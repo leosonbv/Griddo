@@ -9,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace Griddo;
 
@@ -23,6 +24,14 @@ public sealed class Griddo : FrameworkElement
     private const double CurrentCellBorderThickness = 1.0;
     private const double HostedCellInsetX = 2.0;
     private const double HostedCellInsetY = 1.5;
+
+    /// <summary>
+    /// Ctrl+wheel moves between these scale factors (100% = 1.0). Sorted ascending; bounds match <see cref="ContentScale"/> clamp.
+    /// </summary>
+    private static ReadOnlySpan<double> ContentScaleStops =>
+    [
+        0.25, 0.5, 0.75, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0
+    ];
 
     private readonly HashSet<GriddoCellAddress> _selectedCells = [];
     private readonly HashSet<GriddoCellAddress> _selectionDragSnapshot = [];
@@ -39,6 +48,18 @@ public sealed class Griddo : FrameworkElement
     private readonly Dictionary<GriddoCellAddress, FrameworkElement> _hostedCells = [];
     private readonly ScrollBar _horizontalScrollBar;
     private readonly ScrollBar _verticalScrollBar;
+    private readonly Grid _scaleFeedbackLayer = new()
+    {
+        IsHitTestVisible = false,
+        Visibility = Visibility.Collapsed
+    };
+    private readonly TextBlock _scaleFeedbackText = new()
+    {
+        Foreground = Brushes.White,
+        FontSize = 18,
+        FontWeight = FontWeights.SemiBold
+    };
+    private readonly DispatcherTimer _scaleFeedbackTimer;
     private double _uniformRowHeight = DefaultRowHeight;
     private GriddoCellAddress _currentCell = new(0, 0);
     private bool _isEditing;
@@ -96,6 +117,22 @@ public sealed class Griddo : FrameworkElement
         _children.Add(_horizontalScrollBar);
         _children.Add(_verticalScrollBar);
 
+        var scaleBadge = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(200, 45, 45, 48)),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(16, 10, 16, 10),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = _scaleFeedbackText
+        };
+        _scaleFeedbackLayer.Children.Add(scaleBadge);
+
+        _scaleFeedbackTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        _scaleFeedbackTimer.Tick += OnScaleFeedbackTimerTick;
+
+        _children.Add(_scaleFeedbackLayer);
+
         Rows.CollectionChanged += OnGridCollectionChanged;
         Columns.CollectionChanged += OnGridCollectionChanged;
         UpdateRowHeaderWidth();
@@ -146,6 +183,50 @@ public sealed class Griddo : FrameworkElement
         }
     }
 
+    private void ShowScaleFeedback()
+    {
+        var pct = Math.Round(ContentScale * 100.0);
+        _scaleFeedbackText.Text = string.Create(CultureInfo.InvariantCulture, $"{pct}%");
+        _scaleFeedbackLayer.Visibility = Visibility.Visible;
+        _scaleFeedbackTimer.Stop();
+        _scaleFeedbackTimer.Start();
+    }
+
+    private void OnScaleFeedbackTimerTick(object? sender, EventArgs e)
+    {
+        _scaleFeedbackTimer.Stop();
+        _scaleFeedbackLayer.Visibility = Visibility.Collapsed;
+    }
+
+    private static double StepContentScaleStop(double current, bool zoomIn)
+    {
+        const double eps = 1e-9;
+        var stops = ContentScaleStops;
+        if (zoomIn)
+        {
+            foreach (var s in stops)
+            {
+                if (s > current + eps)
+                {
+                    return s;
+                }
+            }
+
+            return stops[stops.Length - 1];
+        }
+
+        for (var i = stops.Length - 1; i >= 0; i--)
+        {
+            var s = stops[i];
+            if (s < current - eps)
+            {
+                return s;
+            }
+        }
+
+        return stops[0];
+    }
+
     private double ScaledColumnHeaderHeight => ColumnHeaderHeightBase * _contentScale;
 
     private double EffectiveFontSize => 12.0 * _contentScale;
@@ -169,6 +250,7 @@ public sealed class Griddo : FrameworkElement
         _horizontalScrollBar.Measure(availableSize);
         _verticalScrollBar.Measure(availableSize);
         _hostCanvas.Measure(new Size(Math.Max(0, availableSize.Width - _rowHeaderWidth - ScrollBarSize), Math.Max(0, availableSize.Height - ScaledColumnHeaderHeight - ScrollBarSize)));
+        _scaleFeedbackLayer.Measure(availableSize);
         return availableSize;
     }
 
@@ -192,6 +274,8 @@ public sealed class Griddo : FrameworkElement
         UpdateScrollBars();
 
         _hostCanvas.Arrange(new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, _viewportBodyWidth, _viewportBodyHeight));
+
+        _scaleFeedbackLayer.Arrange(new Rect(0, 0, finalSize.Width, finalSize.Height));
         return finalSize;
     }
 
@@ -793,8 +877,8 @@ public sealed class Griddo : FrameworkElement
         // Ctrl+wheel scales the whole grid only when no cell editor is active (hosted Plotto uses Ctrl in-chart).
         if (ctrlDown && !inCellEditMode)
         {
-            var factor = e.Delta > 0 ? 1.1 : 1.0 / 1.1;
-            ContentScale = Math.Clamp(ContentScale * factor, 0.25, 4.0);
+            ContentScale = StepContentScaleStop(ContentScale, e.Delta > 0);
+            ShowScaleFeedback();
             e.Handled = true;
             base.OnPreviewMouseWheel(e);
             return;
