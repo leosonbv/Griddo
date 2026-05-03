@@ -43,6 +43,10 @@ public abstract class SkiaChartBaseControl : SKElement
     private Point _zoomRectCurrent;
     private SKRect _plotRect;
 
+    /// <summary>Last <see cref="ActualWidth"/>/<see cref="ActualHeight"/> used to build hit-test geometry; NaN forces a refresh.</summary>
+    private double _hitTestSyncedActualWidth = double.NaN;
+    private double _hitTestSyncedActualHeight = double.NaN;
+
     /// <summary>Set only while <see cref="ApplyRightDragZoom"/> invokes <see cref="ApplyViewportInteractionClamp"/>.</summary>
     private bool _viewportClampAfterRectZoom;
 
@@ -369,9 +373,22 @@ public abstract class SkiaChartBaseControl : SKElement
     protected override void OnPaintSurface(SKPaintSurfaceEventArgs e)
     {
         base.OnPaintSurface(e);
-        _surfacePixelWidth = Math.Max(1, e.Info.Width);
-        _surfacePixelHeight = Math.Max(1, e.Info.Height);
         DrawChart(e.Surface.Canvas, e.Info.Width, e.Info.Height);
+        if (ActualWidth > 0 && ActualHeight > 0)
+        {
+            _hitTestSyncedActualWidth = ActualWidth;
+            _hitTestSyncedActualHeight = ActualHeight;
+        }
+    }
+
+    /// <summary>
+    /// Call after the host has finished sizing the chart (e.g. grid cell layout). Clears the hit-test sync so the next
+    /// <see cref="ToChartPoint"/> recomputes <see cref="_plotRect"/> from current <see cref="ActualWidth"/> / <see cref="ActualHeight"/>.
+    /// </summary>
+    public void ResetHitTestGeometrySync()
+    {
+        _hitTestSyncedActualWidth = double.NaN;
+        _hitTestSyncedActualHeight = double.NaN;
     }
 
     protected override void OnMouseWheel(MouseWheelEventArgs e)
@@ -757,7 +774,57 @@ public abstract class SkiaChartBaseControl : SKElement
     /// <summary>Maps a mouse position in WPF DIP space to chart data coordinates (handles DPI vs Skia surface pixels).</summary>
     protected ChartPoint ToChartPoint(Point logicalPosition)
     {
+        EnsureHitTestGeometryFromLayout();
         return DataPointFromSurfacePixel(LogicalPointToSurface(logicalPosition));
+    }
+
+    /// <summary>
+    /// <see cref="_plotRect"/> and surface pixel size are normally updated in <see cref="OnPaintSurface"/>.
+    /// When the chart is reparented or resized, hit-testing (e.g. relayed mouse down from a host grid) can run
+    /// before the next paint — then stale geometry maps clicks to the wrong data X/Y. Sync from layout first.
+    /// </summary>
+    private void EnsureHitTestGeometryFromLayout()
+    {
+        if (ActualWidth <= 0 || ActualHeight <= 0)
+        {
+            return;
+        }
+
+        if (!double.IsNaN(_hitTestSyncedActualWidth)
+            && ActualWidth == _hitTestSyncedActualWidth
+            && ActualHeight == _hitTestSyncedActualHeight)
+        {
+            return;
+        }
+
+        _hitTestSyncedActualWidth = ActualWidth;
+        _hitTestSyncedActualHeight = ActualHeight;
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var pw = (int)Math.Max(1, Math.Round(ActualWidth * dpi.PixelsPerDip));
+        var ph = (int)Math.Max(1, Math.Round(ActualHeight * dpi.PixelsPerDip));
+        UpdatePlotRectFromSurfaceSize(pw, ph);
+    }
+
+    /// <summary>Aligns Skia pixel size and <see cref="_plotRect"/> with the framebuffer dimensions used for drawing.</summary>
+    private void UpdatePlotRectFromSurfaceSize(int width, int height)
+    {
+        width = Math.Max(1, width);
+        height = Math.Max(1, height);
+        _surfacePixelWidth = width;
+        _surfacePixelHeight = height;
+
+        var s = PlotUiScale;
+        var pad = CellPadding * s;
+        var ax = AxisReserveX * s;
+        var ay = AxisReserveY * s;
+        if (UseSparklineLayout)
+        {
+            _plotRect = new SKRect(pad, pad, width - pad, height - pad);
+        }
+        else
+        {
+            _plotRect = new SKRect(pad + ax, pad, width - pad, height - pad - ay);
+        }
     }
 
     private Point LogicalPointToSurface(Point logical)
@@ -807,18 +874,7 @@ public abstract class SkiaChartBaseControl : SKElement
             return;
         }
 
-        var s = PlotUiScale;
-        var pad = CellPadding * s;
-        var ax = AxisReserveX * s;
-        var ay = AxisReserveY * s;
-        if (UseSparklineLayout)
-        {
-            _plotRect = new SKRect(pad, pad, width - pad, height - pad);
-        }
-        else
-        {
-            _plotRect = new SKRect(pad + ax, pad, width - pad, height - pad - ay);
-        }
+        UpdatePlotRectFromSurfaceSize(width, height);
 
         if (_plotRect.Width <= 2 || _plotRect.Height <= 2)
         {

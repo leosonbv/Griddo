@@ -259,6 +259,10 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView
             return;
         }
 
+        host.UpdateLayout();
+        chart.UpdateLayout();
+        chart.ResetHitTestGeometrySync();
+
         var routed = new MouseButtonEventArgs(eFromGrid.MouseDevice, eFromGrid.Timestamp, eFromGrid.ChangedButton)
         {
             RoutedEvent = Mouse.MouseDownEvent,

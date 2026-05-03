@@ -245,6 +245,8 @@ public sealed partial class Griddo
             SetCurrentHostedCellEditMode(true);
             if (TryGetHostedElement(clicked) is { } hostForRightRelay)
             {
+                UpdateLayout();
+                hostForRightRelay.UpdateLayout();
                 hostedRightDirect.RelayDirectEditMouseDown(hostForRightRelay, e);
             }
 
@@ -315,6 +317,8 @@ public sealed partial class Griddo
                 SetCurrentHostedCellEditMode(true);
                 if (TryGetHostedElement(clicked) is { } hostForRelay)
                 {
+                    UpdateLayout();
+                    hostForRelay.UpdateLayout();
                     hostedDirect.RelayDirectEditMouseDown(hostForRelay, e);
                 }
 
