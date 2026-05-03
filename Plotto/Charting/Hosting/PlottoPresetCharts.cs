@@ -3,11 +3,10 @@ using System.Windows.Controls;
 using Plotto.Charting.Controls;
 using Plotto.Charting.Core;
 
-namespace Plotto.Hosting;
+namespace Plotto.Charting.Hosting;
 
 /// <summary>
-/// Shared singleton chart instances and demo data used when Plotto is hosted in grid cells (chromatogram editor,
-/// calibration editor). Keeps the namespace name separate from this type (avoid <c>Plotto.Plotto</c> confusion).
+/// Shared singleton chart instances and demo data when Plotto is hosted in grid cells (chromatogram and calibration editors).
 /// </summary>
 public static class PlottoPresetCharts
 {

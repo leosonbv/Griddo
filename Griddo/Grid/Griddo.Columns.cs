@@ -56,6 +56,27 @@ public sealed partial class Griddo
         _columnWidthOverrides[columnIndex] = Math.Max(MinColumnWidth, screenPixelWidth / ContentScale);
         UpdateScrollBars();
     }
+
+    /// <summary>Sets column width in logical units (same as <see cref="IGriddoColumnView.Width"/>), independent of <see cref="ContentScale"/>.</summary>
+    public void SetLogicalColumnWidth(int columnIndex, double logicalWidth)
+    {
+        SetColumnWidth(columnIndex, Math.Max(MinColumnWidth, logicalWidth) * ContentScale);
+        InvalidateVisual();
+    }
+
+    /// <summary>Clears per-column width overrides so layout uses each column view’s nominal <see cref="IGriddoColumnView.Width"/>.</summary>
+    public void ClearColumnWidthOverrides()
+    {
+        if (_columnWidthOverrides.Count == 0)
+        {
+            return;
+        }
+
+        _columnWidthOverrides.Clear();
+        UpdateScrollBars();
+        InvalidateMeasure();
+        InvalidateVisual();
+    }
     private void AutoSizeColumn(int columnIndex)
     {
         if (columnIndex < 0 || columnIndex >= Columns.Count)

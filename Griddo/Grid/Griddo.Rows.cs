@@ -1,3 +1,4 @@
+using System;
 using System.Windows;
 using System.Windows.Media;
 using Griddo.Columns;
@@ -6,6 +7,83 @@ namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
+    /// <summary>Leading rows to freeze, limited by row count and how many full rows fit in the body viewport.</summary>
+    private int GetEffectiveFixedRowCount()
+    {
+        if (Rows.Count == 0 || _viewportBodyHeight <= 0)
+        {
+            return 0;
+        }
+
+        var h = GetRowHeight(0);
+        if (h <= 1e-6)
+        {
+            return 0;
+        }
+
+        var maxFit = (int)(_viewportBodyHeight / h);
+        return Math.Min(Math.Min(_fixedRowCount, Rows.Count), maxFit);
+    }
+
+    private double GetFixedRowsHeight() => GetEffectiveFixedRowCount() * GetRowHeight(0);
+
+    private double GetScrollRowsViewportHeight() => Math.Max(0, _viewportBodyHeight - GetFixedRowsHeight());
+
+    private double GetScrollableRowsContentHeight()
+    {
+        var h = GetRowHeight(0);
+        var f = GetEffectiveFixedRowCount();
+        return Math.Max(0, Rows.Count - f) * h;
+    }
+
+    /// <summary>Top edge of a body row relative to the top of the body strip (below column headers).</summary>
+    private double GetRowBodyTopRel(int rowIndex)
+    {
+        var h = GetRowHeight(0);
+        var f = GetEffectiveFixedRowCount();
+        if (rowIndex < f)
+        {
+            return rowIndex * h;
+        }
+
+        return f * h + (rowIndex - f) * h - _verticalOffset;
+    }
+
+    private void ForEachVisibleRow(Action<int> onRow)
+    {
+        if (Rows.Count == 0 || _viewportBodyHeight <= 0)
+        {
+            return;
+        }
+
+        var h = GetRowHeight(0);
+        var f = GetEffectiveFixedRowCount();
+        var bodyH = _viewportBodyHeight;
+        for (var r = 0; r < f && r < Rows.Count; r++)
+        {
+            if (r * h < bodyH)
+            {
+                onRow(r);
+            }
+        }
+
+        var scrollTop = f * h;
+        var vh = bodyH - scrollTop;
+        if (vh <= 0 || f >= Rows.Count)
+        {
+            return;
+        }
+
+        var first = f + (int)Math.Floor(_verticalOffset / h);
+        var last = f + (int)Math.Ceiling((_verticalOffset + vh) / h) - 1;
+        first = Math.Clamp(first, f, Rows.Count - 1);
+        last = Math.Clamp(last, f, Rows.Count - 1);
+        for (var r = first; r <= last; r++)
+        {
+            onRow(r);
+        }
+    }
+
     private double GetRowHeight(int rowIndex)
     {
         _ = rowIndex;
@@ -38,13 +116,10 @@ public sealed partial class Griddo
         SetUniformRowHeightFromScreen(newScreenHeight);
 
         var updatedHeight = GetRowHeight(clampedRowIndex);
-        var offsetDelta = clampedRowIndex * (updatedHeight - oldHeight);
+        var deltaH = updatedHeight - oldHeight;
+        var fr = Math.Min(_fixedRowCount, Rows.Count);
+        var offsetDelta = fr * deltaH + Math.Max(0, clampedRowIndex - fr) * deltaH;
         SetVerticalOffset(oldOffset + offsetDelta);
-    }
-
-    private double GetRowTop(int rowIndex)
-    {
-        return rowIndex * GetRowHeight(0);
     }
 
     private void AutoSizeRow(int rowIndex)
@@ -94,10 +169,10 @@ public sealed partial class Griddo
             x -= _horizontalOffset;
         }
 
-        var y = GetRowTop(row);
+        var y = ScaledColumnHeaderHeight + GetRowBodyTopRel(row);
         return new Rect(
             x,
-            ScaledColumnHeaderHeight + y - _verticalOffset,
+            y,
             GetColumnWidth(col),
             GetRowHeight(row));
     }

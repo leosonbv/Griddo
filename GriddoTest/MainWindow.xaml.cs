@@ -4,8 +4,10 @@ using System.Windows.Media;
 using Griddo;
 using Griddo.Columns;
 using Griddo.Editing;
+using Griddo.Grid;
 using Plotto.Charting.Controls;
 using Plotto.Charting.Core;
+using GriddoTest.ColumnEdit;
 
 namespace GriddoTest;
 
@@ -26,28 +28,37 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         ConfigureGrid();
-        DemoGrid.ColumnHeaderRightClick += DemoGrid_ColumnHeaderRightClick;
+        DemoGrid.ColumnHeaderRightClick += (_, e) => OnColumnHeaderRightClick(DemoGrid, _allColumns, DemoGrid, e);
         DemoGrid.UniformRowHeight = 132;
         DemoGrid.FixedColumnCount = 1;
         DemoGrid.HostedPlotDirectEditOnMouseDown = true;
     }
 
-    private void DemoGrid_ColumnHeaderRightClick(object? sender, GriddoColumnHeaderMouseEventArgs e)
+    private void OnColumnHeaderRightClick(
+        global::Griddo.Grid.Griddo targetGrid,
+        IReadOnlyList<IGriddoColumnView> columnRegistry,
+        global::Griddo.Grid.Griddo sourceGridForChooser,
+        GriddoColumnHeaderMouseEventArgs e)
     {
-        if (e.ColumnIndex < 0 || e.ColumnIndex >= DemoGrid.Columns.Count)
+        if (e.ColumnIndex < 0 || e.ColumnIndex >= targetGrid.Columns.Count)
         {
             return;
         }
 
-        var column = DemoGrid.Columns[e.ColumnIndex];
-        var selectedColumns = GetSelectedVisibleColumns();
-        var targetColumns =
-            selectedColumns.Count > 1 && selectedColumns.Contains(column)
-                ? selectedColumns
-                : [column];
+        var indices = e.SelectedColumnIndices
+            .Where(i => i >= 0 && i < targetGrid.Columns.Count)
+            .Distinct()
+            .OrderBy(i => i)
+            .ToList();
+        if (indices.Count == 0)
+        {
+            return;
+        }
+
+        var targetColumns = indices.Select(i => targetGrid.Columns[i]).ToList();
         var menu = new ContextMenu
         {
-            PlacementTarget = DemoGrid,
+            PlacementTarget = targetGrid,
             Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint
         };
 
@@ -64,14 +75,32 @@ public partial class MainWindow : Window
                 target.Fill = fillItem.IsChecked;
             }
 
-            DemoGrid.InvalidateMeasure();
-            DemoGrid.InvalidateVisual();
+            targetGrid.InvalidateMeasure();
+            targetGrid.InvalidateVisual();
         };
         menu.Items.Add(fillItem);
 
         var autoWidthAllColumnsItem = new MenuItem { Header = "Auto width all columns" };
-        autoWidthAllColumnsItem.Click += (_, _) => DemoGrid.AutoSizeAllColumns();
+        autoWidthAllColumnsItem.Click += (_, _) => targetGrid.AutoSizeAllColumns();
         menu.Items.Add(autoWidthAllColumnsItem);
+
+        var chooseColumnsItem = new MenuItem { Header = "Choose _columns…" };
+        chooseColumnsItem.Click += (_, _) => OpenChooseColumnsDialog(sourceGridForChooser);
+        menu.Items.Add(chooseColumnsItem);
+
+        menu.Items.Add(new Separator());
+        var hideEmptyColsItem = new MenuItem { Header = "Hide _empty columns" };
+        hideEmptyColsItem.Click += (_, _) => HideEmptyColumns(targetGrid, columnRegistry);
+        menu.Items.Add(hideEmptyColsItem);
+
+        var showAllColsItem = new MenuItem { Header = "_Show all columns" };
+        showAllColsItem.Click += (_, _) => ShowAllColumns(targetGrid, columnRegistry);
+        menu.Items.Add(showAllColsItem);
+
+        var showAllExceptEmptyItem = new MenuItem { Header = "Show all _except empty columns" };
+        showAllExceptEmptyItem.Click += (_, _) => ShowAllColumnsExceptEmpty(targetGrid, columnRegistry);
+        menu.Items.Add(showAllExceptEmptyItem);
+        menu.Items.Add(new Separator());
 
         var hideItem = new MenuItem
         {
@@ -79,9 +108,9 @@ public partial class MainWindow : Window
         };
         hideItem.Click += (_, _) =>
         {
-            var visibleCount = DemoGrid.Columns.Count;
+            var visibleCount = targetGrid.Columns.Count;
             var removable = targetColumns
-                .Where(c => DemoGrid.Columns.Contains(c))
+                .Where(c => targetGrid.Columns.Contains(c))
                 .ToList();
             if (visibleCount - removable.Count < 1)
             {
@@ -90,11 +119,11 @@ public partial class MainWindow : Window
 
             foreach (var target in removable)
             {
-                DemoGrid.Columns.Remove(target);
+                targetGrid.Columns.Remove(target);
             }
 
-            DemoGrid.InvalidateMeasure();
-            DemoGrid.InvalidateVisual();
+            targetGrid.InvalidateMeasure();
+            targetGrid.InvalidateVisual();
         };
         menu.Items.Add(hideItem);
         menu.Items.Add(new Separator());
@@ -103,11 +132,11 @@ public partial class MainWindow : Window
         {
             Header = "Immediate edit",
             IsCheckable = true,
-            IsChecked = DemoGrid.HostedPlotDirectEditOnMouseDown
+            IsChecked = targetGrid.HostedPlotDirectEditOnMouseDown
         };
         immediateEditItem.Click += (_, _) =>
         {
-            DemoGrid.HostedPlotDirectEditOnMouseDown = immediateEditItem.IsChecked;
+            targetGrid.HostedPlotDirectEditOnMouseDown = immediateEditItem.IsChecked;
         };
         menu.Items.Add(immediateEditItem);
 
@@ -115,12 +144,12 @@ public partial class MainWindow : Window
         {
             Header = "Hide cell selection coloring",
             IsCheckable = true,
-            IsChecked = DemoGrid.HideCellSelectionColoring
+            IsChecked = targetGrid.HideCellSelectionColoring
         };
         hideSelectionColoringItem.Click += (_, _) =>
         {
-            DemoGrid.HideCellSelectionColoring = hideSelectionColoringItem.IsChecked;
-            DemoGrid.InvalidateVisual();
+            targetGrid.HideCellSelectionColoring = hideSelectionColoringItem.IsChecked;
+            targetGrid.InvalidateVisual();
         };
         menu.Items.Add(hideSelectionColoringItem);
 
@@ -128,12 +157,12 @@ public partial class MainWindow : Window
         {
             Header = "Hide row/col header selection color",
             IsCheckable = true,
-            IsChecked = DemoGrid.HideHeaderSelectionColoring
+            IsChecked = targetGrid.HideHeaderSelectionColoring
         };
         hideHeaderSelectionColoringItem.Click += (_, _) =>
         {
-            DemoGrid.HideHeaderSelectionColoring = hideHeaderSelectionColoringItem.IsChecked;
-            DemoGrid.InvalidateVisual();
+            targetGrid.HideHeaderSelectionColoring = hideHeaderSelectionColoringItem.IsChecked;
+            targetGrid.InvalidateVisual();
         };
         menu.Items.Add(hideHeaderSelectionColoringItem);
 
@@ -141,12 +170,12 @@ public partial class MainWindow : Window
         {
             Header = "Hide current cell color",
             IsCheckable = true,
-            IsChecked = DemoGrid.HideCurrentCellColor
+            IsChecked = targetGrid.HideCurrentCellColor
         };
         hideCurrentCellColorItem.Click += (_, _) =>
         {
-            DemoGrid.HideCurrentCellColor = hideCurrentCellColorItem.IsChecked;
-            DemoGrid.InvalidateVisual();
+            targetGrid.HideCurrentCellColor = hideCurrentCellColorItem.IsChecked;
+            targetGrid.InvalidateVisual();
         };
         menu.Items.Add(hideCurrentCellColorItem);
 
@@ -154,12 +183,12 @@ public partial class MainWindow : Window
         {
             Header = "Hide edit cell color",
             IsCheckable = true,
-            IsChecked = DemoGrid.HideEditCellColor
+            IsChecked = targetGrid.HideEditCellColor
         };
         hideEditCellColorItem.Click += (_, _) =>
         {
-            DemoGrid.HideEditCellColor = hideEditCellColorItem.IsChecked;
-            DemoGrid.InvalidateVisual();
+            targetGrid.HideEditCellColor = hideEditCellColorItem.IsChecked;
+            targetGrid.InvalidateVisual();
         };
         menu.Items.Add(hideEditCellColorItem);
         menu.Items.Add(new Separator());
@@ -173,13 +202,13 @@ public partial class MainWindow : Window
             {
                 Header = label,
                 IsCheckable = true,
-                IsChecked = DemoGrid.VisibleRowCount == localMode
+                IsChecked = targetGrid.VisibleRowCount == localMode
             };
             modeItem.Click += (_, _) =>
             {
-                DemoGrid.VisibleRowCount = localMode;
-                DemoGrid.InvalidateMeasure();
-                DemoGrid.InvalidateVisual();
+                targetGrid.VisibleRowCount = localMode;
+                targetGrid.InvalidateMeasure();
+                targetGrid.InvalidateVisual();
             };
             visibleRowsSubmenu.Items.Add(modeItem);
         }
@@ -187,27 +216,28 @@ public partial class MainWindow : Window
         menu.Items.Add(new Separator());
 
         var columnsSubmenu = new MenuItem { Header = "Columns" };
-        foreach (var col in _allColumns)
+        foreach (var col in columnRegistry)
         {
             var colMenuItem = new MenuItem
             {
                 Header = col.Header,
                 IsCheckable = true,
-                IsChecked = DemoGrid.Columns.Contains(col),
+                IsChecked = targetGrid.Columns.Contains(col),
                 StaysOpenOnClick = true
             };
-            colMenuItem.Click += (_, _) => ToggleColumnVisibility(col, colMenuItem.IsChecked);
+            colMenuItem.Click += (_, _) => ToggleColumnVisibility(targetGrid, columnRegistry, col, colMenuItem.IsChecked);
             columnsSubmenu.Items.Add(colMenuItem);
         }
         menu.Items.Add(columnsSubmenu);
 
-        if (string.Equals(column.Header, PlottoColumnHeader, StringComparison.Ordinal))
+        var clickedColumn = targetGrid.Columns[e.ColumnIndex];
+        if (string.Equals(clickedColumn.Header, PlottoColumnHeader, StringComparison.Ordinal))
         {
             menu.Items.Add(new Separator());
             var configurePlottoItem = new MenuItem { Header = "Configure Plotto..." };
             configurePlottoItem.Click += (_, _) =>
             {
-                var dlg = new PlotConfigurationDialog(ResolvePlotConfigurationChart()) { Owner = this };
+                var dlg = new PlotConfigurationDialog(ResolvePlotConfigurationChart(targetGrid)) { Owner = this };
                 dlg.ShowDialog();
             };
             menu.Items.Add(configurePlottoItem);
@@ -216,10 +246,10 @@ public partial class MainWindow : Window
         menu.IsOpen = true;
     }
 
-    private ChromatogramControl ResolvePlotConfigurationChart()
+    private ChromatogramControl ResolvePlotConfigurationChart(global::Griddo.Grid.Griddo grid)
     {
-        var cell = DemoGrid.SelectedCells.FirstOrDefault(c => c.IsValid);
-        if (cell.IsValid && DemoGrid.TryGetHostedElement(cell) is Border { Child: ChromatogramControl chart })
+        var cell = grid.SelectedCells.FirstOrDefault(c => c.IsValid);
+        if (cell.IsValid && grid.TryGetHostedElement(cell) is Border { Child: ChromatogramControl chart })
         {
             return chart;
         }
@@ -244,7 +274,8 @@ public partial class MainWindow : Window
                 ((DemoRow)row).Id = id;
                 return true;
             },
-            editor: GriddoCellEditors.Number));
+            editor: GriddoCellEditors.Number,
+            sourceMemberName: nameof(DemoRow.Id)));
 
         RegisterColumn(new GriddoColumnView(
             header: "Name",
@@ -254,7 +285,8 @@ public partial class MainWindow : Window
             {
                 ((DemoRow)row).Name = value?.ToString() ?? string.Empty;
                 return true;
-            }));
+            },
+            sourceMemberName: nameof(DemoRow.Name)));
 
         RegisterColumn(new GriddoColumnView(
             header: "Score",
@@ -271,7 +303,24 @@ public partial class MainWindow : Window
                 ((DemoRow)row).Score = score;
                 return true;
             },
-            editor: GriddoCellEditors.Number));
+            editor: GriddoCellEditors.Number,
+            sourceMemberName: nameof(DemoRow.Score)));
+
+        RegisterColumn(new GriddoBoolColumnView(
+            header: "Active",
+            width: 72,
+            valueGetter: row => ((DemoRow)row).Active,
+            valueSetter: (row, value) =>
+            {
+                if (value is not bool b)
+                {
+                    return false;
+                }
+
+                ((DemoRow)row).Active = b;
+                return true;
+            },
+            sourceMemberName: nameof(DemoRow.Active)));
 
         RegisterColumn(new HtmlGriddoColumnView(
             header: "Html",
@@ -281,14 +330,16 @@ public partial class MainWindow : Window
             {
                 ((DemoRow)row).HtmlSnippet = value;
                 return true;
-            }));
+            },
+            sourceMemberName: nameof(DemoRow.HtmlSnippet)));
 
         RegisterColumn(new GriddoColumnView(
             header: "Graphic",
             width: 120,
             valueGetter: row => ((DemoRow)row).Graphic,
             valueSetter: (_, _) => false,
-            editor: GriddoCellEditors.Text));
+            editor: GriddoCellEditors.Text,
+            sourceMemberName: nameof(DemoRow.Graphic)));
 
         RegisterColumn(new HostedPlottoColumnView(
             header: PlottoColumnHeader,
@@ -300,11 +351,30 @@ public partial class MainWindow : Window
             width: 240,
             seedGetter: row => ((DemoRow)row).PlottoSeed));
 
+        var fillDownItem = new MenuItem
+        {
+            Header = "Fill _down",
+            InputGestureText = "Ctrl+D",
+            ToolTip = "Copy the top selected cell in each column to the other selected rows in that column."
+        };
+        fillDownItem.Click += (_, _) => DemoGrid.FillSelectionDown();
+
+        var incrementalDownItem = new MenuItem
+        {
+            Header = "_Incremental down",
+            InputGestureText = "Ctrl+I",
+            ToolTip = "Increment the last integer in each column’s top selected cell for each lower selected row (zero-pad widths)."
+        };
+        incrementalDownItem.Click += (_, _) => DemoGrid.FillSelectionIncrementalDown();
+
         DemoGrid.CellContextMenu = new ContextMenu
         {
             Items =
             {
                 new MenuItem { Header = "Demo: cell context menu" },
+                new Separator(),
+                fillDownItem,
+                incrementalDownItem,
                 new Separator(),
                 new MenuItem { Header = "Second item" },
             },
@@ -317,6 +387,7 @@ public partial class MainWindow : Window
                 Id = i,
                 Name = $"Item {i:000}",
                 Score = Math.Round(40 + Random.Shared.NextDouble() * 60, 2),
+                Active = i % 5 == 0,
                 HtmlSnippet = i % 3 == 0
                     ? $"<table><tr><th>R{i}</th><th>Q{i % 4}</th></tr><tr><td>{i * 2}</td><td><b>{Math.Round(i / 3.0, 2)}</b></td></tr></table>"
                     : $"<b>Row {i}</b> has <i>formatted</i> text",
@@ -332,52 +403,123 @@ public partial class MainWindow : Window
         DemoGrid.Columns.Add(column);
     }
 
-    private void ToggleColumnVisibility(IGriddoColumnView column, bool shouldShow)
+    /// <summary>True when every row’s formatted value for this column is null/whitespace (no rows ⇒ not empty).</summary>
+    private static bool IsColumnEmptyForAllRows(global::Griddo.Grid.Griddo grid, IGriddoColumnView column)
     {
-        var isVisible = DemoGrid.Columns.Contains(column);
+        if (grid.Rows.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var row in grid.Rows)
+        {
+            var formatted = column.FormatValue(column.GetValue(row));
+            if (!string.IsNullOrWhiteSpace(formatted))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static void HideEmptyColumns(global::Griddo.Grid.Griddo grid, IReadOnlyList<IGriddoColumnView> registry)
+    {
+        var toHide = new List<IGriddoColumnView>();
+        foreach (var col in registry)
+        {
+            if (!grid.Columns.Contains(col))
+            {
+                continue;
+            }
+
+            if (IsColumnEmptyForAllRows(grid, col))
+            {
+                toHide.Add(col);
+            }
+        }
+
+        foreach (var col in toHide)
+        {
+            if (grid.Columns.Count <= 1)
+            {
+                break;
+            }
+
+            if (grid.Columns.Contains(col))
+            {
+                grid.Columns.Remove(col);
+            }
+        }
+
+        grid.InvalidateMeasure();
+        grid.InvalidateVisual();
+    }
+
+    private static void ShowAllColumns(global::Griddo.Grid.Griddo grid, IReadOnlyList<IGriddoColumnView> registry)
+    {
+        foreach (var col in registry)
+        {
+            ToggleColumnVisibility(grid, registry, col, true);
+        }
+    }
+
+    private static void ShowAllColumnsExceptEmpty(global::Griddo.Grid.Griddo grid, IReadOnlyList<IGriddoColumnView> registry)
+    {
+        ShowAllColumns(grid, registry);
+        HideEmptyColumns(grid, registry);
+    }
+
+    private static void ToggleColumnVisibility(
+        global::Griddo.Grid.Griddo grid,
+        IReadOnlyList<IGriddoColumnView> registry,
+        IGriddoColumnView column,
+        bool? shouldShow)
+    {
+        var isVisible = grid.Columns.Contains(column);
         if (shouldShow == isVisible)
         {
             return;
         }
 
-        if (!shouldShow)
+        if (shouldShow != true)
         {
-            if (DemoGrid.Columns.Count <= 1)
+            if (grid.Columns.Count <= 1)
             {
                 return;
             }
 
-            DemoGrid.Columns.Remove(column);
+            grid.Columns.Remove(column);
         }
         else
         {
             var insertIndex = 0;
-            foreach (var orderedColumn in _allColumns)
+            foreach (var orderedColumn in registry)
             {
                 if (ReferenceEquals(orderedColumn, column))
                 {
                     break;
                 }
 
-                if (DemoGrid.Columns.Contains(orderedColumn))
+                if (grid.Columns.Contains(orderedColumn))
                 {
                     insertIndex++;
                 }
             }
 
-            insertIndex = Math.Clamp(insertIndex, 0, DemoGrid.Columns.Count);
-            DemoGrid.Columns.Insert(insertIndex, column);
+            insertIndex = Math.Clamp(insertIndex, 0, grid.Columns.Count);
+            grid.Columns.Insert(insertIndex, column);
         }
 
-        DemoGrid.InvalidateMeasure();
-        DemoGrid.InvalidateVisual();
+        grid.InvalidateMeasure();
+        grid.InvalidateVisual();
     }
 
-    private List<IGriddoColumnView> GetSelectedVisibleColumns()
+    private static List<IGriddoColumnView> GetSelectedVisibleColumns(global::Griddo.Grid.Griddo grid)
     {
-        var selectedIndices = DemoGrid.SelectedCells
+        var selectedIndices = grid.SelectedCells
             .Select(c => c.ColumnIndex)
-            .Where(index => index >= 0 && index < DemoGrid.Columns.Count)
+            .Where(index => index >= 0 && index < grid.Columns.Count)
             .Distinct()
             .OrderBy(index => index)
             .ToList();
@@ -385,7 +527,7 @@ public partial class MainWindow : Window
         var selectedColumns = new List<IGriddoColumnView>(selectedIndices.Count);
         foreach (var index in selectedIndices)
         {
-            selectedColumns.Add(DemoGrid.Columns[index]);
+            selectedColumns.Add(grid.Columns[index]);
         }
 
         return selectedColumns;
@@ -453,6 +595,24 @@ public partial class MainWindow : Window
         return g;
     }
 
+    private void ChooseColumns_Click(object sender, RoutedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        OpenChooseColumnsDialog(DemoGrid);
+    }
+
+    private void OpenChooseColumnsDialog(global::Griddo.Grid.Griddo grid)
+    {
+        var rows = ColumnMetadataBuilder.BuildRowsFromGrid(grid, _allColumns);
+        var dlg = new ColumnEditDialog(rows, grid.FixedColumnCount, grid.FixedRowCount) { Owner = this };
+        dlg.TargetSourceGrid = grid;
+        dlg.ApplyToSourceGrid = (r, fc, fr) => ColumnChooserGridApplier.Apply(grid, r, fc, fr, _allColumns);
+        dlg.ColumnHeaderMenuHandler = (g, ev) => OnColumnHeaderRightClick(g, dlg.ColumnHeaderRegistry, grid, ev);
+        grid.ClearCellSelection();
+        dlg.ShowDialog();
+    }
+
     /// <summary>WPF path markup samples—triangle, circle, diamond, rect, hexagon, heart-ish, wave, etc.</summary>
     private static readonly string[] PathMarkupVariants =
     [
@@ -488,6 +648,7 @@ public sealed class DemoRow
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public double Score { get; set; }
+    public bool Active { get; set; }
     public string HtmlSnippet { get; set; } = string.Empty;
     public Geometry Graphic { get; set; } = Geometry.Empty;
     public int PlottoSeed { get; set; }

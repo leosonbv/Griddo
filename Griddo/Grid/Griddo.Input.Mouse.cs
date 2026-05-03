@@ -8,6 +8,13 @@ namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
+    /// <summary>Minimum pointer travel before column/row move or resize cues activate (DIP).</summary>
+    private const double DragCueMinPixels = 1.0;
+
+    // -------------------------------------------------------------------------
+    // Mouse down
+    // -------------------------------------------------------------------------
+
     protected override void OnMouseDown(MouseButtonEventArgs e)
     {
         Focus();
@@ -20,77 +27,143 @@ public sealed partial class Griddo
         var isShiftPressed = (modifiers & ModifierKeys.Shift) != 0;
         var oldCurrentCell = _currentCell;
 
-        if (e.ChangedButton == MouseButton.Right && HitTestColumnHeader(pointer) is var rightHeader && rightHeader >= 0)
+        if (e.ChangedButton == MouseButton.Right && HitTestColumnHeader(pointer) is var rightCol && rightCol >= 0)
         {
-            if (!IsColumnSelected(rightHeader))
+            _headerFocusKind = HeaderFocusKind.Column;
+            _headerFocusColumnIndex = rightCol;
+            _rowHeaderRightClickOutline.Clear();
+            _rowHeaderOnlySelection.Clear();
+
+            var headerAlreadySelected =
+                IsColumnHeaderMarkedSelected(rightCol);
+
+            IReadOnlyList<int> contextColumnIndices;
+            if (headerAlreadySelected)
             {
-                SelectColumn(rightHeader, additive: false);
+                var preserved = new HashSet<int>();
+                if (_selectedCells.Count > 0)
+                {
+                    foreach (var c in GetSelectedColumnIndices())
+                    {
+                        preserved.Add(c);
+                    }
+                }
+                else
+                {
+                    preserved.UnionWith(_columnHeaderOnlySelection);
+                }
+
+                _columnHeaderOnlySelection.Clear();
+                foreach (var c in preserved)
+                {
+                    _columnHeaderOnlySelection.Add(c);
+                }
+
+                _selectedCells.Clear();
+                _columnHeaderRightClickOutline.Clear();
+                foreach (var c in preserved)
+                {
+                    _columnHeaderRightClickOutline.Add(c);
+                }
+
+                contextColumnIndices = preserved.OrderBy(c => c).ToList();
+            }
+            else
+            {
+                ClearHeaderAuxiliarySelectionState();
+                _selectedCells.Clear();
+                _columnHeaderOnlySelection.Add(rightCol);
+                _columnHeaderRightClickOutline.Add(rightCol);
+                contextColumnIndices = [rightCol];
                 _currentCell = new GriddoCellAddress(
-                    Rows.Count == 0 ? 0 : Math.Clamp(_currentCell.RowIndex, 0, Rows.Count - 1),
-                    rightHeader);
-                _isEditing = false;
-                InvalidateVisual();
+                    Rows.Count == 0 ? 0 : Math.Clamp(_currentCell.RowIndex, 0, Math.Max(0, Rows.Count - 1)),
+                    rightCol);
             }
 
-            ColumnHeaderRightClick?.Invoke(this, new GriddoColumnHeaderMouseEventArgs(rightHeader));
-            e.Handled = true;
-            base.OnMouseDown(e);
+            _hasKeyboardSelectionAnchor = false;
+            _isEditing = false;
+            ColumnHeaderRightClick?.Invoke(this, new GriddoColumnHeaderMouseEventArgs(rightCol, contextColumnIndices));
+            InvalidateVisual();
+            CompleteMouseDown(e, handled: true);
             return;
         }
 
-        if (e.ChangedButton == MouseButton.Left)
+        if (TryBeginDividerResizeOrAutoSize(e, pointer, isCtrlPressed))
         {
-            var dividerColumn = HitTestColumnDivider(pointer);
-            if (dividerColumn >= 0)
-            {
-                if (e.ClickCount == 2)
-                {
-                    if (isCtrlPressed)
-                    {
-                        AutoSizeAllColumns();
-                        e.Handled = true;
-                        return;
-                    }
+            return;
+        }
 
-                    AutoSizeColumn(dividerColumn);
-                    e.Handled = true;
-                    return;
+        if (e.ChangedButton == MouseButton.Right && HitTestTopLeftHeaderCell(pointer))
+        {
+            _headerFocusKind = HeaderFocusKind.Corner;
+            ClearHeaderAuxiliarySelectionState();
+            _selectedCells.Clear();
+            _hasKeyboardSelectionAnchor = false;
+            _isEditing = false;
+            InvalidateVisual();
+            CompleteMouseDown(e, handled: true);
+            return;
+        }
+
+        var rightRowHeaderHit = HitTestRowHeader(pointer);
+        if (e.ChangedButton == MouseButton.Right && rightRowHeaderHit >= 0)
+        {
+            _headerFocusKind = HeaderFocusKind.Row;
+            _headerFocusRowIndex = rightRowHeaderHit;
+            _columnHeaderRightClickOutline.Clear();
+            _columnHeaderOnlySelection.Clear();
+
+            var rowHeaderAlreadySelected = IsRowHeaderMarkedSelected(rightRowHeaderHit);
+
+            IReadOnlyList<int> contextRowIndices;
+            if (rowHeaderAlreadySelected)
+            {
+                var preserved = new HashSet<int>();
+                if (_selectedCells.Count > 0)
+                {
+                    foreach (var r in GetSelectedRowIndices())
+                    {
+                        preserved.Add(r);
+                    }
+                }
+                else
+                {
+                    preserved.UnionWith(_rowHeaderOnlySelection);
                 }
 
-                _isResizingColumn = true;
-                _resizingColumnIndex = dividerColumn;
-                _resizeStartPoint = pointer;
-                _resizeInitialSize = GetColumnWidth(dividerColumn);
-                CaptureMouse();
-                e.Handled = true;
-                return;
-            }
-
-            var dividerRow = HitTestRowDivider(pointer);
-            if (dividerRow >= 0)
-            {
-                if (e.ClickCount == 2)
+                _rowHeaderOnlySelection.Clear();
+                foreach (var r in preserved)
                 {
-                    if (isCtrlPressed)
-                    {
-                        AutoSizeAllColumns();
-                        e.Handled = true;
-                        return;
-                    }
-
-                    AutoSizeRow(dividerRow);
-                    e.Handled = true;
-                    return;
+                    _rowHeaderOnlySelection.Add(r);
                 }
 
-                _isResizingRow = true;
-                _resizingRowIndex = dividerRow;
-                _resizeStartPoint = pointer;
-                _resizeInitialSize = GetRowHeight(dividerRow);
-                CaptureMouse();
-                e.Handled = true;
-                return;
+                _selectedCells.Clear();
+                _rowHeaderRightClickOutline.Clear();
+                foreach (var r in preserved)
+                {
+                    _rowHeaderRightClickOutline.Add(r);
+                }
+
+                contextRowIndices = preserved.OrderBy(r => r).ToList();
             }
+            else
+            {
+                ClearHeaderAuxiliarySelectionState();
+                _selectedCells.Clear();
+                _rowHeaderOnlySelection.Add(rightRowHeaderHit);
+                _rowHeaderRightClickOutline.Add(rightRowHeaderHit);
+                contextRowIndices = [rightRowHeaderHit];
+                _currentCell = new GriddoCellAddress(
+                    rightRowHeaderHit,
+                    Columns.Count == 0 ? 0 : Math.Clamp(_currentCell.ColumnIndex, 0, Math.Max(0, Columns.Count - 1)));
+            }
+
+            _hasKeyboardSelectionAnchor = false;
+            _isEditing = false;
+            RowHeaderRightClick?.Invoke(this, new GriddoRowHeaderMouseEventArgs(rightRowHeaderHit, contextRowIndices));
+            InvalidateVisual();
+            CompleteMouseDown(e, handled: true);
+            return;
         }
 
         if (HitTestTopLeftHeaderCell(pointer))
@@ -98,18 +171,18 @@ public sealed partial class Griddo
             SelectAllCells();
             _isEditing = false;
             InvalidateVisual();
-            e.Handled = true;
-            base.OnMouseDown(e);
+            CompleteMouseDown(e, handled: true);
             return;
         }
 
         var clickedColumnHeader = HitTestColumnHeader(pointer);
         if (clickedColumnHeader >= 0)
         {
+            ClearHeaderFocus();
             var target = new GriddoCellAddress(
                 Rows.Count == 0 ? 0 : Math.Clamp(oldCurrentCell.RowIndex, 0, Rows.Count - 1),
                 clickedColumnHeader);
-            var clickedSelectedColumnHeader = IsColumnSelected(clickedColumnHeader);
+            var clickedSelectedColumnHeader = IsColumnHeaderMarkedSelected(clickedColumnHeader);
 
             if (e.ChangedButton == MouseButton.Left
                 && clickedSelectedColumnHeader
@@ -127,8 +200,7 @@ public sealed partial class Griddo
                 _pendingColumnHeaderIndex = clickedColumnHeader;
                 _pendingColumnHeaderSelectionAdditive = isCtrlPressed;
                 CaptureMouse();
-                e.Handled = true;
-                base.OnMouseDown(e);
+                CompleteMouseDown(e, handled: true);
                 return;
             }
 
@@ -159,18 +231,18 @@ public sealed partial class Griddo
                 CaptureMouse();
             }
 
-            e.Handled = true;
-            base.OnMouseDown(e);
+            CompleteMouseDown(e, handled: true);
             return;
         }
 
         var clickedRowHeader = HitTestRowHeader(pointer);
         if (clickedRowHeader >= 0)
         {
+            ClearHeaderFocus();
             var target = new GriddoCellAddress(
                 clickedRowHeader,
                 Columns.Count == 0 ? 0 : Math.Clamp(oldCurrentCell.ColumnIndex, 0, Columns.Count - 1));
-            var clickedSelectedRowHeader = IsRowSelected(clickedRowHeader);
+            var clickedSelectedRowHeader = IsRowHeaderMarkedSelected(clickedRowHeader);
 
             if (e.ChangedButton == MouseButton.Left
                 && clickedSelectedRowHeader
@@ -187,8 +259,7 @@ public sealed partial class Griddo
                 _pendingRowHeaderIndex = clickedRowHeader;
                 _pendingRowHeaderSelectionAdditive = isCtrlPressed;
                 CaptureMouse();
-                e.Handled = true;
-                base.OnMouseDown(e);
+                CompleteMouseDown(e, handled: true);
                 return;
             }
 
@@ -219,16 +290,21 @@ public sealed partial class Griddo
             _currentCell = target;
             _isEditing = false;
             InvalidateVisual();
-            e.Handled = true;
-            base.OnMouseDown(e);
+            CompleteMouseDown(e, handled: true);
             return;
         }
 
         var clicked = HitTestCell(pointer);
         if (!clicked.IsValid)
         {
-            base.OnMouseDown(e);
+            CompleteMouseDown(e, handled: false);
             return;
+        }
+
+        ClearHeaderFocus();
+        if (e.ChangedButton == MouseButton.Right)
+        {
+            ClearHeaderAuxiliarySelectionState();
         }
 
         if (e.ChangedButton == MouseButton.Right
@@ -236,9 +312,13 @@ public sealed partial class Griddo
             && e.ClickCount == 1
             && Columns[clicked.ColumnIndex] is IGriddoHostedColumnView hostedRightDirect)
         {
-            _selectedCells.Clear();
-            _selectedCells.Add(clicked);
-            _currentCell = clicked;
+            var wasSelectedHosted = _selectedCells.Contains(clicked);
+            if (!wasSelectedHosted)
+            {
+                _selectedCells.Clear();
+                _selectedCells.Add(clicked);
+                _currentCell = clicked;
+            }
             _isDraggingSelection = false;
             _pendingHostedEditActivation = false;
             SyncHostedCells();
@@ -252,8 +332,7 @@ public sealed partial class Griddo
 
             _isEditing = false;
             InvalidateVisual();
-            e.Handled = true;
-            base.OnMouseDown(e);
+            CompleteMouseDown(e, handled: true);
             return;
         }
 
@@ -270,8 +349,7 @@ public sealed partial class Griddo
             _isEditing = false;
             InvalidateVisual();
             OpenCellContextMenu(e, clicked, wasSelected);
-            e.Handled = true;
-            base.OnMouseDown(e);
+            CompleteMouseDown(e, handled: true);
             return;
         }
 
@@ -285,14 +363,17 @@ public sealed partial class Griddo
                 _selectedCells.Add(clicked);
                 _currentCell = clicked;
                 _isDraggingSelection = false;
-                if (Columns[clicked.ColumnIndex] is not IGriddoHostedColumnView)
+                if (Columns[clicked.ColumnIndex] is GriddoBoolColumnView)
+                {
+                    ToggleBoolCell(clicked);
+                }
+                else if (Columns[clicked.ColumnIndex] is not IGriddoHostedColumnView)
                 {
                     BeginEditWithoutReplacing();
                 }
 
                 InvalidateVisual();
-                e.Handled = true;
-                base.OnMouseDown(e);
+                CompleteMouseDown(e, handled: true);
                 return;
             }
 
@@ -304,7 +385,7 @@ public sealed partial class Griddo
                     && hostedDirect.IsHostInEditMode(hostedForDirect))
                 {
                     InvalidateVisual();
-                    base.OnMouseDown(e);
+                    CompleteMouseDown(e, handled: false);
                     return;
                 }
 
@@ -323,8 +404,7 @@ public sealed partial class Griddo
                 }
 
                 InvalidateVisual();
-                e.Handled = true;
-                base.OnMouseDown(e);
+                CompleteMouseDown(e, handled: true);
                 return;
             }
 
@@ -338,12 +418,23 @@ public sealed partial class Griddo
                         && hostedSameCell.IsHostInEditMode(hostedSameElement))
                     {
                         InvalidateVisual();
-                        base.OnMouseDown(e);
+                        CompleteMouseDown(e, handled: false);
                         return;
                     }
 
                     _pendingHostedEditActivation = true;
                     _pendingHostedEditCell = clicked;
+                }
+                else if (Columns[clicked.ColumnIndex] is GriddoBoolColumnView)
+                {
+                    _selectedCells.Clear();
+                    _selectedCells.Add(clicked);
+                    _currentCell = clicked;
+                    _isDraggingSelection = false;
+                    ToggleBoolCell(clicked);
+                    InvalidateVisual();
+                    CompleteMouseDown(e, handled: true);
+                    return;
                 }
                 else
                 {
@@ -353,8 +444,7 @@ public sealed partial class Griddo
                     _isDraggingSelection = false;
                     BeginEditWithoutReplacing();
                     InvalidateVisual();
-                    e.Handled = true;
-                    base.OnMouseDown(e);
+                    CompleteMouseDown(e, handled: true);
                     return;
                 }
             }
@@ -370,8 +460,7 @@ public sealed partial class Griddo
             _currentCell = clicked;
             _isEditing = false;
             InvalidateVisual();
-            e.Handled = true;
-            base.OnMouseDown(e);
+            CompleteMouseDown(e, handled: true);
             return;
         }
 
@@ -394,13 +483,13 @@ public sealed partial class Griddo
             _isDraggingSelection = false;
             _isEditing = false;
             InvalidateVisual();
-            base.OnMouseDown(e);
+            CompleteMouseDown(e, handled: false);
             return;
         }
 
         if (e.ChangedButton != MouseButton.Left)
         {
-            base.OnMouseDown(e);
+            CompleteMouseDown(e, handled: false);
             return;
         }
 
@@ -426,8 +515,7 @@ public sealed partial class Griddo
         _currentCell = clicked;
         _isEditing = false;
         InvalidateVisual();
-        e.Handled = true;
-        base.OnMouseDown(e);
+        CompleteMouseDown(e, handled: true);
     }
 
     private void OpenCellContextMenu(MouseButtonEventArgs e, GriddoCellAddress cell, bool cellWasAlreadySelected)
@@ -447,8 +535,90 @@ public sealed partial class Griddo
         CellContextMenu.IsOpen = true;
     }
 
+    private void CompleteMouseDown(MouseButtonEventArgs e, bool handled)
+    {
+        if (handled)
+        {
+            e.Handled = true;
+        }
+
+        base.OnMouseDown(e);
+    }
+
+    /// <summary>Column or row divider: double-click autosize, drag starts resize with capture.</summary>
+    private bool TryBeginDividerResizeOrAutoSize(MouseButtonEventArgs e, Point pointer, bool isCtrlPressed)
+    {
+        if (e.ChangedButton != MouseButton.Left)
+        {
+            return false;
+        }
+
+        var dividerColumn = HitTestColumnDivider(pointer);
+        if (dividerColumn >= 0)
+        {
+            if (e.ClickCount == 2)
+            {
+                if (isCtrlPressed)
+                {
+                    AutoSizeAllColumns();
+                    e.Handled = true;
+                    return true;
+                }
+
+                AutoSizeColumn(dividerColumn);
+                e.Handled = true;
+                return true;
+            }
+
+            _isResizingColumn = true;
+            _resizingColumnIndex = dividerColumn;
+            _resizeStartPoint = pointer;
+            _resizeInitialSize = GetColumnWidth(dividerColumn);
+            CaptureMouse();
+            e.Handled = true;
+            return true;
+        }
+
+        var dividerRow = HitTestRowDivider(pointer);
+        if (dividerRow < 0)
+        {
+            return false;
+        }
+
+        if (e.ClickCount == 2)
+        {
+            if (isCtrlPressed)
+            {
+                AutoSizeAllColumns();
+                e.Handled = true;
+                return true;
+            }
+
+            AutoSizeRow(dividerRow);
+            e.Handled = true;
+            return true;
+        }
+
+        _isResizingRow = true;
+        _resizingRowIndex = dividerRow;
+        _resizeStartPoint = pointer;
+        _resizeInitialSize = GetRowHeight(dividerRow);
+        CaptureMouse();
+        e.Handled = true;
+        return true;
+    }
+
+    // -------------------------------------------------------------------------
+    // Preview mouse down (hosted columns)
+    // -------------------------------------------------------------------------
+
     protected override void OnPreviewMouseDown(MouseButtonEventArgs e)
     {
+        if (e.ChangedButton == MouseButton.Left)
+        {
+            ClearHeaderAuxiliarySelectionState();
+        }
+
         if (e.ChangedButton != MouseButton.Left)
         {
             base.OnPreviewMouseDown(e);
@@ -528,6 +698,10 @@ public sealed partial class Griddo
         base.OnPreviewMouseDown(e);
     }
 
+    // -------------------------------------------------------------------------
+    // Mouse move
+    // -------------------------------------------------------------------------
+
     protected override void OnMouseMove(MouseEventArgs e)
     {
         var pointer = e.GetPosition(this);
@@ -562,7 +736,7 @@ public sealed partial class Griddo
 
             var dragDistance = (pointer - _columnMoveStartPoint).Length;
             var isPointerInColumnHeader = HitTestColumnHeader(pointer) >= 0;
-            var shouldShowMovingHeaderCue = isPointerInColumnHeader && dragDistance >= 1;
+            var shouldShowMovingHeaderCue = isPointerInColumnHeader && dragDistance >= DragCueMinPixels;
             if (_isMovingPointerInColumnHeader != shouldShowMovingHeaderCue)
             {
                 _isMovingPointerInColumnHeader = shouldShowMovingHeaderCue;
@@ -571,7 +745,7 @@ public sealed partial class Griddo
 
             if (!_isMovingColumn)
             {
-                if (dragDistance >= 1)
+                if (dragDistance >= DragCueMinPixels)
                 {
                     _isMovingColumn = true;
                 }
@@ -608,7 +782,7 @@ public sealed partial class Griddo
             }
 
             var dragDistance = (pointer - _rowMoveStartPoint).Length;
-            if (!_isMovingRow && dragDistance >= 1)
+            if (!_isMovingRow && dragDistance >= DragCueMinPixels)
             {
                 _isMovingRow = true;
             }
@@ -691,6 +865,10 @@ public sealed partial class Griddo
         e.Handled = true;
         base.OnMouseMove(e);
     }
+
+    // -------------------------------------------------------------------------
+    // Auto-scroll while dragging near viewport edges
+    // -------------------------------------------------------------------------
 
     private void AutoScrollDuringColumnMove(double pointerX)
     {
@@ -834,6 +1012,10 @@ public sealed partial class Griddo
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Mouse up
+    // -------------------------------------------------------------------------
+
     protected override void OnMouseUp(MouseButtonEventArgs e)
     {
         if (_isTrackingColumnMove && e.ChangedButton == MouseButton.Left)
@@ -965,7 +1147,11 @@ public sealed partial class Griddo
             _isDraggingRowHeaderSelection = false;
             _rowHeaderDragAnchorRow = -1;
             _rowHeaderDragCurrentRow = -1;
-            if (!_isDraggingSelection && !_isResizingColumn && !_isResizingRow && !_isTrackingColumnMove && IsMouseCaptured)
+            if (!_isDraggingSelection
+                && !_isResizingColumn
+                && !_isResizingRow
+                && !_isTrackingColumnMove
+                && IsMouseCaptured)
             {
                 ReleaseMouseCapture();
             }
@@ -989,6 +1175,10 @@ public sealed partial class Griddo
 
         base.OnMouseUp(e);
     }
+
+    // -------------------------------------------------------------------------
+    // Mouse wheel
+    // -------------------------------------------------------------------------
 
     protected override void OnPreviewMouseWheel(MouseWheelEventArgs e)
     {

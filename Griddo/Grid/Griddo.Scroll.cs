@@ -1,46 +1,112 @@
+using System;
 using System.Windows;
 
 namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
+    private static double FloorToRowStep(double valuePx, double rowHeightPx)
+    {
+        if (rowHeightPx < 1e-9)
+        {
+            return valuePx;
+        }
+
+        return Math.Floor(valuePx / rowHeightPx + 1e-9) * rowHeightPx;
+    }
+
+    /// <summary>
+    /// When <see cref="VisibleRowCount"/> is set, row height tracks viewport height; snap scroll extent so the thumb maps to whole-row offsets.
+    /// </summary>
+    private double GetAlignedMaxVerticalScrollForSlider(double rawMaxVertical)
+    {
+        if (_visibleRowCount <= 0 || Rows.Count == 0 || _viewportBodyHeight <= 0)
+        {
+            return rawMaxVertical;
+        }
+
+        var h = GetRowHeight(0);
+        if (h < 1e-6)
+        {
+            return rawMaxVertical;
+        }
+
+        return FloorToRowStep(rawMaxVertical, h);
+    }
+
+    /// <summary>
+    /// When <see cref="VisibleRowCount"/> is set, vertical scroll offset must be a multiple of row height so the top visible scroll row aligns with the body band (resize no longer leaves a partial row at the top).
+    /// </summary>
+    private double HarmonizeVerticalScrollOffset(double offsetPx)
+    {
+        if (_visibleRowCount <= 0 || Rows.Count == 0 || _viewportBodyHeight <= 0)
+        {
+            return Math.Clamp(offsetPx, 0, _verticalScrollBar.Maximum);
+        }
+
+        var h = GetRowHeight(0);
+        if (h < 1e-6)
+        {
+            return Math.Clamp(offsetPx, 0, _verticalScrollBar.Maximum);
+        }
+
+        var rawMax = Math.Max(0, GetScrollableRowsContentHeight() - GetScrollRowsViewportHeight());
+        var clamped = Math.Clamp(offsetPx, 0, rawMax);
+        var maxAligned = FloorToRowStep(rawMax, h);
+        var snapped = FloorToRowStep(clamped, h);
+        return Math.Clamp(snapped, 0, maxAligned);
+    }
+
     private void UpdateScrollBars()
     {
         var scrollViewport = GetScrollViewportWidth();
         var scrollContent = GetScrollableContentWidth();
-        var contentHeight = GetContentHeight();
+        var scrollRowsViewport = GetScrollRowsViewportHeight();
+        var scrollRowsContent = GetScrollableRowsContentHeight();
         var maxHorizontal = Math.Max(0, scrollContent - scrollViewport);
-        var maxVertical = Math.Max(0, contentHeight - _viewportBodyHeight);
+        var rawMaxVertical = Math.Max(0, scrollRowsContent - scrollRowsViewport);
+        var maxVertical = GetAlignedMaxVerticalScrollForSlider(rawMaxVertical);
 
         _horizontalScrollBar.LargeChange = Math.Max(1, _viewportBodyWidth);
         _horizontalScrollBar.SmallChange = 16;
         _horizontalScrollBar.Maximum = maxHorizontal;
 
-        _verticalScrollBar.LargeChange = Math.Max(1, _viewportBodyHeight);
+        _verticalScrollBar.LargeChange = Math.Max(1, scrollRowsViewport);
         _verticalScrollBar.SmallChange = Math.Max(1, GetRowHeight(0));
         _verticalScrollBar.Maximum = maxVertical;
 
         SetHorizontalOffset(_horizontalOffset);
         SetVerticalOffset(_verticalOffset);
+        SnapVerticalScrollForVisibleRowFitMode();
     }
 
-    private double GetContentHeight()
+    /// <summary>After viewport/row height changes, re-align scroll offset to whole rows so the scroll band starts on a row boundary.</summary>
+    private void SnapVerticalScrollForVisibleRowFitMode()
     {
-        return Rows.Count * GetRowHeight(0);
-    }
-
-    private void GetVisibleRowRange(out int startRow, out int endRow)
-    {
-        if (Rows.Count == 0 || _viewportBodyHeight <= 0)
+        if (_visibleRowCount <= 0 || Rows.Count == 0 || _viewportBodyHeight <= 0)
         {
-            startRow = 0;
-            endRow = -1;
             return;
         }
 
-        var rowHeight = GetRowHeight(0);
-        startRow = Math.Clamp((int)(_verticalOffset / rowHeight), 0, Rows.Count - 1);
-        endRow = Math.Clamp((int)Math.Ceiling((_verticalOffset + _viewportBodyHeight) / rowHeight) - 1, 0, Rows.Count - 1);
+        var h = GetRowHeight(0);
+        if (h < 1e-6)
+        {
+            return;
+        }
+
+        var v = HarmonizeVerticalScrollOffset(_verticalOffset);
+        if (Math.Abs(v - _verticalOffset) < double.Epsilon)
+        {
+            return;
+        }
+
+        _verticalOffset = v;
+        if (Math.Abs(_verticalScrollBar.Value - v) > double.Epsilon)
+        {
+            _verticalScrollBar.Value = v;
+        }
+
+        InvalidateVisual();
     }
 
     private void SetHorizontalOffset(double value)

@@ -5,6 +5,20 @@ namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
+    private void ClearHeaderAuxiliarySelectionState()
+    {
+        _columnHeaderOnlySelection.Clear();
+        _rowHeaderOnlySelection.Clear();
+        _columnHeaderRightClickOutline.Clear();
+        _rowHeaderRightClickOutline.Clear();
+    }
+
+    private bool IsColumnHeaderMarkedSelected(int columnIndex) =>
+        IsColumnSelected(columnIndex) || _columnHeaderOnlySelection.Contains(columnIndex);
+
+    private bool IsRowHeaderMarkedSelected(int rowIndex) =>
+        IsRowSelected(rowIndex) || _rowHeaderOnlySelection.Contains(rowIndex);
+
     private void MoveCurrentCell(int rowDelta, int colDelta)
     {
         if (Rows.Count == 0 || Columns.Count == 0)
@@ -12,6 +26,8 @@ public sealed partial class Griddo
             return;
         }
 
+        ClearHeaderFocus();
+        ClearHeaderAuxiliarySelectionState();
         var row = Math.Clamp(_currentCell.RowIndex + rowDelta, 0, Rows.Count - 1);
         var col = Math.Clamp(_currentCell.ColumnIndex + colDelta, 0, Columns.Count - 1);
         _currentCell = new GriddoCellAddress(row, col);
@@ -35,12 +51,16 @@ public sealed partial class Griddo
                 _hasKeyboardSelectionAnchor = true;
             }
 
+            ClearHeaderFocus();
+            ClearHeaderAuxiliarySelectionState();
             _currentCell = target;
             SelectRange(_keyboardSelectionAnchor, _currentCell, additive: false);
             InvalidateVisual();
             return true;
         }
 
+        ClearHeaderFocus();
+        ClearHeaderAuxiliarySelectionState();
         _hasKeyboardSelectionAnchor = false;
         _currentCell = target;
         _selectedCells.Clear();
@@ -51,6 +71,7 @@ public sealed partial class Griddo
 
     private void ApplyDragSelection()
     {
+        ClearHeaderAuxiliarySelectionState();
         _selectedCells.Clear();
         if (_dragIsAdditive || (Keyboard.Modifiers & ModifierKeys.Control) != 0)
         {
@@ -73,6 +94,7 @@ public sealed partial class Griddo
 
     private void SelectRange(GriddoCellAddress from, GriddoCellAddress to, bool additive)
     {
+        ClearHeaderAuxiliarySelectionState();
         if (!additive)
         {
             _selectedCells.Clear();
@@ -101,6 +123,7 @@ public sealed partial class Griddo
             return;
         }
 
+        ClearHeaderAuxiliarySelectionState();
         if (!additive)
         {
             _selectedCells.Clear();
@@ -114,6 +137,8 @@ public sealed partial class Griddo
 
     private void SelectAllCells()
     {
+        ClearHeaderFocus();
+        ClearHeaderAuxiliarySelectionState();
         _selectedCells.Clear();
         if (Rows.Count == 0 || Columns.Count == 0)
         {
@@ -129,6 +154,11 @@ public sealed partial class Griddo
         }
     }
 
+    private void ClearHeaderFocus()
+    {
+        _headerFocusKind = HeaderFocusKind.None;
+    }
+
     private void StopColumnMoveTracking()
     {
         _isTrackingColumnMove = false;
@@ -139,7 +169,13 @@ public sealed partial class Griddo
         _pendingColumnHeaderIndex = -1;
         _movingColumnIndex = -1;
         _columnMoveCueIndex = -1;
-        if (!_isDraggingSelection && !_isResizingColumn && !_isResizingRow && !_isTrackingRowMove && IsMouseCaptured)
+        if (!_isDraggingSelection
+            && !_isDraggingColumnHeaderSelection
+            && !_isDraggingRowHeaderSelection
+            && !_isResizingColumn
+            && !_isResizingRow
+            && !_isTrackingRowMove
+            && IsMouseCaptured)
         {
             ReleaseMouseCapture();
         }
@@ -153,10 +189,26 @@ public sealed partial class Griddo
         _rowMoveCueIndex = -1;
         _pendingRowHeaderSelectionOnMouseUp = false;
         _pendingRowHeaderIndex = -1;
-        if (!_isDraggingSelection && !_isResizingColumn && !_isResizingRow && !_isTrackingColumnMove && IsMouseCaptured)
+        if (!_isDraggingSelection
+            && !_isDraggingColumnHeaderSelection
+            && !_isDraggingRowHeaderSelection
+            && !_isResizingColumn
+            && !_isResizingRow
+            && !_isTrackingColumnMove
+            && IsMouseCaptured)
         {
             ReleaseMouseCapture();
         }
+    }
+
+    private void RemapHeaderFocusColumnAfterMove(int fromIndex, int toIndex)
+    {
+        if (_headerFocusKind != HeaderFocusKind.Column)
+        {
+            return;
+        }
+
+        _headerFocusColumnIndex = RemapColumnIndex(_headerFocusColumnIndex, fromIndex, toIndex);
     }
 
     private void MoveColumn(int fromIndex, int toIndex)
@@ -179,6 +231,43 @@ public sealed partial class Griddo
 
         _selectedCells.Clear();
         _selectedCells.UnionWith(remapped);
+        if (_columnHeaderOnlySelection.Count > 0)
+        {
+            var remappedHeaders = new HashSet<int>();
+            foreach (var c in _columnHeaderOnlySelection)
+            {
+                remappedHeaders.Add(RemapColumnIndex(c, fromIndex, toIndex));
+            }
+
+            _columnHeaderOnlySelection.Clear();
+            foreach (var c in remappedHeaders)
+            {
+                if (c >= 0 && c < Columns.Count)
+                {
+                    _columnHeaderOnlySelection.Add(c);
+                }
+            }
+        }
+
+        if (_columnHeaderRightClickOutline.Count > 0)
+        {
+            var remappedOutline = new HashSet<int>();
+            foreach (var c in _columnHeaderRightClickOutline)
+            {
+                remappedOutline.Add(RemapColumnIndex(c, fromIndex, toIndex));
+            }
+
+            _columnHeaderRightClickOutline.Clear();
+            foreach (var c in remappedOutline)
+            {
+                if (c >= 0 && c < Columns.Count)
+                {
+                    _columnHeaderRightClickOutline.Add(c);
+                }
+            }
+        }
+
+        RemapHeaderFocusColumnAfterMove(fromIndex, toIndex);
     }
 
     private void MoveSelectedColumns(int anchorColumn, int targetColumn)
@@ -230,6 +319,64 @@ public sealed partial class Griddo
             insertAfterTarget,
             index => Rows.Move(index.from, index.to));
         RemapSelectionAfterRowMove(oldToNew);
+    }
+
+    /// <summary>Clears all selected cells without changing the logical current cell; ends in-cell editing.</summary>
+    public void ClearCellSelection()
+    {
+        ClearHeaderFocus();
+        ClearHeaderAuxiliarySelectionState();
+        _hasKeyboardSelectionAnchor = false;
+        _selectedCells.Clear();
+        _isEditing = false;
+        if (Rows.Count > 0 && Columns.Count > 0)
+        {
+            _currentCell = new GriddoCellAddress(
+                Math.Clamp(_currentCell.RowIndex, 0, Rows.Count - 1),
+                Math.Clamp(_currentCell.ColumnIndex, 0, Columns.Count - 1));
+        }
+
+        InvalidateVisual();
+    }
+
+    /// <summary>Moves all selected rows up (<paramref name="direction"/> = -1) or down (+1), matching row-header drag behavior.</summary>
+    /// <returns>True if a move was applied.</returns>
+    public bool TryMoveSelectedRowsStep(int direction)
+    {
+        if (direction is not (-1) and not 1 || Rows.Count == 0)
+        {
+            return false;
+        }
+
+        var selected = GetSelectedRowIndices();
+        if (selected.Count == 0)
+        {
+            return false;
+        }
+
+        if (direction < 0)
+        {
+            var min = selected[0];
+            if (min <= 0)
+            {
+                return false;
+            }
+
+            MoveSelectedRows(min, min - 1);
+        }
+        else
+        {
+            var max = selected[^1];
+            if (max >= Rows.Count - 1)
+            {
+                return false;
+            }
+
+            MoveSelectedRows(max, max + 1);
+        }
+
+        InvalidateVisual();
+        return true;
     }
 
     private static int[] MoveColumnOrRowIndices(
@@ -308,6 +455,49 @@ public sealed partial class Griddo
 
         _selectedCells.Clear();
         _selectedCells.UnionWith(remapped);
+
+        if (_headerFocusKind == HeaderFocusKind.Column
+            && _headerFocusColumnIndex >= 0
+            && _headerFocusColumnIndex < oldToNew.Length)
+        {
+            _headerFocusColumnIndex = oldToNew[_headerFocusColumnIndex];
+        }
+
+        if (_columnHeaderOnlySelection.Count > 0)
+        {
+            var remappedHeaders = new HashSet<int>();
+            foreach (var c in _columnHeaderOnlySelection)
+            {
+                if (c >= 0 && c < oldToNew.Length)
+                {
+                    remappedHeaders.Add(oldToNew[c]);
+                }
+            }
+
+            _columnHeaderOnlySelection.Clear();
+            foreach (var c in remappedHeaders)
+            {
+                _columnHeaderOnlySelection.Add(c);
+            }
+        }
+
+        if (_columnHeaderRightClickOutline.Count > 0)
+        {
+            var remappedOutline = new HashSet<int>();
+            foreach (var c in _columnHeaderRightClickOutline)
+            {
+                if (c >= 0 && c < oldToNew.Length)
+                {
+                    remappedOutline.Add(oldToNew[c]);
+                }
+            }
+
+            _columnHeaderRightClickOutline.Clear();
+            foreach (var c in remappedOutline)
+            {
+                _columnHeaderRightClickOutline.Add(c);
+            }
+        }
     }
 
     private void RemapSelectionAfterRowMove(int[] oldToNew)
@@ -335,6 +525,49 @@ public sealed partial class Griddo
 
         _selectedCells.Clear();
         _selectedCells.UnionWith(remapped);
+
+        if (_headerFocusKind == HeaderFocusKind.Row
+            && _headerFocusRowIndex >= 0
+            && _headerFocusRowIndex < oldToNew.Length)
+        {
+            _headerFocusRowIndex = oldToNew[_headerFocusRowIndex];
+        }
+
+        if (_rowHeaderOnlySelection.Count > 0)
+        {
+            var remappedRows = new HashSet<int>();
+            foreach (var r in _rowHeaderOnlySelection)
+            {
+                if (r >= 0 && r < oldToNew.Length)
+                {
+                    remappedRows.Add(oldToNew[r]);
+                }
+            }
+
+            _rowHeaderOnlySelection.Clear();
+            foreach (var r in remappedRows)
+            {
+                _rowHeaderOnlySelection.Add(r);
+            }
+        }
+
+        if (_rowHeaderRightClickOutline.Count > 0)
+        {
+            var remappedOutline = new HashSet<int>();
+            foreach (var r in _rowHeaderRightClickOutline)
+            {
+                if (r >= 0 && r < oldToNew.Length)
+                {
+                    remappedOutline.Add(oldToNew[r]);
+                }
+            }
+
+            _rowHeaderRightClickOutline.Clear();
+            foreach (var r in remappedOutline)
+            {
+                _rowHeaderRightClickOutline.Add(r);
+            }
+        }
     }
 
     private static int RemapColumnIndex(int columnIndex, int fromIndex, int toIndex)
@@ -352,7 +585,6 @@ public sealed partial class Griddo
         return (columnIndex >= toIndex && columnIndex < fromIndex) ? columnIndex + 1 : columnIndex;
     }
 
-
     private void SelectRow(int rowIndex, bool additive)
     {
         if (rowIndex < 0 || rowIndex >= Rows.Count)
@@ -360,6 +592,7 @@ public sealed partial class Griddo
             return;
         }
 
+        ClearHeaderAuxiliarySelectionState();
         if (!additive)
         {
             _selectedCells.Clear();
@@ -369,6 +602,23 @@ public sealed partial class Griddo
         {
             _selectedCells.Add(new GriddoCellAddress(rowIndex, col));
         }
+    }
+
+    /// <summary>Selects one entire row (all columns), optionally adding to the existing selection.</summary>
+    public void SelectEntireRow(int rowIndex, bool additive = false)
+    {
+        ClearHeaderFocus();
+        SelectRow(rowIndex, additive);
+        if (rowIndex >= 0 && rowIndex < Rows.Count && Columns.Count > 0)
+        {
+            _currentCell = new GriddoCellAddress(
+                rowIndex,
+                Math.Clamp(_currentCell.ColumnIndex, 0, Columns.Count - 1));
+        }
+
+        _hasKeyboardSelectionAnchor = false;
+        _isEditing = false;
+        InvalidateVisual();
     }
 
     private bool IsRowSelected(int rowIndex)
@@ -382,22 +632,48 @@ public sealed partial class Griddo
     }
     private List<int> GetSelectedColumnIndices()
     {
-        return _selectedCells
-            .Select(c => c.ColumnIndex)
-            .Where(c => c >= 0 && c < Columns.Count)
-            .Distinct()
-            .OrderBy(c => c)
-            .ToList();
+        var set = new HashSet<int>();
+        foreach (var address in _selectedCells)
+        {
+            var c = address.ColumnIndex;
+            if (c >= 0 && c < Columns.Count)
+            {
+                set.Add(c);
+            }
+        }
+
+        foreach (var c in _columnHeaderOnlySelection)
+        {
+            if (c >= 0 && c < Columns.Count)
+            {
+                set.Add(c);
+            }
+        }
+
+        return set.OrderBy(c => c).ToList();
     }
 
     private List<int> GetSelectedRowIndices()
     {
-        return _selectedCells
-            .Select(c => c.RowIndex)
-            .Where(r => r >= 0 && r < Rows.Count)
-            .Distinct()
-            .OrderBy(r => r)
-            .ToList();
+        var set = new HashSet<int>();
+        foreach (var address in _selectedCells)
+        {
+            var r = address.RowIndex;
+            if (r >= 0 && r < Rows.Count)
+            {
+                set.Add(r);
+            }
+        }
+
+        foreach (var r in _rowHeaderOnlySelection)
+        {
+            if (r >= 0 && r < Rows.Count)
+            {
+                set.Add(r);
+            }
+        }
+
+        return set.OrderBy(r => r).ToList();
     }
 
     private void ApplyRowHeaderDragSelection()
@@ -410,6 +686,7 @@ public sealed partial class Griddo
             return;
         }
 
+        ClearHeaderAuxiliarySelectionState();
         _selectedCells.Clear();
         if (_rowHeaderDragIsAdditive || (Keyboard.Modifiers & ModifierKeys.Control) != 0)
         {
@@ -437,6 +714,7 @@ public sealed partial class Griddo
             return;
         }
 
+        ClearHeaderAuxiliarySelectionState();
         _selectedCells.Clear();
         if (_columnHeaderDragIsAdditive || (Keyboard.Modifiers & ModifierKeys.Control) != 0)
         {
@@ -467,6 +745,7 @@ public sealed partial class Griddo
 
         if (!additive)
         {
+            ClearHeaderAuxiliarySelectionState();
             _selectedCells.Clear();
         }
 

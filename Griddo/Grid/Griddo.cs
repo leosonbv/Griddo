@@ -15,6 +15,14 @@ namespace Griddo.Grid;
 
 public sealed partial class Griddo : FrameworkElement
 {
+    private enum HeaderFocusKind : byte
+    {
+        None,
+        Corner,
+        Column,
+        Row,
+    }
+
     private const double ColumnHeaderHeightBase = 22;
     private const double DefaultRowHeight = 24;
     private const double MinColumnWidth = 28;
@@ -34,6 +42,17 @@ public sealed partial class Griddo : FrameworkElement
     ];
 
     private readonly HashSet<GriddoCellAddress> _selectedCells = [];
+    /// <summary>Column indices whose headers stay highlighted after a column-header context gesture cleared body cells.</summary>
+    private readonly HashSet<int> _columnHeaderOnlySelection = [];
+
+    /// <summary>Row indices whose headers stay highlighted after a row-header context gesture cleared body cells.</summary>
+    private readonly HashSet<int> _rowHeaderOnlySelection = [];
+
+    /// <summary>Column headers outlined in red after a column-header right-click (context scope).</summary>
+    private readonly HashSet<int> _columnHeaderRightClickOutline = [];
+
+    /// <summary>Row headers outlined in red after a row-header right-click (context scope).</summary>
+    private readonly HashSet<int> _rowHeaderRightClickOutline = [];
     private readonly HashSet<GriddoCellAddress> _selectionDragSnapshot = [];
     private readonly Dictionary<int, double> _columnWidthOverrides = [];
     private readonly GriddoTextEditSession _editSession = new();
@@ -76,14 +95,6 @@ public sealed partial class Griddo : FrameworkElement
     private bool _dragIsAdditive;
     private GriddoCellAddress _dragAnchorCell;
     private GriddoCellAddress _dragCurrentCell;
-    private bool _isDraggingRowHeaderSelection;
-    private bool _rowHeaderDragIsAdditive;
-    private int _rowHeaderDragAnchorRow = -1;
-    private int _rowHeaderDragCurrentRow = -1;
-    private bool _isDraggingColumnHeaderSelection;
-    private bool _columnHeaderDragIsAdditive;
-    private int _columnHeaderDragAnchorColumn = -1;
-    private int _columnHeaderDragCurrentColumn = -1;
     private bool _pendingHostedEditActivation;
     private GriddoCellAddress _pendingHostedEditCell;
     private bool _isResizingColumn;
@@ -102,6 +113,10 @@ public sealed partial class Griddo : FrameworkElement
     private bool _pendingColumnHeaderSelectionOnMouseUp;
     private int _pendingColumnHeaderIndex = -1;
     private bool _pendingColumnHeaderSelectionAdditive;
+    private bool _isDraggingColumnHeaderSelection;
+    private bool _columnHeaderDragIsAdditive;
+    private int _columnHeaderDragAnchorColumn = -1;
+    private int _columnHeaderDragCurrentColumn = -1;
     private bool _isTrackingRowMove;
     private bool _isMovingRow;
     private int _movingRowIndex = -1;
@@ -110,8 +125,16 @@ public sealed partial class Griddo : FrameworkElement
     private bool _pendingRowHeaderSelectionOnMouseUp;
     private int _pendingRowHeaderIndex = -1;
     private bool _pendingRowHeaderSelectionAdditive;
+    private bool _isDraggingRowHeaderSelection;
+    private bool _rowHeaderDragIsAdditive;
+    private int _rowHeaderDragAnchorRow = -1;
+    private int _rowHeaderDragCurrentRow = -1;
+    private HeaderFocusKind _headerFocusKind;
+    private int _headerFocusColumnIndex;
+    private int _headerFocusRowIndex;
     private double _horizontalOffset;
     private int _fixedColumnCount;
+    private int _fixedRowCount;
     private double _verticalOffset;
     private double _viewportBodyWidth;
     private double _viewportBodyHeight;
@@ -223,7 +246,13 @@ public sealed partial class Griddo : FrameworkElement
 
     public IReadOnlyCollection<GriddoCellAddress> SelectedCells => _selectedCells;
 
+    /// <summary>Keyboard/mouse focus cell (not necessarily the only selected cell when a range is selected).</summary>
+    public GriddoCellAddress CurrentCell => _currentCell;
+
     public event EventHandler<GriddoColumnHeaderMouseEventArgs>? ColumnHeaderRightClick;
+
+    /// <summary>Fires on row header right-click; see <see cref="GriddoRowHeaderMouseEventArgs.SelectedRowIndices"/> for the full scope.</summary>
+    public event EventHandler<GriddoRowHeaderMouseEventArgs>? RowHeaderRightClick;
 
     /// <summary>Optional context menu for body-cell right-click (after selection rules are applied).</summary>
     public ContextMenu? CellContextMenu { get; set; }
@@ -276,6 +305,9 @@ public sealed partial class Griddo : FrameworkElement
     /// <summary>Pen stroke for the right edge of the last fixed column only (freeze boundary before scrollable columns).</summary>
     public Brush FixedColumnRightBorderBrush { get; set; } = new SolidColorBrush(Color.FromRgb(118, 118, 118));
 
+    /// <summary>Pen stroke for the bottom edge of the last fixed row only (freeze boundary above scrollable rows).</summary>
+    public Brush FixedRowBottomBorderBrush { get; set; } = new SolidColorBrush(Color.FromRgb(118, 118, 118));
+
     /// <summary>Number of leading columns that remain fixed on the left when scrolling horizontally (0 = off).</summary>
     public int FixedColumnCount
     {
@@ -291,6 +323,24 @@ public sealed partial class Griddo : FrameworkElement
             _fixedColumnCount = v;
             UpdateScrollBars();
             UpdateHostCanvasClips();
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>Number of leading rows that stay fixed at the top when scrolling vertically (0 = off).</summary>
+    public int FixedRowCount
+    {
+        get => _fixedRowCount;
+        set
+        {
+            var v = Math.Clamp(value, 0, Math.Max(0, Rows.Count));
+            if (v == _fixedRowCount)
+            {
+                return;
+            }
+
+            _fixedRowCount = v;
+            UpdateScrollBars();
             InvalidateVisual();
         }
     }
@@ -402,6 +452,7 @@ public sealed partial class Griddo : FrameworkElement
         _ = sender;
         _ = e;
         _fixedColumnCount = Math.Clamp(_fixedColumnCount, 0, Math.Max(0, Columns.Count));
+        _fixedRowCount = Math.Clamp(_fixedRowCount, 0, Math.Max(0, Rows.Count));
         if (Rows.Count == 0)
         {
             _hasAutoSizedColumns = false;

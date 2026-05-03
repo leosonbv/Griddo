@@ -11,7 +11,7 @@ using Griddo.Editing;
 
 namespace GriddoTest;
 
-public sealed class HostedPlottoColumnView : IGriddoHostedColumnView
+public sealed class HostedPlottoColumnView : IGriddoHostedColumnView, IGriddoColumnSourceMember
 {
     private static bool _sharedEditorHooked;
     private readonly Func<object, int> _plottoSeedGetter;
@@ -25,7 +25,9 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView
         ContentAlignment = TextAlignment.Left;
     }
 
-    public string Header { get; }
+    public string Header { get; set; }
+
+    public string SourceMemberName => nameof(DemoRow.PlottoSeed);
     public double Width { get; }
     public bool Fill { get; set; }
     public bool IsHtml => false;
@@ -73,7 +75,7 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView
         var seed = _plottoSeedGetter(rowSource);
         border.Tag = seed;
         var points = MainWindow.CreateChromatogramPoints(seed);
-        var sharedEditor = global::Plotto.Hosting.PlottoPresetCharts.Editor;
+        var sharedEditor = global::Plotto.Charting.Hosting.PlottoPresetCharts.Editor;
         EnsureSharedEditorHook(sharedEditor);
         if (isCurrentCell)
         {
@@ -187,7 +189,7 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView
     public bool IsHostInEditMode(FrameworkElement host)
     {
         return host is Border { Child: ChromatogramControl chart } &&
-               ReferenceEquals(chart, global::Plotto.Hosting.PlottoPresetCharts.Editor) &&
+               ReferenceEquals(chart, global::Plotto.Charting.Hosting.PlottoPresetCharts.Editor) &&
                chart.RenderMode == ChartRenderMode.Editor;
     }
 
@@ -242,7 +244,7 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView
             ApplyOne(ch, gridUsesHostedPlotDirectMouseDown);
         }
 
-        ApplyOne(global::Plotto.Hosting.PlottoPresetCharts.Editor, gridUsesHostedPlotDirectMouseDown);
+        ApplyOne(global::Plotto.Charting.Hosting.PlottoPresetCharts.Editor, gridUsesHostedPlotDirectMouseDown);
     }
 
     public void RelayDirectEditMouseDown(FrameworkElement host, MouseButtonEventArgs eFromGrid)

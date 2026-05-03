@@ -36,6 +36,19 @@ internal sealed class GriddoTextEditSession
 
     public void MoveCaretEnd(bool shiftPressed) => MoveCaret(Buffer.Length, shiftPressed);
 
+    public void SelectAll()
+    {
+        if (Buffer.Length == 0)
+        {
+            CaretIndex = 0;
+            SelectionAnchor = -1;
+            return;
+        }
+
+        SelectionAnchor = 0;
+        CaretIndex = Buffer.Length;
+    }
+
     public void InsertText(string text)
     {
         if (string.IsNullOrEmpty(text))

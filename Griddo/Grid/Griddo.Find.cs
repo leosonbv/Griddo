@@ -135,15 +135,30 @@ public sealed partial class Griddo
             return;
         }
 
-        var targetCenterY = ScaledColumnHeaderHeight + (_viewportBodyHeight / 2.0);
-        var deltaY = rect.Y + (rect.Height / 2.0) - targetCenterY;
-        SetVerticalOffset(_verticalOffset + deltaY);
+        // Center within the vertically scrollable band (below frozen rows), not the full body height.
+        var fRows = GetEffectiveFixedRowCount();
+        if (cell.RowIndex >= fRows)
+        {
+            var vh = GetScrollRowsViewportHeight();
+            if (vh > 1e-6)
+            {
+                var targetCenterY = ScaledColumnHeaderHeight + GetFixedRowsHeight() + vh / 2.0;
+                var deltaY = rect.Y + (rect.Height / 2.0) - targetCenterY;
+                SetVerticalOffset(_verticalOffset + deltaY);
+            }
+        }
 
+        // Center within the horizontally scrollable band (to the right of frozen columns).
         if (cell.ColumnIndex >= _fixedColumnCount)
         {
-            var targetCenterX = _rowHeaderWidth + (_viewportBodyWidth / 2.0);
-            var deltaX = rect.X + (rect.Width / 2.0) - targetCenterX;
-            SetHorizontalOffset(_horizontalOffset + deltaX);
+            var fixedW = GetFixedColumnsWidth();
+            var scrollVp = GetScrollViewportWidth();
+            if (scrollVp > 1e-6)
+            {
+                var targetCenterX = _rowHeaderWidth + fixedW + scrollVp / 2.0;
+                var deltaX = rect.X + (rect.Width / 2.0) - targetCenterX;
+                SetHorizontalOffset(_horizontalOffset + deltaX);
+            }
         }
     }
 

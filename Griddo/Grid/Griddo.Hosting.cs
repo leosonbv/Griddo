@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Griddo.Columns;
 using Griddo.Primitives;
 
@@ -13,6 +14,24 @@ public sealed partial class Griddo
         return _hostedCells.GetValueOrDefault(address);
     }
 
+    /// <summary>
+    /// Clears hosted cell visuals so the next measure/render recreates and reparents them (e.g. Plotto after column chooser apply).
+    /// </summary>
+    public void RefreshHostedCells()
+    {
+        ClearHostedCells();
+        InvalidateMeasure();
+        InvalidateVisual();
+        var grid = this;
+        Dispatcher.BeginInvoke(
+            () =>
+            {
+                grid.InvalidateMeasure();
+                grid.InvalidateVisual();
+            },
+            DispatcherPriority.Render);
+    }
+
     private void SyncHostedCells()
     {
         if (_viewportBodyWidth <= 0 || _viewportBodyHeight <= 0 || Rows.Count == 0 || Columns.Count == 0)
@@ -22,12 +41,6 @@ public sealed partial class Griddo
         }
 
         var needed = new HashSet<GriddoCellAddress>();
-        GetVisibleRowRange(out var startRow, out var endRow);
-        if (endRow < startRow)
-        {
-            ClearHostedCells();
-            return;
-        }
 
         void AddHostedInColumnRange(int c0, int c1)
         {
@@ -38,10 +51,7 @@ public sealed partial class Griddo
                     continue;
                 }
 
-                for (var row = startRow; row <= endRow; row++)
-                {
-                    needed.Add(new GriddoCellAddress(row, col));
-                }
+                ForEachVisibleRow(row => needed.Add(new GriddoCellAddress(row, col)));
             }
         }
 

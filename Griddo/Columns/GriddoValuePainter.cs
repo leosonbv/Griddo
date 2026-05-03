@@ -76,6 +76,44 @@ public static class GriddoValuePainter
         drawingContext.DrawText(formatted, new Point(bounds.X + 4, y));
     }
 
+    /// <summary>Renders a simple checkbox centered in <paramref name="bounds"/> (DIP).</summary>
+    public static void DrawBoolCheckbox(DrawingContext drawingContext, bool isChecked, Rect bounds, double fontSize)
+    {
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return;
+        }
+
+        var side = Math.Clamp(fontSize * 0.9, 11.0, 18.0);
+        var x = bounds.X + Math.Max(0, (bounds.Width - side) / 2);
+        var y = bounds.Y + Math.Max(0, (bounds.Height - side) / 2);
+        var box = new Rect(x, y, side, side);
+
+        var border = new Pen(new SolidColorBrush(Color.FromRgb(96, 96, 96)), 1);
+        drawingContext.DrawRectangle(Brushes.White, border, box);
+
+        if (!isChecked)
+        {
+            return;
+        }
+
+        var stroke = new Pen(Brushes.Black, Math.Max(1.2, side * 0.11))
+        {
+            StartLineCap = PenLineCap.Round,
+            EndLineCap = PenLineCap.Round,
+            LineJoin = PenLineJoin.Round
+        };
+        var m = side * 0.22;
+        var ix0 = box.Left + m;
+        var iy0 = box.Top + side * 0.52;
+        var ix1 = box.Left + side * 0.38;
+        var iy1 = box.Bottom - m;
+        var ix2 = box.Right - m * 0.85;
+        var iy2 = box.Top + side * 0.28;
+        drawingContext.DrawLine(stroke, new Point(ix0, iy0), new Point(ix1, iy1));
+        drawingContext.DrawLine(stroke, new Point(ix1, iy1), new Point(ix2, iy2));
+    }
+
     /// <summary>Places geometry in world space so it scales uniformly and centers inside <paramref name="bounds"/>.</summary>
     private static void DrawGeometryInBounds(DrawingContext drawingContext, Geometry geometry, Rect bounds, Brush foregroundBrush)
     {

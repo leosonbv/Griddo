@@ -16,8 +16,8 @@ public sealed partial class Griddo
         var minY = ScaledColumnHeaderHeight;
         var maxY = ScaledColumnHeaderHeight + _viewportBodyHeight - 1;
         var clampedY = Math.Clamp(point.Y, minY, maxY);
-        var contentY = clampedY - ScaledColumnHeaderHeight + _verticalOffset;
-        var row = HitTestRowIndex(contentY);
+        var bodyY = clampedY - ScaledColumnHeaderHeight;
+        var row = HitTestRowFromBodyY(bodyY);
         return row >= 0 ? row : -1;
     }
 
@@ -46,7 +46,7 @@ public sealed partial class Griddo
             return new GriddoCellAddress(-1, -1);
         }
 
-        var row = HitTestRowIndex(point.Y - ScaledColumnHeaderHeight + _verticalOffset);
+        var row = HitTestRowFromBodyY(point.Y - ScaledColumnHeaderHeight);
         if (row < 0)
         {
             return new GriddoCellAddress(-1, -1);
@@ -139,12 +139,13 @@ public sealed partial class Griddo
             return -1;
         }
 
-        var y = 0.0;
-        var contentY = point.Y - ScaledColumnHeaderHeight + _verticalOffset;
-        for (var row = 0; row < Rows.Count; row++)
+        var bodyY = point.Y - ScaledColumnHeaderHeight;
+        for (var row = 0; row < Rows.Count - 1; row++)
         {
-            y += GetRowHeight(row);
-            if (Math.Abs(contentY - y) <= ScaledResizeGrip)
+            var topRel = GetRowBodyTopRel(row);
+            var h = GetRowHeight(row);
+            var sep = topRel + h;
+            if (Math.Abs(bodyY - sep) <= ScaledResizeGrip)
             {
                 return row;
             }
@@ -160,19 +161,29 @@ public sealed partial class Griddo
             return -1;
         }
 
-        return HitTestRowIndex(point.Y - ScaledColumnHeaderHeight + _verticalOffset);
+        return HitTestRowFromBodyY(point.Y - ScaledColumnHeaderHeight);
     }
 
-    private int HitTestRowIndex(double pointerY)
+    private int HitTestRowFromBodyY(double bodyY)
     {
-        if (Rows.Count == 0 || pointerY < 0)
+        if (Rows.Count == 0 || bodyY < 0)
         {
             return -1;
         }
 
-        var rowHeight = GetRowHeight(0);
-        var row = (int)(pointerY / rowHeight);
-        return row >= 0 && row < Rows.Count ? row : -1;
+        var h = GetRowHeight(0);
+        var f = GetEffectiveFixedRowCount();
+        var fixedH = f * h;
+        if (bodyY < fixedH)
+        {
+            var r = (int)(bodyY / h);
+            return r >= 0 && r < Rows.Count ? r : -1;
+        }
+
+        var scrollBodyY = bodyY - fixedH;
+        var scrollContentY = scrollBodyY + _verticalOffset;
+        var r2 = f + (int)(scrollContentY / h);
+        return r2 >= 0 && r2 < Rows.Count ? r2 : -1;
     }
 
     private void UpdateResizeCursor(Point point)

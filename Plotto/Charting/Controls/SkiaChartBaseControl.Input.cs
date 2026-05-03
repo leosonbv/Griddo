@@ -11,6 +11,46 @@ namespace Plotto.Charting.Controls;
 
 public abstract partial class SkiaChartBaseControl
 {
+    // Squared movement in surface pixels before a right-click becomes a drag-zoom (4px radius).
+    private const float RightDragRubberActivationDistSquared = 16f;
+
+    // -------------------------------------------------------------------------
+    // Interaction policy
+    // -------------------------------------------------------------------------
+
+    protected virtual bool CanInteract() =>
+        EnableMouseInteractions && EnableInlineEditing && RenderMode == ChartRenderMode.Editor;
+
+    /// <summary>
+    /// Wheel zoom only in <see cref="ChartRenderMode.Editor"/> (inline chart editor). In
+    /// <see cref="ChartRenderMode.Renderer"/> the wheel is left for the parent grid to scroll.
+    /// </summary>
+    protected virtual bool CanUseScrollWheelZoom() =>
+        EnableMouseInteractions && RenderMode == ChartRenderMode.Editor;
+
+    // -------------------------------------------------------------------------
+    // Keyboard
+    // -------------------------------------------------------------------------
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Handled || !CanInteract())
+        {
+            return;
+        }
+
+        if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            ZoomOutCompletely();
+            e.Handled = true;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Wheel
+    // -------------------------------------------------------------------------
+
     protected override void OnMouseWheel(MouseWheelEventArgs e)
     {
         base.OnMouseWheel(e);
@@ -39,8 +79,8 @@ public abstract partial class SkiaChartBaseControl
     {
         var factor = delta > 0 ? 0.9 : 1.1;
         var mod = Keyboard.Modifiers;
-        var ctrlWithoutShift = mod.HasFlag(ModifierKeys.Control) && !mod.HasFlag(ModifierKeys.Shift);
-        if (ctrlWithoutShift || IsPointerOverXAxisScrollZone(pivot))
+        var wheelZoomsX = mod.HasFlag(ModifierKeys.Control) && !mod.HasFlag(ModifierKeys.Shift);
+        if (wheelZoomsX || IsPointerOverXAxisScrollZone(pivot))
         {
             ZoomXAt(pivot, factor);
         }
@@ -84,30 +124,16 @@ public abstract partial class SkiaChartBaseControl
         return sy >= plotRect.Bottom && sy <= h - pad && sx >= plotRect.Left && sx <= plotRect.Right;
     }
 
+    // -------------------------------------------------------------------------
+    // Mouse
+    // -------------------------------------------------------------------------
+
     protected override void OnMouseDown(MouseButtonEventArgs e)
     {
         base.OnMouseDown(e);
 
-        if (e.ChangedButton == MouseButton.Right && e.ClickCount == 2)
+        if (TryHandleDoubleRightClickFitAllData(e))
         {
-            CancelDeferredContextMenu();
-
-            if (ContextMenu is { } menu)
-            {
-                menu.IsOpen = false;
-            }
-
-            Focus();
-            FitViewportToAllData();
-            _rightZoomRubberPending = false;
-            _isRightDragZoom = false;
-            _isDragging = false;
-            if (IsMouseCaptured)
-            {
-                ReleaseMouseCapture();
-            }
-
-            e.Handled = true;
             return;
         }
 
@@ -127,15 +153,7 @@ public abstract partial class SkiaChartBaseControl
 
         if (e.ChangedButton == MouseButton.Right)
         {
-            CancelDeferredContextMenu();
-
-            _rightZoomRubberPending = true;
-            SyncHitTestGeometryFromLayout();
-            _zoomRectStart = _coordinates.LogicalPointToSurface(_lastMousePos, ActualWidth, ActualHeight);
-            _zoomRectCurrent = _zoomRectStart;
-            CaptureMouse();
-            InvalidateVisual();
-            e.Handled = true;
+            BeginRightButtonRubberBand(_lastMousePos, e);
             return;
         }
 
@@ -163,50 +181,11 @@ public abstract partial class SkiaChartBaseControl
         var pos = e.GetPosition(this);
         var canInteract = CanInteract();
 
-        if (_rightZoomRubberPending && canInteract && !_isRightDragZoom)
-        {
-            SyncHitTestGeometryFromLayout();
-            var surf = _coordinates.LogicalPointToSurface(pos, ActualWidth, ActualHeight);
-            var ox = surf.X - _zoomRectStart.X;
-            var oy = surf.Y - _zoomRectStart.Y;
-            if (ox * ox + oy * oy >= 16f)
-            {
-                CaptureMouse();
-                _isDragging = true;
-                _isRightDragZoom = true;
-                _zoomRectCurrent = surf;
-                InvalidateVisual();
-            }
-        }
+        TryPromoteRightRubberToDragZoom(pos, canInteract);
 
         if (_isDragging)
         {
-            if (_isRightDragZoom)
-            {
-                if (canInteract)
-                {
-                    SyncHitTestGeometryFromLayout();
-                    _zoomRectCurrent = _coordinates.LogicalPointToSurface(pos, ActualWidth, ActualHeight);
-                    InvalidateVisual();
-                }
-            }
-            else if (_isPanning)
-            {
-                if (canInteract)
-                {
-                    var sx = (pos.X - _lastMousePos.X) * SurfaceScaleX();
-                    var sy = (pos.Y - _lastMousePos.Y) * SurfaceScaleY();
-                    PanByPixels(sx, sy);
-                }
-            }
-            else
-            {
-                // Left-button chart gesture (e.g. manual integration).
-                // Use _isDragging (set on mouse down, cleared on mouse up), not e.LeftButton:
-                // SKElement/WPF sometimes reports Released on MouseMove during capture, which blocks all drags.
-                OnChartMouseDrag(ToChartPoint(pos), e);
-                InvalidateVisual();
-            }
+            ApplyDraggingMove(pos, canInteract, e);
         }
 
         _lastMousePos = pos;
@@ -220,40 +199,13 @@ public abstract partial class SkiaChartBaseControl
 
         if (e.ChangedButton == MouseButton.Right)
         {
-            var rubberWasPending = _rightZoomRubberPending;
-            if (canInteract && _isRightDragZoom)
-            {
-                _viewportWheelClamp.ResyncXClampFromPoints(Points);
-                ApplyRightDragZoom(_zoomRectStart, _zoomRectCurrent);
-            }
-            else if (canInteract && rubberWasPending && !_isRightDragZoom)
-            {
-                // Same place as mouse down (no drag-zoom threshold): editor context menu; otherwise rubber-band zoom on mouse up.
-                TryOpenEditorContextMenu(e);
-            }
-
-            _rightZoomRubberPending = false;
-            _isRightDragZoom = false;
-            _isDragging = false;
-            ReleaseMouseCapture();
-            InvalidateVisual();
-            e.Handled = canInteract;
+            CompleteRightButtonInteraction(e, pos, canInteract);
             return;
         }
 
         if (e.ChangedButton == MouseButton.Left && _isDragging && !_isPanning && !_isRightDragZoom)
         {
-            var chartPoint = ToChartPoint(pos);
-            if (canInteract)
-            {
-                OnChartMouseUp(chartPoint, e);
-                DataPointClicked?.Invoke(this, new ChartPointEventArgs(chartPoint));
-            }
-            else
-            {
-                // Finish chart gesture and release capture even if interaction flags flipped (avoids stuck drag).
-                OnChartMouseUp(chartPoint, e);
-            }
+            CompleteLeftChartDrag(pos, canInteract, e);
         }
 
         if (canInteract && e.ChangedButton == MouseButton.Middle && _isPanning)
@@ -264,6 +216,10 @@ public abstract partial class SkiaChartBaseControl
         _isDragging = false;
         ReleaseMouseCapture();
     }
+
+    // -------------------------------------------------------------------------
+    // Deferred context menu (right-click without drag)
+    // -------------------------------------------------------------------------
 
     /// <summary>
     /// Schedules <see cref="FrameworkElement.ContextMenu"/> after a short delay so a fast second click can register as double-click on this element.
@@ -304,6 +260,10 @@ public abstract partial class SkiaChartBaseControl
         menu.IsOpen = true;
     }
 
+    // -------------------------------------------------------------------------
+    // Chart gesture hooks (subclasses)
+    // -------------------------------------------------------------------------
+
     protected virtual void OnChartMouseDown(ChartPoint point, MouseButtonEventArgs e)
     {
     }
@@ -316,42 +276,140 @@ public abstract partial class SkiaChartBaseControl
     {
     }
 
-    protected virtual bool CanInteract()
-    {
-        return EnableMouseInteractions && EnableInlineEditing && RenderMode == ChartRenderMode.Editor;
-    }
+    // -------------------------------------------------------------------------
+    // Mouse — helpers
+    // -------------------------------------------------------------------------
 
-    /// <summary>
-    /// Wheel zoom only in <see cref="ChartRenderMode.Editor"/> (inline chart editor). In
-    /// <see cref="ChartRenderMode.Renderer"/> the wheel is left for the parent grid to scroll.
-    /// </summary>
-    protected virtual bool CanUseScrollWheelZoom()
+    private bool TryHandleDoubleRightClickFitAllData(MouseButtonEventArgs e)
     {
-        if (!EnableMouseInteractions)
+        if (e.ChangedButton != MouseButton.Right || e.ClickCount != 2)
         {
             return false;
         }
 
-        return RenderMode == ChartRenderMode.Editor;
+        CancelDeferredContextMenu();
+
+        if (ContextMenu is { } menu)
+        {
+            menu.IsOpen = false;
+        }
+
+        Focus();
+        FitViewportToAllData();
+        _rightZoomRubberPending = false;
+        _isRightDragZoom = false;
+        _isDragging = false;
+        if (IsMouseCaptured)
+        {
+            ReleaseMouseCapture();
+        }
+
+        e.Handled = true;
+        return true;
     }
 
-    protected override void OnKeyDown(KeyEventArgs e)
+    private void BeginRightButtonRubberBand(Point logicalDown, MouseButtonEventArgs e)
     {
-        base.OnKeyDown(e);
-        if (e.Handled)
+        CancelDeferredContextMenu();
+
+        _rightZoomRubberPending = true;
+        SyncHitTestGeometryFromLayout();
+        _zoomRectStart = _coordinates.LogicalPointToSurface(logicalDown, ActualWidth, ActualHeight);
+        _zoomRectCurrent = _zoomRectStart;
+        CaptureMouse();
+        InvalidateVisual();
+        e.Handled = true;
+    }
+
+    private void TryPromoteRightRubberToDragZoom(Point pos, bool canInteract)
+    {
+        if (!_rightZoomRubberPending || !canInteract || _isRightDragZoom)
         {
             return;
         }
 
-        if (!CanInteract())
+        SyncHitTestGeometryFromLayout();
+        var surf = _coordinates.LogicalPointToSurface(pos, ActualWidth, ActualHeight);
+        var ox = surf.X - _zoomRectStart.X;
+        var oy = surf.Y - _zoomRectStart.Y;
+        if (ox * ox + oy * oy < RightDragRubberActivationDistSquared)
         {
             return;
         }
 
-        if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.None)
+        CaptureMouse();
+        _isDragging = true;
+        _isRightDragZoom = true;
+        _zoomRectCurrent = surf;
+        InvalidateVisual();
+    }
+
+    private void ApplyDraggingMove(Point pos, bool canInteract, MouseEventArgs e)
+    {
+        if (_isRightDragZoom)
         {
-            ZoomOutCompletely();
-            e.Handled = true;
+            if (canInteract)
+            {
+                SyncHitTestGeometryFromLayout();
+                _zoomRectCurrent = _coordinates.LogicalPointToSurface(pos, ActualWidth, ActualHeight);
+                InvalidateVisual();
+            }
+
+            return;
+        }
+
+        if (_isPanning)
+        {
+            if (canInteract)
+            {
+                var sx = (pos.X - _lastMousePos.X) * SurfaceScaleX();
+                var sy = (pos.Y - _lastMousePos.Y) * SurfaceScaleY();
+                PanByPixels(sx, sy);
+            }
+
+            return;
+        }
+
+        // Left-button chart gesture (e.g. manual integration).
+        // Use _isDragging (set on mouse down, cleared on mouse up), not e.LeftButton:
+        // SKElement/WPF sometimes reports Released on MouseMove during capture, which blocks all drags.
+        OnChartMouseDrag(ToChartPoint(pos), e);
+        InvalidateVisual();
+    }
+
+    private void CompleteRightButtonInteraction(MouseButtonEventArgs e, Point pos, bool canInteract)
+    {
+        var rubberWasPending = _rightZoomRubberPending;
+        if (canInteract && _isRightDragZoom)
+        {
+            _viewportWheelClamp.ResyncXClampFromPoints(Points);
+            ApplyRightDragZoom(_zoomRectStart, _zoomRectCurrent);
+        }
+        else if (canInteract && rubberWasPending && !_isRightDragZoom)
+        {
+            TryOpenEditorContextMenu(e);
+        }
+
+        _rightZoomRubberPending = false;
+        _isRightDragZoom = false;
+        _isDragging = false;
+        ReleaseMouseCapture();
+        InvalidateVisual();
+        e.Handled = canInteract;
+    }
+
+    private void CompleteLeftChartDrag(Point pos, bool canInteract, MouseButtonEventArgs e)
+    {
+        var chartPoint = ToChartPoint(pos);
+        if (canInteract)
+        {
+            OnChartMouseUp(chartPoint, e);
+            DataPointClicked?.Invoke(this, new ChartPointEventArgs(chartPoint));
+        }
+        else
+        {
+            // Finish chart gesture and release capture even if interaction flags flipped (avoids stuck drag).
+            OnChartMouseUp(chartPoint, e);
         }
     }
 }

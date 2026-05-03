@@ -1,0 +1,79 @@
+<Window
+    x:Class="GriddoTest.ColumnEdit.ColumnEditDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:grid="clr-namespace:Griddo.Grid;assembly=Griddo"
+    Title="Choose columns"
+    Width="960"
+    Height="620"
+    WindowStartupLocation="CenterOwner"
+    ShowInTaskbar="False">
+    <DockPanel>
+        <Border
+            DockPanel.Dock="Bottom"
+            Padding="10,8"
+            Background="#FFF0F0F0"
+            BorderBrush="#FFD0D0D0"
+            BorderThickness="0,1,0,0">
+            <StackPanel>
+                <DockPanel LastChildFill="False">
+                    <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button
+                            x:Name="MoveUpButton"
+                            Width="72"
+                            Margin="0,0,8,0"
+                            Click="MoveUpButton_Click"
+                            Content="Up" />
+                        <Button
+                            x:Name="MoveDownButton"
+                            Width="72"
+                            Margin="0,0,16,0"
+                            Click="MoveDownButton_Click"
+                            Content="Down" />
+                        <TextBlock VerticalAlignment="Center" Text="Frozen columns:" />
+                        <TextBox
+                            x:Name="FrozenColumnsBox"
+                            Width="56"
+                            Margin="8,0,16,0"
+                            VerticalAlignment="Center"
+                            Text="0" />
+                        <TextBlock VerticalAlignment="Center" Text="Frozen rows:" />
+                        <TextBox
+                            x:Name="FrozenRowsBox"
+                            Width="56"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Center"
+                            Text="0" />
+                    </StackPanel>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <Button
+                            Width="88"
+                            Margin="0,0,8,0"
+                            Click="ApplyButton_Click"
+                            Content="Apply" />
+                        <Button
+                            Width="88"
+                            Margin="0,0,8,0"
+                            Click="OkButton_Click"
+                            Content="OK"
+                            IsDefault="True" />
+                        <Button
+                            Width="88"
+                            Click="CancelButton_Click"
+                            Content="Cancel"
+                            IsCancel="True" />
+                    </StackPanel>
+                </DockPanel>
+                <TextBlock
+                    Margin="0,8,0,0"
+                    Foreground="#FF555555"
+                    TextWrapping="Wrap"
+                    Text="In the grid: Ctrl+F opens find, F3 next match, Shift+F3 previous match, Esc clears find highlighting." />
+            </StackPanel>
+        </Border>
+        <grid:Griddo
+            x:Name="ColumnGrid"
+            Margin="8"
+            UniformRowHeight="26" />
+    </DockPanel>
+</Window>

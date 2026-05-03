@@ -6,33 +6,19 @@ namespace Plotto.Charting.Controls;
 
 public partial class ChromatogramControl
 {
+    // -------------------------------------------------------------------------
+    // Mouse — routed overrides (activation, peak split, then base chart)
+    // -------------------------------------------------------------------------
+
     protected override void OnMouseDown(MouseButtonEventArgs e)
     {
-        if (RequireActivationClick && RenderMode == ChartRenderMode.Renderer && e.ChangedButton == MouseButton.Left)
+        if (TryHandleRendererActivationMouseDown(e))
         {
-            if (DeferRendererActivationToParent)
-            {
-                base.OnMouseDown(e);
-                return;
-            }
-
-            Focus();
-            _activationPressPosition = e.GetPosition(this);
-            _awaitingActivationClick = true;
-            CaptureMouse();
-            e.Handled = true;
             return;
         }
 
-        if (RenderMode == ChartRenderMode.Editor
-            && e.ChangedButton == MouseButton.Left
-            && (Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        if (TryHandlePeakSplitAnchorClick(e))
         {
-            Focus();
-            var x = ToChartPoint(e.GetPosition(this)).X;
-            _peakSplitStaticX.Add(x);
-            RequestRender();
-            e.Handled = true;
             return;
         }
 
@@ -41,19 +27,9 @@ public partial class ChromatogramControl
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
-        if (_awaitingActivationClick && RequireActivationClick && RenderMode == ChartRenderMode.Renderer)
-        {
-            var p = e.GetPosition(this);
-            if (DistanceSquaredDip(p, _activationPressPosition) > ActivationMoveToleranceDip * ActivationMoveToleranceDip)
-            {
-                _awaitingActivationClick = false;
-                ReleaseMouseCapture();
-            }
-        }
+        CancelActivationIfMovedBeyondSlop(e);
 
-        if (RenderMode == ChartRenderMode.Editor
-            && (Keyboard.Modifiers & ModifierKeys.Control) != 0
-            && e.LeftButton == MouseButtonState.Released)
+        if (ShouldUpdatePeakSplitHover(e))
         {
             _peakSplitHoverX = ToChartPoint(e.GetPosition(this)).X;
             InvalidateVisual();
@@ -64,42 +40,27 @@ public partial class ChromatogramControl
 
     protected override void OnMouseUp(MouseButtonEventArgs e)
     {
-        if (_awaitingActivationClick && RequireActivationClick && RenderMode == ChartRenderMode.Renderer && e.ChangedButton == MouseButton.Left)
+        if (TryCompleteRendererActivationClick(e))
         {
-            _awaitingActivationClick = false;
-            ReleaseMouseCapture();
-            var up = e.GetPosition(this);
-            if (DistanceSquaredDip(up, _activationPressPosition) <= ActivationMoveToleranceDip * ActivationMoveToleranceDip)
-            {
-                RenderMode = ChartRenderMode.Editor;
-                InvalidateVisual();
-                e.Handled = true;
-                return;
-            }
+            return;
         }
 
         base.OnMouseUp(e);
+
         if (e.ChangedButton == MouseButton.Left)
         {
             _isIntegrationDragActive = false;
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Keyboard — escape deactivates editor; Ctrl toggles peak-split hover
+    // -------------------------------------------------------------------------
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        if (e.Key == Key.Escape && RequireActivationClick && RenderMode == ChartRenderMode.Editor)
+        if (TryHandleEscapeDeactivateEditor(e))
         {
-            RenderMode = ChartRenderMode.Renderer;
-            _awaitingActivationClick = false;
-            _peakSplitStaticX.Clear();
-            _peakSplitHoverX = null;
-            if (IsMouseCaptured)
-            {
-                ReleaseMouseCapture();
-            }
-
-            InvalidateVisual();
-            e.Handled = true;
             return;
         }
 
@@ -107,11 +68,7 @@ public partial class ChromatogramControl
 
         if (RenderMode == ChartRenderMode.Editor && e.Key is Key.LeftCtrl or Key.RightCtrl)
         {
-            if (Mouse.LeftButton == MouseButtonState.Released && IsMouseOver)
-            {
-                _peakSplitHoverX = ToChartPoint(Mouse.GetPosition(this)).X;
-            }
-
+            RefreshPeakSplitHoverFromPointer();
             InvalidateVisual();
         }
     }
@@ -127,14 +84,13 @@ public partial class ChromatogramControl
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Chart gestures — manual integration (when Ctrl is not held for peak split)
+    // -------------------------------------------------------------------------
+
     protected override void OnChartMouseDown(ChartPoint point, MouseButtonEventArgs e)
     {
-        if (e.ChangedButton != MouseButton.Left)
-        {
-            return;
-        }
-
-        if ((Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        if (e.ChangedButton != MouseButton.Left || IsPeakSplitModifierHeld)
         {
             return;
         }
@@ -150,12 +106,7 @@ public partial class ChromatogramControl
 
     protected override void OnChartMouseDrag(ChartPoint point, MouseEventArgs e)
     {
-        if ((Keyboard.Modifiers & ModifierKeys.Control) != 0)
-        {
-            return;
-        }
-
-        if (!_isIntegrationDragActive || _activeRegion is null)
+        if (IsPeakSplitModifierHeld || !_isIntegrationDragActive || _activeRegion is null)
         {
             return;
         }
@@ -167,12 +118,7 @@ public partial class ChromatogramControl
 
     protected override void OnChartMouseUp(ChartPoint point, MouseButtonEventArgs e)
     {
-        if ((Keyboard.Modifiers & ModifierKeys.Control) != 0)
-        {
-            return;
-        }
-
-        if (!_isIntegrationDragActive || _activeRegion is null || e.ChangedButton != MouseButton.Left)
+        if (IsPeakSplitModifierHeld || !_isIntegrationDragActive || _activeRegion is null || e.ChangedButton != MouseButton.Left)
         {
             return;
         }
@@ -186,7 +132,121 @@ public partial class ChromatogramControl
         RequestRender();
     }
 
-    private static double DistanceSquaredDip(Point a, Point b)
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    private static bool IsPeakSplitModifierHeld => (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+
+    private bool IsAwaitingRendererActivation =>
+        _awaitingActivationClick && RequireActivationClick && RenderMode == ChartRenderMode.Renderer;
+
+    private bool TryHandleRendererActivationMouseDown(MouseButtonEventArgs e)
+    {
+        if (!RequireActivationClick || RenderMode != ChartRenderMode.Renderer || e.ChangedButton != MouseButton.Left)
+        {
+            return false;
+        }
+
+        if (DeferRendererActivationToParent)
+        {
+            base.OnMouseDown(e);
+            return true;
+        }
+
+        Focus();
+        _activationPressPosition = e.GetPosition(this);
+        _awaitingActivationClick = true;
+        CaptureMouse();
+        e.Handled = true;
+        return true;
+    }
+
+    private bool TryHandlePeakSplitAnchorClick(MouseButtonEventArgs e)
+    {
+        if (RenderMode != ChartRenderMode.Editor || e.ChangedButton != MouseButton.Left || !IsPeakSplitModifierHeld)
+        {
+            return false;
+        }
+
+        Focus();
+        _peakSplitStaticX.Add(ToChartPoint(e.GetPosition(this)).X);
+        RequestRender();
+        e.Handled = true;
+        return true;
+    }
+
+    private void CancelActivationIfMovedBeyondSlop(MouseEventArgs e)
+    {
+        if (!IsAwaitingRendererActivation)
+        {
+            return;
+        }
+
+        var p = e.GetPosition(this);
+        if (LogicalDistanceSquaredDip(p, _activationPressPosition) > ActivationMoveToleranceDip * ActivationMoveToleranceDip)
+        {
+            _awaitingActivationClick = false;
+            ReleaseMouseCapture();
+        }
+    }
+
+    private bool ShouldUpdatePeakSplitHover(MouseEventArgs e) =>
+        RenderMode == ChartRenderMode.Editor
+        && IsPeakSplitModifierHeld
+        && e.LeftButton == MouseButtonState.Released;
+
+    private bool TryCompleteRendererActivationClick(MouseButtonEventArgs e)
+    {
+        if (!IsAwaitingRendererActivation || e.ChangedButton != MouseButton.Left)
+        {
+            return false;
+        }
+
+        _awaitingActivationClick = false;
+        ReleaseMouseCapture();
+        var up = e.GetPosition(this);
+        if (LogicalDistanceSquaredDip(up, _activationPressPosition) > ActivationMoveToleranceDip * ActivationMoveToleranceDip)
+        {
+            return false;
+        }
+
+        RenderMode = ChartRenderMode.Editor;
+        InvalidateVisual();
+        e.Handled = true;
+        return true;
+    }
+
+    private bool TryHandleEscapeDeactivateEditor(KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape || !RequireActivationClick || RenderMode != ChartRenderMode.Editor)
+        {
+            return false;
+        }
+
+        RenderMode = ChartRenderMode.Renderer;
+        _awaitingActivationClick = false;
+        _peakSplitStaticX.Clear();
+        _peakSplitHoverX = null;
+        if (IsMouseCaptured)
+        {
+            ReleaseMouseCapture();
+        }
+
+        InvalidateVisual();
+        e.Handled = true;
+        return true;
+    }
+
+    private void RefreshPeakSplitHoverFromPointer()
+    {
+        if (Mouse.LeftButton == MouseButtonState.Released && IsMouseOver)
+        {
+            _peakSplitHoverX = ToChartPoint(Mouse.GetPosition(this)).X;
+        }
+    }
+
+    private static double LogicalDistanceSquaredDip(Point a, Point b)
     {
         var dx = a.X - b.X;
         var dy = a.Y - b.Y;

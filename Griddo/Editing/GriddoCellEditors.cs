@@ -58,8 +58,70 @@ public sealed class GriddoNumberCellEditor : IGriddoCellEditor
     }
 }
 
+/// <summary>Inline text edit for boolean values (F2 / typing); commit accepts common true/false literals.</summary>
+public sealed class GriddoBoolCellEditor : IGriddoCellEditor
+{
+    public bool CanStartWith(char inputChar) =>
+        inputChar is 'y' or 'Y' or 'n' or 'N' or 't' or 'T' or 'f' or 'F' or '0' or '1';
+
+    public string BeginEdit(object? currentValue, char? firstCharacter = null)
+    {
+        if (firstCharacter.HasValue && CanStartWith(firstCharacter.Value))
+        {
+            return firstCharacter.Value.ToString();
+        }
+
+        return currentValue switch
+        {
+            bool b => b ? bool.TrueString : bool.FalseString,
+            null => string.Empty,
+            _ => currentValue.ToString() ?? string.Empty
+        };
+    }
+
+    public bool TryCommit(string editBuffer, out object? newValue)
+    {
+        if (string.IsNullOrWhiteSpace(editBuffer))
+        {
+            newValue = false;
+            return true;
+        }
+
+        var t = editBuffer.Trim();
+        if (bool.TryParse(t, out var parsed))
+        {
+            newValue = parsed;
+            return true;
+        }
+
+        switch (t.ToUpperInvariant())
+        {
+            case "Y":
+            case "YES":
+            case "T":
+            case "TRUE":
+            case "1":
+            case "ON":
+                newValue = true;
+                return true;
+            case "N":
+            case "NO":
+            case "F":
+            case "FALSE":
+            case "0":
+            case "OFF":
+                newValue = false;
+                return true;
+            default:
+                newValue = null;
+                return false;
+        }
+    }
+}
+
 public static class GriddoCellEditors
 {
     public static readonly IGriddoCellEditor Text = new GriddoTextCellEditor();
     public static readonly IGriddoCellEditor Number = new GriddoNumberCellEditor();
+    public static readonly IGriddoCellEditor Bool = new GriddoBoolCellEditor();
 }

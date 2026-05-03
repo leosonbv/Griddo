@@ -23,7 +23,7 @@ public sealed partial class Griddo
     {
         var width = GetColumnWidth(col);
         var rect = new Rect(x, 0, width, ScaledColumnHeaderHeight);
-        var headerBackground = (IsColumnSelected(col) && !HideHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
+        var headerBackground = (IsColumnHeaderMarkedSelected(col) && !HideHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
         dc.DrawRectangle(headerBackground, null, rect);
         var pen = new Pen(GridLineBrush, GridPenThickness);
         // Top edge of header strip is drawn once in DrawOuterWorksheetFrame (matches DrawLine rasterization for scroll columns).
@@ -96,6 +96,19 @@ public sealed partial class Griddo
             return;
         }
 
+        if (Columns[col] is GriddoBoolColumnView)
+        {
+            var rawBool = Columns[col].GetValue(rowData);
+            var isChecked = rawBool is true;
+            var boolPaintBounds = Rect.Intersect(rect, bodyViewport);
+            if (!boolPaintBounds.IsEmpty)
+            {
+                GriddoValuePainter.DrawBoolCheckbox(dc, isChecked, boolPaintBounds, EffectiveFontSize);
+            }
+
+            return;
+        }
+
         var value = Columns[col].GetValue(rowData);
         var isGraphic = value is ImageSource or Geometry;
         // Intersect with viewport so HTML (and plain text) centers in the visible strip when the row is clipped vertically.
@@ -163,14 +176,13 @@ public sealed partial class Griddo
         var rowHeaderClip = new Rect(0, ScaledColumnHeaderHeight, _rowHeaderWidth, _viewportBodyHeight);
         dc.PushClip(new RectangleGeometry(rowHeaderClip));
         {
-            GetVisibleRowRange(out var startRow, out var endRow);
-            var rowHeight = GetRowHeight(0);
-            var y = ScaledColumnHeaderHeight + (startRow * rowHeight) - _verticalOffset;
             var rowHeaderPen = new Pen(GridLineBrush, GridPenThickness);
-            for (var row = startRow; row <= endRow; row++)
+            ForEachVisibleRow(row =>
             {
+                var rowHeight = GetRowHeight(row);
+                var y = ScaledColumnHeaderHeight + GetRowBodyTopRel(row);
                 var rect = new Rect(0, y, _rowHeaderWidth, rowHeight);
-                var rowHeaderBackground = (IsRowSelected(row) && !HideHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
+                var rowHeaderBackground = (IsRowHeaderMarkedSelected(row) && !HideHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
                 dc.DrawRectangle(rowHeaderBackground, null, rect);
                 // Top + bottom only; outer x=0 edge is one DrawLine in DrawOuterWorksheetFrame (avoids path vs line mismatch).
                 dc.DrawLine(rowHeaderPen, new Point(rect.Left, rect.Top), new Point(rect.Right, rect.Top));
@@ -180,13 +192,84 @@ public sealed partial class Griddo
                 {
                     GriddoValuePainter.Paint(dc, row + 1, visibleRect, typeface, EffectiveFontSize, Brushes.Black, false, false, TextAlignment.Right, VerticalAlignment.Center);
                 }
-
-                y += rowHeight;
-            }
+            });
         }
         dc.Pop();
 
+        DrawHeaderFocusHighlight(dc);
         DrawOuterWorksheetFrame(dc);
+    }
+
+    private void DrawHeaderFocusHighlight(DrawingContext dc)
+    {
+        if (_headerFocusKind == HeaderFocusKind.None)
+        {
+            return;
+        }
+
+        var pen = new Pen(Brushes.Red, 2);
+        pen.Freeze();
+        var inset = pen.Thickness / 2;
+
+        void DrawOutlinedRect(Rect rect)
+        {
+            if (rect.IsEmpty)
+            {
+                return;
+            }
+
+            var rr = new Rect(
+                rect.X + inset,
+                rect.Y + inset,
+                Math.Max(0, rect.Width - pen.Thickness),
+                Math.Max(0, rect.Height - pen.Thickness));
+            if (rr.Width <= 0 || rr.Height <= 0)
+            {
+                return;
+            }
+
+            dc.DrawRectangle(null, pen, rr);
+        }
+
+        if (_headerFocusKind == HeaderFocusKind.Column && _columnHeaderRightClickOutline.Count > 0)
+        {
+            foreach (var col in _columnHeaderRightClickOutline.OrderBy(c => c))
+            {
+                DrawOutlinedRect(GetColumnHeaderRect(col));
+            }
+
+            return;
+        }
+
+        if (_headerFocusKind == HeaderFocusKind.Row && _rowHeaderRightClickOutline.Count > 0)
+        {
+            foreach (var row in _rowHeaderRightClickOutline.OrderBy(r => r))
+            {
+                DrawOutlinedRect(GetRowHeaderRect(row));
+            }
+
+            return;
+        }
+
+        Rect r = Rect.Empty;
+        if (_headerFocusKind == HeaderFocusKind.Corner)
+        {
+            r = new Rect(0, 0, _rowHeaderWidth, ScaledColumnHeaderHeight);
+        }
+        else if (_headerFocusKind == HeaderFocusKind.Column
+                 && _headerFocusColumnIndex >= 0
+                 && _headerFocusColumnIndex < Columns.Count)
+        {
+            r = GetColumnHeaderRect(_headerFocusColumnIndex);
+        }
+        else if (_headerFocusKind == HeaderFocusKind.Row
+                 && _headerFocusRowIndex >= 0
+                 && _headerFocusRowIndex < Rows.Count)
+        {
+            r = GetRowHeaderRect(_headerFocusRowIndex);
+        }
+
+        DrawOutlinedRect(r);
     }
 
     /// <summary>
@@ -214,14 +297,13 @@ public sealed partial class Griddo
 
     private void DrawBody(DrawingContext dc)
     {
-        var bodyViewport = new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
-        var typeface = new Typeface("Segoe UI");
-        GetVisibleRowRange(out var startRow, out var endRow);
-        if (endRow < startRow)
+        if (Rows.Count == 0)
         {
             return;
         }
 
+        var bodyViewport = new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
+        var typeface = new Typeface("Segoe UI");
         var rowHeight = GetRowHeight(0);
         var fixedW = GetFixedColumnsWidth();
         var scrollLeft = _rowHeaderWidth + fixedW;
@@ -234,9 +316,9 @@ public sealed partial class Griddo
             GetVisibleScrollColumnRange(out var sCol, out var eCol, out var startX);
             if (eCol >= sCol)
             {
-                for (var row = startRow; row <= endRow; row++)
+                ForEachVisibleRow(row =>
                 {
-                    var y = ScaledColumnHeaderHeight + (row * rowHeight) - _verticalOffset;
+                    var y = ScaledColumnHeaderHeight + GetRowBodyTopRel(row);
                     var rowData = Rows[row];
                     var x = startX;
                     for (var col = sCol; col <= eCol; col++)
@@ -244,7 +326,7 @@ public sealed partial class Griddo
                         DrawBodyCell(dc, row, col, x, y, rowHeight, rowData, bodyViewport, typeface);
                         x += GetColumnWidth(col);
                     }
-                }
+                });
             }
 
             dc.Pop();
@@ -255,9 +337,9 @@ public sealed partial class Griddo
             var fixedClipW = Math.Min(fixedW, _viewportBodyWidth);
             var fixedClip = new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, fixedClipW, _viewportBodyHeight);
             dc.PushClip(new RectangleGeometry(fixedClip));
-            for (var row = startRow; row <= endRow; row++)
+            ForEachVisibleRow(row =>
             {
-                var y = ScaledColumnHeaderHeight + (row * rowHeight) - _verticalOffset;
+                var y = ScaledColumnHeaderHeight + GetRowBodyTopRel(row);
                 var rowData = Rows[row];
                 var x = _rowHeaderWidth;
                 for (var col = 0; col < _fixedColumnCount; col++)
@@ -265,10 +347,36 @@ public sealed partial class Griddo
                     DrawBodyCell(dc, row, col, x, y, rowHeight, rowData, bodyViewport, typeface);
                     x += GetColumnWidth(col);
                 }
-            }
+            });
 
             dc.Pop();
         }
+
+        DrawFixedRowSeparator(dc);
+    }
+
+    private void DrawFixedRowSeparator(DrawingContext dc)
+    {
+        if (GetScrollableRowsContentHeight() <= 1e-6)
+        {
+            return;
+        }
+
+        var f = GetEffectiveFixedRowCount();
+        if (f <= 0)
+        {
+            return;
+        }
+
+        var h = GetRowHeight(0);
+        var yLine = ScaledColumnHeaderHeight + f * h;
+        if (yLine > ScaledColumnHeaderHeight + _viewportBodyHeight)
+        {
+            return;
+        }
+
+        var pen = new Pen(FixedRowBottomBorderBrush, GridPenThickness);
+        dc.DrawLine(pen, new Point(_rowHeaderWidth, yLine), new Point(_rowHeaderWidth + _viewportBodyWidth, yLine));
     }
     private void DrawCurrentCellOverlay(DrawingContext dc)
     {
@@ -774,7 +882,7 @@ public sealed partial class Griddo
             return Rect.Empty;
         }
 
-        var y = ScaledColumnHeaderHeight + GetRowTop(rowIndex) - _verticalOffset;
+        var y = ScaledColumnHeaderHeight + GetRowBodyTopRel(rowIndex);
         return new Rect(0, y, _rowHeaderWidth, GetRowHeight(rowIndex));
     }
     private void DrawScrollBarCorner(DrawingContext dc)

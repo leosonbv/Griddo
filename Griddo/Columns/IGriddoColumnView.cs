@@ -6,7 +6,7 @@ namespace Griddo.Columns;
 
 public interface IGriddoColumnView
 {
-    string Header { get; }
+    string Header { get; set; }
     double Width { get; }
     bool Fill { get; set; }
     bool IsHtml { get; }
