@@ -76,6 +76,14 @@ public sealed class Griddo : FrameworkElement
     private bool _dragIsAdditive;
     private GriddoCellAddress _dragAnchorCell;
     private GriddoCellAddress _dragCurrentCell;
+    private bool _isDraggingRowHeaderSelection;
+    private bool _rowHeaderDragIsAdditive;
+    private int _rowHeaderDragAnchorRow = -1;
+    private int _rowHeaderDragCurrentRow = -1;
+    private bool _isDraggingColumnHeaderSelection;
+    private bool _columnHeaderDragIsAdditive;
+    private int _columnHeaderDragAnchorColumn = -1;
+    private int _columnHeaderDragCurrentColumn = -1;
     private bool _pendingHostedEditActivation;
     private GriddoCellAddress _pendingHostedEditCell;
     private bool _isResizingColumn;
@@ -90,6 +98,18 @@ public sealed class Griddo : FrameworkElement
     private int _movingColumnIndex = -1;
     private int _columnMoveCueIndex = -1;
     private Point _columnMoveStartPoint;
+    private bool _columnMoveStartedFromSelectedHeader;
+    private bool _pendingColumnHeaderSelectionOnMouseUp;
+    private int _pendingColumnHeaderIndex = -1;
+    private bool _pendingColumnHeaderSelectionAdditive;
+    private bool _isTrackingRowMove;
+    private bool _isMovingRow;
+    private int _movingRowIndex = -1;
+    private int _rowMoveCueIndex = -1;
+    private Point _rowMoveStartPoint;
+    private bool _pendingRowHeaderSelectionOnMouseUp;
+    private int _pendingRowHeaderIndex = -1;
+    private bool _pendingRowHeaderSelectionAdditive;
     private double _horizontalOffset;
     private int _fixedColumnCount;
     private double _verticalOffset;
@@ -412,10 +432,11 @@ public sealed class Griddo : FrameworkElement
 
     protected override Size MeasureOverride(Size availableSize)
     {
+        const double outerBorderInset = 1;
         _horizontalScrollBar.Measure(availableSize);
         _verticalScrollBar.Measure(availableSize);
-        var bodyW = Math.Max(0, availableSize.Width - _rowHeaderWidth - ScrollBarSize);
-        var bodyH = Math.Max(0, availableSize.Height - ScaledColumnHeaderHeight - ScrollBarSize);
+        var bodyW = Math.Max(0, availableSize.Width - _rowHeaderWidth - ScrollBarSize - outerBorderInset);
+        var bodyH = Math.Max(0, availableSize.Height - ScaledColumnHeaderHeight - ScrollBarSize - outerBorderInset);
         var bodySize = new Size(bodyW, bodyH);
         _scrollHostCanvas.Measure(bodySize);
         _fixedHostCanvas.Measure(bodySize);
@@ -425,19 +446,21 @@ public sealed class Griddo : FrameworkElement
 
     protected override Size ArrangeOverride(Size finalSize)
     {
-        _viewportBodyWidth = Math.Max(0, finalSize.Width - _rowHeaderWidth - ScrollBarSize);
-        _viewportBodyHeight = Math.Max(0, finalSize.Height - ScaledColumnHeaderHeight - ScrollBarSize);
+        const double outerBorderInset = 1;
+        var arrangedScrollBarThickness = Math.Max(0, ScrollBarSize - outerBorderInset);
+        _viewportBodyWidth = Math.Max(0, finalSize.Width - _rowHeaderWidth - ScrollBarSize - outerBorderInset);
+        _viewportBodyHeight = Math.Max(0, finalSize.Height - ScaledColumnHeaderHeight - ScrollBarSize - outerBorderInset);
 
         _horizontalScrollBar.Arrange(new Rect(
             _rowHeaderWidth,
-            Math.Max(0, finalSize.Height - ScrollBarSize),
+            Math.Max(0, finalSize.Height - ScrollBarSize - outerBorderInset),
             _viewportBodyWidth,
-            ScrollBarSize));
+            arrangedScrollBarThickness));
 
         _verticalScrollBar.Arrange(new Rect(
-            Math.Max(0, finalSize.Width - ScrollBarSize),
+            Math.Max(0, finalSize.Width - ScrollBarSize - outerBorderInset),
             ScaledColumnHeaderHeight,
-            ScrollBarSize,
+            arrangedScrollBarThickness,
             _viewportBodyHeight));
 
         UpdateScrollBars();
@@ -610,6 +633,7 @@ public sealed class Griddo : FrameworkElement
         DrawBody(dc);
         DrawEditingText(dc);
         DrawCurrentCellOverlay(dc);
+        DrawRowMoveCue(dc);
         DrawScrollBarCorner(dc);
     }
 
@@ -690,6 +714,28 @@ public sealed class Griddo : FrameworkElement
             var target = new GriddoCellAddress(
                 Rows.Count == 0 ? 0 : Math.Clamp(oldCurrentCell.RowIndex, 0, Rows.Count - 1),
                 clickedColumnHeader);
+            var clickedSelectedColumnHeader = IsColumnSelected(clickedColumnHeader);
+
+            if (e.ChangedButton == MouseButton.Left
+                && clickedSelectedColumnHeader
+                && !isShiftPressed
+                && Rows.Count > 0
+                && Columns.Count > 0)
+            {
+                _isTrackingColumnMove = true;
+                _isMovingColumn = false;
+                _columnMoveStartedFromSelectedHeader = true;
+                _movingColumnIndex = clickedColumnHeader;
+                _columnMoveCueIndex = -1;
+                _columnMoveStartPoint = pointer;
+                _pendingColumnHeaderSelectionOnMouseUp = true;
+                _pendingColumnHeaderIndex = clickedColumnHeader;
+                _pendingColumnHeaderSelectionAdditive = isCtrlPressed;
+                CaptureMouse();
+                e.Handled = true;
+                base.OnMouseDown(e);
+                return;
+            }
 
             if (isShiftPressed && oldCurrentCell.IsValid && Rows.Count > 0 && Columns.Count > 0)
             {
@@ -704,13 +750,17 @@ public sealed class Griddo : FrameworkElement
             _currentCell = target;
             _isEditing = false;
             InvalidateVisual();
-            if (!isShiftPressed && !isCtrlPressed && e.ChangedButton == MouseButton.Left && e.ClickCount == 1)
+            if (!isShiftPressed
+                && e.ChangedButton == MouseButton.Left
+                && Rows.Count > 0
+                && Columns.Count > 0)
             {
-                _isTrackingColumnMove = true;
-                _isMovingColumn = false;
-                _movingColumnIndex = clickedColumnHeader;
-                _columnMoveCueIndex = -1;
-                _columnMoveStartPoint = pointer;
+                _columnHeaderDragIsAdditive = isCtrlPressed;
+                _selectionDragSnapshot.Clear();
+                _selectionDragSnapshot.UnionWith(_selectedCells);
+                _columnHeaderDragAnchorColumn = clickedColumnHeader;
+                _columnHeaderDragCurrentColumn = clickedColumnHeader;
+                _isDraggingColumnHeaderSelection = true;
                 CaptureMouse();
             }
 
@@ -725,6 +775,27 @@ public sealed class Griddo : FrameworkElement
             var target = new GriddoCellAddress(
                 clickedRowHeader,
                 Columns.Count == 0 ? 0 : Math.Clamp(oldCurrentCell.ColumnIndex, 0, Columns.Count - 1));
+            var clickedSelectedRowHeader = IsRowSelected(clickedRowHeader);
+
+            if (e.ChangedButton == MouseButton.Left
+                && clickedSelectedRowHeader
+                && !isShiftPressed
+                && Rows.Count > 0
+                && Columns.Count > 0)
+            {
+                _isTrackingRowMove = true;
+                _isMovingRow = false;
+                _movingRowIndex = clickedRowHeader;
+                _rowMoveCueIndex = clickedRowHeader;
+                _rowMoveStartPoint = pointer;
+                _pendingRowHeaderSelectionOnMouseUp = true;
+                _pendingRowHeaderIndex = clickedRowHeader;
+                _pendingRowHeaderSelectionAdditive = isCtrlPressed;
+                CaptureMouse();
+                e.Handled = true;
+                base.OnMouseDown(e);
+                return;
+            }
 
             if (isShiftPressed && oldCurrentCell.IsValid && Rows.Count > 0 && Columns.Count > 0)
             {
@@ -734,6 +805,20 @@ public sealed class Griddo : FrameworkElement
             else
             {
                 SelectRow(clickedRowHeader, isCtrlPressed);
+            }
+
+            if (!isShiftPressed
+                && e.ChangedButton == MouseButton.Left
+                && Rows.Count > 0
+                && Columns.Count > 0)
+            {
+                _rowHeaderDragIsAdditive = isCtrlPressed;
+                _selectionDragSnapshot.Clear();
+                _selectionDragSnapshot.UnionWith(_selectedCells);
+                _rowHeaderDragAnchorRow = clickedRowHeader;
+                _rowHeaderDragCurrentRow = clickedRowHeader;
+                _isDraggingRowHeaderSelection = true;
+                CaptureMouse();
             }
 
             _currentCell = target;
@@ -747,6 +832,30 @@ public sealed class Griddo : FrameworkElement
         var clicked = HitTestCell(pointer);
         if (!clicked.IsValid)
         {
+            base.OnMouseDown(e);
+            return;
+        }
+
+        if (e.ChangedButton == MouseButton.Right
+            && HostedPlotDirectEditOnMouseDown
+            && e.ClickCount == 1
+            && Columns[clicked.ColumnIndex] is IGriddoHostedColumnView hostedRightDirect)
+        {
+            _selectedCells.Clear();
+            _selectedCells.Add(clicked);
+            _currentCell = clicked;
+            _isDraggingSelection = false;
+            _pendingHostedEditActivation = false;
+            SyncHostedCells();
+            SetCurrentHostedCellEditMode(true);
+            if (TryGetHostedElement(clicked) is FrameworkElement hostForRightRelay)
+            {
+                hostedRightDirect.RelayDirectEditMouseDown(hostForRightRelay, e);
+            }
+
+            _isEditing = false;
+            InvalidateVisual();
+            e.Handled = true;
             base.OnMouseDown(e);
             return;
         }
@@ -1071,7 +1180,8 @@ public sealed class Griddo : FrameworkElement
 
             if (_isMovingColumn)
             {
-                var targetColumn = HitTestColumnHeader(pointer);
+                AutoScrollDuringColumnMove(pointer.X);
+                var targetColumn = HitTestColumnHeaderDrag(pointer);
                 if (targetColumn >= 0 && targetColumn != _movingColumnIndex)
                 {
                     _columnMoveCueIndex = targetColumn;
@@ -1089,6 +1199,70 @@ public sealed class Griddo : FrameworkElement
             return;
         }
 
+        if (_isTrackingRowMove)
+        {
+            if (e.LeftButton != MouseButtonState.Pressed)
+            {
+                StopRowMoveTracking();
+                base.OnMouseMove(e);
+                return;
+            }
+
+            var dragDistance = (pointer - _rowMoveStartPoint).Length;
+            if (!_isMovingRow && dragDistance >= 1)
+            {
+                _isMovingRow = true;
+            }
+
+            AutoScrollDuringRowInteraction(pointer.Y);
+            var targetRow = HitTestRowHeaderDrag(pointer);
+            if (targetRow >= 0 && targetRow != _rowMoveCueIndex)
+            {
+                _rowMoveCueIndex = targetRow;
+                InvalidateVisual();
+            }
+
+            e.Handled = true;
+            base.OnMouseMove(e);
+            return;
+        }
+
+        if (_isDraggingColumnHeaderSelection
+            && IsMouseCaptured
+            && e.LeftButton == MouseButtonState.Pressed)
+        {
+            AutoScrollDuringColumnMove(pointer.X);
+            var hoveredColumnHeader = HitTestColumnHeaderDrag(pointer);
+            if (hoveredColumnHeader >= 0 && hoveredColumnHeader != _columnHeaderDragCurrentColumn)
+            {
+                _columnHeaderDragCurrentColumn = hoveredColumnHeader;
+                ApplyColumnHeaderDragSelection();
+                InvalidateVisual();
+                e.Handled = true;
+            }
+
+            base.OnMouseMove(e);
+            return;
+        }
+
+        if (_isDraggingRowHeaderSelection
+            && IsMouseCaptured
+            && e.LeftButton == MouseButtonState.Pressed)
+        {
+            AutoScrollDuringRowInteraction(pointer.Y);
+            var hoveredRowHeader = HitTestRowHeaderDrag(pointer);
+            if (hoveredRowHeader >= 0 && hoveredRowHeader != _rowHeaderDragCurrentRow)
+            {
+                _rowHeaderDragCurrentRow = hoveredRowHeader;
+                ApplyRowHeaderDragSelection();
+                InvalidateVisual();
+                e.Handled = true;
+            }
+
+            base.OnMouseMove(e);
+            return;
+        }
+
         if (!_isDraggingSelection
             || !IsMouseCaptured
             || e.LeftButton != MouseButtonState.Pressed)
@@ -1098,6 +1272,7 @@ public sealed class Griddo : FrameworkElement
             return;
         }
 
+        AutoScrollDuringCellSelection(pointer);
         var hovered = HitTestCell(pointer);
         if (!hovered.IsValid)
         {
@@ -1118,6 +1293,148 @@ public sealed class Griddo : FrameworkElement
         base.OnMouseMove(e);
     }
 
+    private void AutoScrollDuringColumnMove(double pointerX)
+    {
+        if (Columns.Count == 0 || _viewportBodyWidth <= 0)
+        {
+            return;
+        }
+
+        var scrollStart = _rowHeaderWidth + GetFixedColumnsWidth();
+        var scrollEnd = _rowHeaderWidth + _viewportBodyWidth;
+        if (scrollEnd <= scrollStart)
+        {
+            return;
+        }
+
+        const double edgeBand = 24.0;
+        const double maxSpeedPerMove = 48.0;
+        var delta = 0.0;
+        if (pointerX < scrollStart + edgeBand)
+        {
+            var pressure = (scrollStart + edgeBand - pointerX) / edgeBand;
+            delta = -Math.Clamp(pressure, 0, 3) * maxSpeedPerMove;
+        }
+        else if (pointerX > scrollEnd - edgeBand)
+        {
+            var pressure = (pointerX - (scrollEnd - edgeBand)) / edgeBand;
+            delta = Math.Clamp(pressure, 0, 3) * maxSpeedPerMove;
+        }
+
+        if (Math.Abs(delta) < double.Epsilon)
+        {
+            return;
+        }
+
+        var oldOffset = _horizontalOffset;
+        SetHorizontalOffset(_horizontalOffset + delta);
+        if (Math.Abs(oldOffset - _horizontalOffset) > double.Epsilon)
+        {
+            InvalidateVisual();
+        }
+    }
+
+    private void AutoScrollDuringRowInteraction(double pointerY)
+    {
+        if (Rows.Count == 0 || _viewportBodyHeight <= 0)
+        {
+            return;
+        }
+
+        var scrollStartY = ScaledColumnHeaderHeight;
+        var scrollEndY = ScaledColumnHeaderHeight + _viewportBodyHeight;
+        if (scrollEndY <= scrollStartY)
+        {
+            return;
+        }
+
+        const double edgeBand = 24.0;
+        const double maxSpeedPerMove = 36.0;
+        var delta = 0.0;
+        if (pointerY < scrollStartY + edgeBand)
+        {
+            var pressure = (scrollStartY + edgeBand - pointerY) / edgeBand;
+            delta = -Math.Clamp(pressure, 0, 3) * maxSpeedPerMove;
+        }
+        else if (pointerY > scrollEndY - edgeBand)
+        {
+            var pressure = (pointerY - (scrollEndY - edgeBand)) / edgeBand;
+            delta = Math.Clamp(pressure, 0, 3) * maxSpeedPerMove;
+        }
+
+        if (Math.Abs(delta) < double.Epsilon)
+        {
+            return;
+        }
+
+        var oldOffset = _verticalOffset;
+        SetVerticalOffset(_verticalOffset + delta);
+        if (Math.Abs(oldOffset - _verticalOffset) > double.Epsilon)
+        {
+            InvalidateVisual();
+        }
+    }
+
+    private void AutoScrollDuringCellSelection(Point pointer)
+    {
+        if (Rows.Count == 0 || Columns.Count == 0 || _viewportBodyWidth <= 0 || _viewportBodyHeight <= 0)
+        {
+            return;
+        }
+
+        const double edgeBand = 24.0;
+        const double maxHorizontalSpeed = 48.0;
+        const double maxVerticalSpeed = 36.0;
+
+        var scrollStartX = _rowHeaderWidth + GetFixedColumnsWidth();
+        var scrollEndX = _rowHeaderWidth + _viewportBodyWidth;
+        var horizontalDelta = 0.0;
+        if (scrollEndX > scrollStartX)
+        {
+            if (pointer.X < scrollStartX + edgeBand)
+            {
+                var pressure = (scrollStartX + edgeBand - pointer.X) / edgeBand;
+                horizontalDelta = -Math.Clamp(pressure, 0, 3) * maxHorizontalSpeed;
+            }
+            else if (pointer.X > scrollEndX - edgeBand)
+            {
+                var pressure = (pointer.X - (scrollEndX - edgeBand)) / edgeBand;
+                horizontalDelta = Math.Clamp(pressure, 0, 3) * maxHorizontalSpeed;
+            }
+        }
+
+        var scrollStartY = ScaledColumnHeaderHeight;
+        var scrollEndY = ScaledColumnHeaderHeight + _viewportBodyHeight;
+        var verticalDelta = 0.0;
+        if (pointer.Y < scrollStartY + edgeBand)
+        {
+            var pressure = (scrollStartY + edgeBand - pointer.Y) / edgeBand;
+            verticalDelta = -Math.Clamp(pressure, 0, 3) * maxVerticalSpeed;
+        }
+        else if (pointer.Y > scrollEndY - edgeBand)
+        {
+            var pressure = (pointer.Y - (scrollEndY - edgeBand)) / edgeBand;
+            verticalDelta = Math.Clamp(pressure, 0, 3) * maxVerticalSpeed;
+        }
+
+        var oldH = _horizontalOffset;
+        var oldV = _verticalOffset;
+        if (Math.Abs(horizontalDelta) > double.Epsilon)
+        {
+            SetHorizontalOffset(_horizontalOffset + horizontalDelta);
+        }
+
+        if (Math.Abs(verticalDelta) > double.Epsilon)
+        {
+            SetVerticalOffset(_verticalOffset + verticalDelta);
+        }
+
+        if (Math.Abs(oldH - _horizontalOffset) > double.Epsilon || Math.Abs(oldV - _verticalOffset) > double.Epsilon)
+        {
+            InvalidateVisual();
+        }
+    }
+
     protected override void OnMouseUp(MouseButtonEventArgs e)
     {
         if (_isTrackingColumnMove && e.ChangedButton == MouseButton.Left)
@@ -1127,12 +1444,54 @@ public sealed class Griddo : FrameworkElement
                 _columnMoveCueIndex >= 0 &&
                 _movingColumnIndex != _columnMoveCueIndex)
             {
-                MoveColumn(_movingColumnIndex, _columnMoveCueIndex);
+                if (_columnMoveStartedFromSelectedHeader)
+                {
+                    MoveSelectedColumns(_movingColumnIndex, _columnMoveCueIndex);
+                }
+                else
+                {
+                    MoveColumn(_movingColumnIndex, _columnMoveCueIndex);
+                }
+                InvalidateVisual();
+            }
+            else if (_pendingColumnHeaderSelectionOnMouseUp
+                && _pendingColumnHeaderIndex >= 0)
+            {
+                SelectColumn(_pendingColumnHeaderIndex, _pendingColumnHeaderSelectionAdditive);
+                _currentCell = new GriddoCellAddress(
+                    Rows.Count == 0 ? 0 : Math.Clamp(_currentCell.RowIndex, 0, Rows.Count - 1),
+                    _pendingColumnHeaderIndex);
+                _isEditing = false;
                 InvalidateVisual();
             }
 
             StopColumnMoveTracking();
             InvalidateVisual();
+            e.Handled = true;
+        }
+
+        if (_isTrackingRowMove && e.ChangedButton == MouseButton.Left)
+        {
+            if (_isMovingRow &&
+                _movingRowIndex >= 0 &&
+                _rowMoveCueIndex >= 0 &&
+                _movingRowIndex != _rowMoveCueIndex)
+            {
+                MoveSelectedRows(_movingRowIndex, _rowMoveCueIndex);
+                InvalidateVisual();
+            }
+            else if (_pendingRowHeaderSelectionOnMouseUp
+                && _pendingRowHeaderIndex >= 0)
+            {
+                SelectRow(_pendingRowHeaderIndex, _pendingRowHeaderSelectionAdditive);
+                _currentCell = new GriddoCellAddress(
+                    _pendingRowHeaderIndex,
+                    Columns.Count == 0 ? 0 : Math.Clamp(_currentCell.ColumnIndex, 0, Columns.Count - 1));
+                _isEditing = false;
+                InvalidateVisual();
+            }
+
+            StopRowMoveTracking();
             e.Handled = true;
         }
 
@@ -1180,6 +1539,51 @@ public sealed class Griddo : FrameworkElement
             }
 
             _pendingHostedEditActivation = false;
+            e.Handled = true;
+        }
+
+        if (_isDraggingColumnHeaderSelection && e.ChangedButton == MouseButton.Left)
+        {
+            _isDraggingColumnHeaderSelection = false;
+            _columnHeaderDragAnchorColumn = -1;
+            _columnHeaderDragCurrentColumn = -1;
+            if (!_isDraggingSelection
+                && !_isDraggingRowHeaderSelection
+                && !_isResizingColumn
+                && !_isResizingRow
+                && !_isTrackingColumnMove
+                && !_isTrackingRowMove
+                && IsMouseCaptured)
+            {
+                ReleaseMouseCapture();
+            }
+
+            e.Handled = true;
+        }
+
+        if (_isDraggingRowHeaderSelection && e.ChangedButton == MouseButton.Left)
+        {
+            _isDraggingRowHeaderSelection = false;
+            _rowHeaderDragAnchorRow = -1;
+            _rowHeaderDragCurrentRow = -1;
+            if (!_isDraggingSelection && !_isResizingColumn && !_isResizingRow && !_isTrackingColumnMove && IsMouseCaptured)
+            {
+                ReleaseMouseCapture();
+            }
+
+            e.Handled = true;
+        }
+
+        if (e.ChangedButton == MouseButton.Right
+            && _currentCell.IsValid
+            && _currentCell.RowIndex >= 0
+            && _currentCell.RowIndex < Rows.Count
+            && _currentCell.ColumnIndex >= 0
+            && _currentCell.ColumnIndex < Columns.Count
+            && Columns[_currentCell.ColumnIndex] is IGriddoHostedColumnView hostedUp
+            && TryGetHostedElement(_currentCell) is FrameworkElement hostUp)
+        {
+            hostedUp.RelayDirectEditMouseUp(hostUp, e);
             e.Handled = true;
         }
 
@@ -1493,7 +1897,8 @@ public sealed class Griddo : FrameworkElement
     {
         var width = GetColumnWidth(col);
         var rect = new Rect(x, 0, width, ScaledColumnHeaderHeight);
-        dc.DrawRectangle(HeaderBackground, null, rect);
+        var headerBackground = IsColumnSelected(col) ? SelectionBackground : HeaderBackground;
+        dc.DrawRectangle(headerBackground, null, rect);
         var pen = new Pen(GridLineBrush, GridPenThickness);
         // Top edge of header strip is drawn once in DrawOuterWorksheetFrame (matches DrawLine rasterization for scroll columns).
         dc.DrawLine(pen, rect.TopRight, rect.BottomRight);
@@ -1523,6 +1928,34 @@ public sealed class Griddo : FrameworkElement
                 new Point(rect.Right, rect.Top),
                 new Point(rect.Right, rect.Bottom));
         }
+    }
+
+    private int HitTestRowHeaderDrag(Point point)
+    {
+        if (Rows.Count == 0 || _viewportBodyHeight <= 0)
+        {
+            return -1;
+        }
+
+        var minY = ScaledColumnHeaderHeight;
+        var maxY = ScaledColumnHeaderHeight + _viewportBodyHeight - 1;
+        var clampedY = Math.Clamp(point.Y, minY, maxY);
+        var contentY = clampedY - ScaledColumnHeaderHeight + _verticalOffset;
+        var row = HitTestRowIndex(contentY);
+        return row >= 0 ? row : -1;
+    }
+
+    private int HitTestColumnHeaderDrag(Point point)
+    {
+        if (Columns.Count == 0 || _viewportBodyWidth <= 0)
+        {
+            return -1;
+        }
+
+        var minX = _rowHeaderWidth;
+        var maxX = _rowHeaderWidth + _viewportBodyWidth - 1;
+        var clampedX = Math.Clamp(point.X, minX, maxX);
+        return HitTestColumnHeader(new Point(clampedX, point.Y));
     }
 
     private void DrawBodyCell(
@@ -1624,7 +2057,6 @@ public sealed class Griddo : FrameworkElement
         }
 
         DrawColumnMoveCue(dc);
-
         var rowHeaderClip = new Rect(0, ScaledColumnHeaderHeight, _rowHeaderWidth, _viewportBodyHeight);
         dc.PushClip(new RectangleGeometry(rowHeaderClip));
         {
@@ -1635,7 +2067,8 @@ public sealed class Griddo : FrameworkElement
             for (var row = startRow; row <= endRow; row++)
             {
                 var rect = new Rect(0, y, _rowHeaderWidth, rowHeight);
-                dc.DrawRectangle(HeaderBackground, null, rect);
+                var rowHeaderBackground = IsRowSelected(row) ? SelectionBackground : HeaderBackground;
+                dc.DrawRectangle(rowHeaderBackground, null, rect);
                 // Top + bottom only; outer x=0 edge is one DrawLine in DrawOuterWorksheetFrame (avoids path vs line mismatch).
                 dc.DrawLine(rowHeaderPen, new Point(rect.Left, rect.Top), new Point(rect.Right, rect.Top));
                 dc.DrawLine(rowHeaderPen, new Point(rect.Left, rect.Bottom), new Point(rect.Right, rect.Bottom));
@@ -1654,7 +2087,7 @@ public sealed class Griddo : FrameworkElement
     }
 
     /// <summary>
-    /// Single DrawLine for the outermost top and left grid edges so they match column header strokes (PathGeometry stroke looked thicker under AA).
+    /// Single DrawLine for the outermost grid edges so they match column header strokes (PathGeometry stroke looked thicker under AA).
     /// </summary>
     private void DrawOuterWorksheetFrame(DrawingContext dc)
     {
@@ -1668,8 +2101,12 @@ public sealed class Griddo : FrameworkElement
         var stripBottom = ScaledColumnHeaderHeight + Math.Max(0, _viewportBodyHeight);
         var layoutBottom = Math.Max(0, ActualHeight - ScrollBarSize);
         var leftBottom = Math.Min(stripBottom, layoutBottom);
+        var rightX = Math.Max(0, ActualWidth - 1);
+        var bottomY = Math.Max(0, ActualHeight - 1);
         dc.DrawLine(pen, new Point(0, 0), new Point(topRight, 0));
         dc.DrawLine(pen, new Point(0, 0), new Point(0, leftBottom));
+        dc.DrawLine(pen, new Point(rightX, 0), new Point(rightX, bottomY));
+        dc.DrawLine(pen, new Point(0, bottomY), new Point(rightX, bottomY));
     }
 
     private void DrawBody(DrawingContext dc)
@@ -2213,9 +2650,26 @@ public sealed class Griddo : FrameworkElement
         _isTrackingColumnMove = false;
         _isMovingColumn = false;
         _isMovingPointerInColumnHeader = false;
+        _columnMoveStartedFromSelectedHeader = false;
+        _pendingColumnHeaderSelectionOnMouseUp = false;
+        _pendingColumnHeaderIndex = -1;
         _movingColumnIndex = -1;
         _columnMoveCueIndex = -1;
-        if (!_isDraggingSelection && !_isResizingColumn && !_isResizingRow && IsMouseCaptured)
+        if (!_isDraggingSelection && !_isResizingColumn && !_isResizingRow && !_isTrackingRowMove && IsMouseCaptured)
+        {
+            ReleaseMouseCapture();
+        }
+    }
+
+    private void StopRowMoveTracking()
+    {
+        _isTrackingRowMove = false;
+        _isMovingRow = false;
+        _movingRowIndex = -1;
+        _rowMoveCueIndex = -1;
+        _pendingRowHeaderSelectionOnMouseUp = false;
+        _pendingRowHeaderIndex = -1;
+        if (!_isDraggingSelection && !_isResizingColumn && !_isResizingRow && !_isTrackingColumnMove && IsMouseCaptured)
         {
             ReleaseMouseCapture();
         }
@@ -2237,6 +2691,162 @@ public sealed class Griddo : FrameworkElement
         foreach (var address in _selectedCells)
         {
             remapped.Add(new GriddoCellAddress(address.RowIndex, RemapColumnIndex(address.ColumnIndex, fromIndex, toIndex)));
+        }
+
+        _selectedCells.Clear();
+        _selectedCells.UnionWith(remapped);
+    }
+
+    private void MoveSelectedColumns(int anchorColumn, int targetColumn)
+    {
+        var selected = GetSelectedColumnIndices();
+        if (selected.Count <= 1 || !selected.Contains(anchorColumn))
+        {
+            MoveColumn(anchorColumn, targetColumn);
+            return;
+        }
+
+        var minSelected = selected[0];
+        var maxSelected = selected[^1];
+        var insertAfterTarget = targetColumn > maxSelected;
+        if (targetColumn >= minSelected && targetColumn <= maxSelected)
+        {
+            return;
+        }
+
+        var oldToNew = MoveColumnOrRowIndices(
+            Columns.Count,
+            selected,
+            targetColumn,
+            insertAfterTarget,
+            index => Columns.Move(index.from, index.to));
+        RemapSelectionAfterColumnMove(oldToNew);
+    }
+
+    private void MoveSelectedRows(int anchorRow, int targetRow)
+    {
+        var selected = GetSelectedRowIndices();
+        if (selected.Count == 0 || !selected.Contains(anchorRow))
+        {
+            return;
+        }
+
+        var minSelected = selected[0];
+        var maxSelected = selected[^1];
+        var insertAfterTarget = targetRow > maxSelected;
+        if (targetRow >= minSelected && targetRow <= maxSelected)
+        {
+            return;
+        }
+
+        var oldToNew = MoveColumnOrRowIndices(
+            Rows.Count,
+            selected,
+            targetRow,
+            insertAfterTarget,
+            index => Rows.Move(index.from, index.to));
+        RemapSelectionAfterRowMove(oldToNew);
+    }
+
+    private static int[] MoveColumnOrRowIndices(
+        int count,
+        List<int> selectedIndices,
+        int targetIndex,
+        bool insertAfterTarget,
+        Action<(int from, int to)> mover)
+    {
+        if (count <= 0 || selectedIndices.Count == 0)
+        {
+            return [];
+        }
+
+        selectedIndices.Sort();
+        var selectedLookup = selectedIndices.ToHashSet();
+        var unselected = Enumerable.Range(0, count)
+            .Where(i => !selectedLookup.Contains(i))
+            .ToList();
+        var insertionPoint = insertAfterTarget
+            ? unselected.Count(i => i <= targetIndex)
+            : unselected.Count(i => i < targetIndex);
+        insertionPoint = Math.Clamp(insertionPoint, 0, unselected.Count);
+
+        var finalOrder = new List<int>(count);
+        finalOrder.AddRange(unselected.Take(insertionPoint));
+        finalOrder.AddRange(selectedIndices);
+        finalOrder.AddRange(unselected.Skip(insertionPoint));
+
+        var currentOrder = Enumerable.Range(0, count).ToList();
+        for (var newIndex = 0; newIndex < finalOrder.Count; newIndex++)
+        {
+            var item = finalOrder[newIndex];
+            var currentIndex = currentOrder.IndexOf(item);
+            if (currentIndex < 0 || currentIndex == newIndex)
+            {
+                continue;
+            }
+
+            mover((currentIndex, newIndex));
+            currentOrder.RemoveAt(currentIndex);
+            currentOrder.Insert(newIndex, item);
+        }
+
+        var oldToNew = new int[count];
+        for (var newIndex = 0; newIndex < finalOrder.Count; newIndex++)
+        {
+            oldToNew[finalOrder[newIndex]] = newIndex;
+        }
+
+        return oldToNew;
+    }
+
+    private void RemapSelectionAfterColumnMove(int[] oldToNew)
+    {
+        if (oldToNew.Length == 0)
+        {
+            return;
+        }
+
+        if (_currentCell.IsValid
+            && _currentCell.ColumnIndex >= 0
+            && _currentCell.ColumnIndex < oldToNew.Length)
+        {
+            _currentCell = new GriddoCellAddress(_currentCell.RowIndex, oldToNew[_currentCell.ColumnIndex]);
+        }
+
+        var remapped = new HashSet<GriddoCellAddress>();
+        foreach (var address in _selectedCells)
+        {
+            if (address.ColumnIndex >= 0 && address.ColumnIndex < oldToNew.Length)
+            {
+                remapped.Add(new GriddoCellAddress(address.RowIndex, oldToNew[address.ColumnIndex]));
+            }
+        }
+
+        _selectedCells.Clear();
+        _selectedCells.UnionWith(remapped);
+    }
+
+    private void RemapSelectionAfterRowMove(int[] oldToNew)
+    {
+        if (oldToNew.Length == 0)
+        {
+            return;
+        }
+
+        if (_currentCell.IsValid
+            && _currentCell.RowIndex >= 0
+            && _currentCell.RowIndex < oldToNew.Length)
+        {
+            _currentCell = new GriddoCellAddress(oldToNew[_currentCell.RowIndex], _currentCell.ColumnIndex);
+        }
+
+        var remapped = new HashSet<GriddoCellAddress>();
+        foreach (var address in _selectedCells)
+        {
+            if (address.RowIndex >= 0 && address.RowIndex < oldToNew.Length)
+            {
+                remapped.Add(new GriddoCellAddress(oldToNew[address.RowIndex], address.ColumnIndex));
+            }
         }
 
         _selectedCells.Clear();
@@ -2267,14 +2877,27 @@ public sealed class Griddo : FrameworkElement
 
         var clipRect = new Rect(_rowHeaderWidth, 0, _viewportBodyWidth, ScaledColumnHeaderHeight);
 
-        // Keep a thin red "current/source" marker on the column being moved.
+        // Keep a thin red "current/source" marker on the column(s) being moved.
         if (_isMovingPointerInColumnHeader && _movingColumnIndex >= 0 && _movingColumnIndex < Columns.Count)
         {
-            var movingRect = GetColumnHeaderRect(_movingColumnIndex);
-            var visibleMovingRect = Rect.Intersect(movingRect, clipRect);
-            if (!visibleMovingRect.IsEmpty)
+            var currentPen = new Pen(Brushes.Red, 1);
+            var movingColumns = _columnMoveStartedFromSelectedHeader && _isMovingColumn
+                ? GetSelectedColumnIndices()
+                : [_movingColumnIndex];
+            foreach (var movingColumn in movingColumns)
             {
-                var currentPen = new Pen(Brushes.Red, 1);
+                if (movingColumn < 0 || movingColumn >= Columns.Count)
+                {
+                    continue;
+                }
+
+                var movingRect = GetColumnHeaderRect(movingColumn);
+                var visibleMovingRect = Rect.Intersect(movingRect, clipRect);
+                if (visibleMovingRect.IsEmpty)
+                {
+                    continue;
+                }
+
                 var currentRect = new Rect(
                     visibleMovingRect.X + 0.5,
                     visibleMovingRect.Y + 0.5,
@@ -2301,8 +2924,24 @@ public sealed class Griddo : FrameworkElement
             return;
         }
 
-        var movingRight = _movingColumnIndex >= 0 && _columnMoveCueIndex > _movingColumnIndex;
-        var x = movingRight ? visibleCueRect.Right : visibleCueRect.Left;
+        var x = visibleCueRect.Left;
+        if (_columnMoveStartedFromSelectedHeader && _isMovingColumn)
+        {
+            var selectedColumns = GetSelectedColumnIndices();
+            if (selectedColumns.Count > 0)
+            {
+                var minSelected = selectedColumns[0];
+                var maxSelected = selectedColumns[^1];
+                var movingLeft = _columnMoveCueIndex < minSelected;
+                var movingRight = _columnMoveCueIndex > maxSelected;
+                x = movingRight ? visibleCueRect.Right : visibleCueRect.Left;
+            }
+        }
+        else
+        {
+            var movingRight = _movingColumnIndex >= 0 && _columnMoveCueIndex > _movingColumnIndex;
+            x = movingRight ? visibleCueRect.Right : visibleCueRect.Left;
+        }
         var insertionPen = new Pen(Brushes.Red, 2);
         dc.DrawLine(
             insertionPen,
@@ -2310,6 +2949,103 @@ public sealed class Griddo : FrameworkElement
             new Point(x, Math.Max(1, ScaledColumnHeaderHeight - 1)));
 
         DrawDropArrows(dc, x, ScaledColumnHeaderHeight);
+    }
+
+    private void DrawRowMoveCue(DrawingContext dc)
+    {
+        if (!_isTrackingRowMove || !_isMovingRow)
+        {
+            return;
+        }
+
+        var clipRect = new Rect(0, ScaledColumnHeaderHeight, _rowHeaderWidth, _viewportBodyHeight);
+        var currentPen = new Pen(Brushes.Red, 1);
+        var movingRows = GetSelectedRowIndices();
+        foreach (var movingRow in movingRows)
+        {
+            var movingRect = GetRowHeaderRect(movingRow);
+            var visibleMovingRect = Rect.Intersect(movingRect, clipRect);
+            if (visibleMovingRect.IsEmpty)
+            {
+                continue;
+            }
+
+            var currentRect = new Rect(
+                visibleMovingRect.X + 0.5,
+                visibleMovingRect.Y + 0.5,
+                Math.Max(0, visibleMovingRect.Width - 1),
+                Math.Max(0, visibleMovingRect.Height - 1));
+            dc.DrawRectangle(null, currentPen, currentRect);
+        }
+
+        if (_rowMoveCueIndex < 0 || _rowMoveCueIndex >= Rows.Count)
+        {
+            return;
+        }
+
+        var cueRect = GetRowHeaderRect(_rowMoveCueIndex);
+        if (cueRect.IsEmpty)
+        {
+            return;
+        }
+
+        if (!TryGetRowDropIndicatorY(out var y))
+        {
+            return;
+        }
+
+        y = Math.Clamp(y, clipRect.Top + 1, clipRect.Bottom - 1);
+        var insertionPen = new Pen(Brushes.Red, 2);
+        dc.DrawLine(
+            insertionPen,
+            new Point(1, y),
+            new Point(Math.Max(1, _rowHeaderWidth - 1), y));
+
+        DrawRowDropArrows(dc, y, _rowHeaderWidth, clipRect.Top + 1, clipRect.Bottom - 1);
+    }
+
+    private bool TryGetRowDropIndicatorY(out double y)
+    {
+        y = 0;
+        if (_rowMoveCueIndex < 0 || _rowMoveCueIndex >= Rows.Count)
+        {
+            return false;
+        }
+
+        var selectedRows = GetSelectedRowIndices();
+        if (selectedRows.Count == 0)
+        {
+            if (_movingRowIndex < 0 || _movingRowIndex >= Rows.Count || _rowMoveCueIndex == _movingRowIndex)
+            {
+                return false;
+            }
+
+            var cueRectSingle = GetRowHeaderRect(_rowMoveCueIndex);
+            if (cueRectSingle.IsEmpty)
+            {
+                return false;
+            }
+
+            y = _rowMoveCueIndex > _movingRowIndex ? cueRectSingle.Bottom : cueRectSingle.Top;
+            return true;
+        }
+
+        var minSelected = selectedRows[0];
+        var maxSelected = selectedRows[^1];
+        if (_rowMoveCueIndex >= minSelected && _rowMoveCueIndex <= maxSelected)
+        {
+            return false;
+        }
+
+        var cueRect = GetRowHeaderRect(_rowMoveCueIndex);
+        if (cueRect.IsEmpty)
+        {
+            return false;
+        }
+
+        var insertAfterTarget = _rowMoveCueIndex > maxSelected;
+        y = insertAfterTarget ? cueRect.Bottom : cueRect.Top;
+        return true;
     }
 
     private static void DrawDropArrows(DrawingContext dc, double lineX, double headerHeight)
@@ -2346,6 +3082,42 @@ public sealed class Griddo : FrameworkElement
         dc.DrawGeometry(red, null, rightArrow);
     }
 
+    private static void DrawRowDropArrows(DrawingContext dc, double lineY, double headerWidth, double minY, double maxY)
+    {
+        const double arrowWidth = 4;
+        const double arrowHeight = 6;
+        const double gap = 3;
+        var clampedLineY = Math.Clamp(lineY, minY, maxY);
+        var centerX = headerWidth / 2.0;
+        var red = Brushes.Red;
+
+        // Down arrow above insertion line.
+        var downArrow = new StreamGeometry();
+        using (var ctx = downArrow.Open())
+        {
+            var tipY = Math.Clamp(clampedLineY - gap, minY + arrowHeight, maxY - arrowHeight);
+            var tip = new Point(centerX, tipY);
+            ctx.BeginFigure(new Point(tip.X - arrowWidth, tip.Y - arrowHeight), true, true);
+            ctx.LineTo(new Point(tip.X + arrowWidth, tip.Y - arrowHeight), true, false);
+            ctx.LineTo(tip, true, false);
+        }
+        downArrow.Freeze();
+        dc.DrawGeometry(red, null, downArrow);
+
+        // Up arrow below insertion line.
+        var upArrow = new StreamGeometry();
+        using (var ctx = upArrow.Open())
+        {
+            var tipY = Math.Clamp(clampedLineY + gap, minY + arrowHeight, maxY - arrowHeight);
+            var tip = new Point(centerX, tipY);
+            ctx.BeginFigure(new Point(tip.X - arrowWidth, tip.Y + arrowHeight), true, true);
+            ctx.LineTo(new Point(tip.X + arrowWidth, tip.Y + arrowHeight), true, false);
+            ctx.LineTo(tip, true, false);
+        }
+        upArrow.Freeze();
+        dc.DrawGeometry(red, null, upArrow);
+    }
+
     private Rect GetColumnHeaderRect(int columnIndex)
     {
         if (columnIndex < 0 || columnIndex >= Columns.Count)
@@ -2376,6 +3148,17 @@ public sealed class Griddo : FrameworkElement
         return new Rect(left, 0, GetColumnWidth(columnIndex), ScaledColumnHeaderHeight);
     }
 
+    private Rect GetRowHeaderRect(int rowIndex)
+    {
+        if (rowIndex < 0 || rowIndex >= Rows.Count)
+        {
+            return Rect.Empty;
+        }
+
+        var y = ScaledColumnHeaderHeight + GetRowTop(rowIndex) - _verticalOffset;
+        return new Rect(0, y, _rowHeaderWidth, GetRowHeight(rowIndex));
+    }
+
     private void SelectRow(int rowIndex, bool additive)
     {
         if (rowIndex < 0 || rowIndex >= Rows.Count)
@@ -2391,6 +3174,90 @@ public sealed class Griddo : FrameworkElement
         for (var col = 0; col < Columns.Count; col++)
         {
             _selectedCells.Add(new GriddoCellAddress(rowIndex, col));
+        }
+    }
+
+    private bool IsRowSelected(int rowIndex)
+    {
+        return _selectedCells.Any(c => c.RowIndex == rowIndex);
+    }
+
+    private bool IsColumnSelected(int columnIndex)
+    {
+        return _selectedCells.Any(c => c.ColumnIndex == columnIndex);
+    }
+
+    private List<int> GetSelectedColumnIndices()
+    {
+        return _selectedCells
+            .Select(c => c.ColumnIndex)
+            .Where(c => c >= 0 && c < Columns.Count)
+            .Distinct()
+            .OrderBy(c => c)
+            .ToList();
+    }
+
+    private List<int> GetSelectedRowIndices()
+    {
+        return _selectedCells
+            .Select(c => c.RowIndex)
+            .Where(r => r >= 0 && r < Rows.Count)
+            .Distinct()
+            .OrderBy(r => r)
+            .ToList();
+    }
+
+    private void ApplyRowHeaderDragSelection()
+    {
+        if (_rowHeaderDragAnchorRow < 0
+            || _rowHeaderDragCurrentRow < 0
+            || Rows.Count == 0
+            || Columns.Count == 0)
+        {
+            return;
+        }
+
+        _selectedCells.Clear();
+        if (_rowHeaderDragIsAdditive || (Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        {
+            _selectedCells.UnionWith(_selectionDragSnapshot);
+        }
+
+        var minRow = Math.Min(_rowHeaderDragAnchorRow, _rowHeaderDragCurrentRow);
+        var maxRow = Math.Max(_rowHeaderDragAnchorRow, _rowHeaderDragCurrentRow);
+        for (var row = minRow; row <= maxRow; row++)
+        {
+            for (var col = 0; col < Columns.Count; col++)
+            {
+                _selectedCells.Add(new GriddoCellAddress(row, col));
+            }
+        }
+    }
+
+    private void ApplyColumnHeaderDragSelection()
+    {
+        if (_columnHeaderDragAnchorColumn < 0
+            || _columnHeaderDragCurrentColumn < 0
+            || Rows.Count == 0
+            || Columns.Count == 0)
+        {
+            return;
+        }
+
+        _selectedCells.Clear();
+        if (_columnHeaderDragIsAdditive || (Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        {
+            _selectedCells.UnionWith(_selectionDragSnapshot);
+        }
+
+        var minCol = Math.Min(_columnHeaderDragAnchorColumn, _columnHeaderDragCurrentColumn);
+        var maxCol = Math.Max(_columnHeaderDragAnchorColumn, _columnHeaderDragCurrentColumn);
+        for (var col = minCol; col <= maxCol; col++)
+        {
+            for (var row = 0; row < Rows.Count; row++)
+            {
+                _selectedCells.Add(new GriddoCellAddress(row, col));
+            }
         }
     }
 
@@ -2514,23 +3381,23 @@ public sealed class Griddo : FrameworkElement
     {
         if (point.X < _rowHeaderWidth || point.Y < ScaledColumnHeaderHeight)
         {
-            return default;
+            return new GriddoCellAddress(-1, -1);
         }
 
         if (point.X > _rowHeaderWidth + _viewportBodyWidth || point.Y > ScaledColumnHeaderHeight + _viewportBodyHeight)
         {
-            return default;
+            return new GriddoCellAddress(-1, -1);
         }
 
         var row = HitTestRowIndex(point.Y - ScaledColumnHeaderHeight + _verticalOffset);
         if (row < 0)
         {
-            return default;
+            return new GriddoCellAddress(-1, -1);
         }
 
         if (!TryMapViewportPointToContentX(point.X, out var contentX))
         {
-            return default;
+            return new GriddoCellAddress(-1, -1);
         }
 
         var x = 0.0;
@@ -2545,7 +3412,7 @@ public sealed class Griddo : FrameworkElement
             x += width;
         }
 
-        return default;
+        return new GriddoCellAddress(-1, -1);
     }
 
     private Rect GetCellRect(int row, int col)
@@ -2979,12 +3846,51 @@ public sealed class Griddo : FrameworkElement
 
     private void DrawScrollBarCorner(DrawingContext dc)
     {
-        var rect = new Rect(
-            Math.Max(0, ActualWidth - ScrollBarSize),
-            Math.Max(0, ActualHeight - ScrollBarSize),
-            ScrollBarSize,
-            ScrollBarSize);
-        dc.DrawRectangle(HeaderBackground, new Pen(GridLineBrush, GridPenThickness), rect);
+        const double outerBorderInset = 1;
+        var cornerThickness = Math.Max(0, ScrollBarSize - outerBorderInset);
+        var topRightRect = new Rect(
+            Math.Max(0, ActualWidth - ScrollBarSize - outerBorderInset),
+            0,
+            cornerThickness,
+            Math.Max(0, ScaledColumnHeaderHeight));
+        var bottomLeftRect = new Rect(
+            0,
+            Math.Max(0, ActualHeight - ScrollBarSize - outerBorderInset),
+            Math.Max(0, _rowHeaderWidth),
+            cornerThickness);
+        var bottomRightRect = new Rect(
+            Math.Max(0, ActualWidth - ScrollBarSize - outerBorderInset),
+            Math.Max(0, ActualHeight - ScrollBarSize - outerBorderInset),
+            cornerThickness,
+            cornerThickness);
+
+        dc.DrawRectangle(HeaderBackground, null, topRightRect);
+        dc.DrawRectangle(HeaderBackground, null, bottomLeftRect);
+        dc.DrawRectangle(HeaderBackground, null, bottomRightRect);
+
+        var pen = new Pen(GridLineBrush, GridPenThickness);
+
+        // Top-right: only top border.
+        dc.DrawLine(
+            pen,
+            new Point(topRightRect.Left, topRightRect.Top),
+            new Point(topRightRect.Right, topRightRect.Top));
+
+        // Bottom-left: only left border.
+        dc.DrawLine(
+            pen,
+            new Point(bottomLeftRect.Left, bottomLeftRect.Top),
+            new Point(bottomLeftRect.Left, bottomLeftRect.Bottom));
+
+        // Bottom-right: keep subtle separator to both scrollbars.
+        dc.DrawLine(
+            pen,
+            new Point(bottomRightRect.Left, bottomRightRect.Top),
+            new Point(bottomRightRect.Right, bottomRightRect.Top));
+        dc.DrawLine(
+            pen,
+            new Point(bottomRightRect.Left, bottomRightRect.Top),
+            new Point(bottomRightRect.Left, bottomRightRect.Bottom));
     }
 
     private void UpdateScrollBars()

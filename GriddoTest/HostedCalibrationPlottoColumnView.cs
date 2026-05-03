@@ -245,9 +245,32 @@ public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView
             return;
         }
 
-        var routed = new MouseButtonEventArgs(eFromGrid.MouseDevice, eFromGrid.Timestamp, MouseButton.Left)
+        if (eFromGrid.ChangedButton == MouseButton.Right && eFromGrid.ClickCount == 2)
+        {
+            chart.Focus();
+            chart.ZoomOutCompletely();
+            return;
+        }
+
+        var routed = new MouseButtonEventArgs(eFromGrid.MouseDevice, eFromGrid.Timestamp, eFromGrid.ChangedButton)
         {
             RoutedEvent = Mouse.MouseDownEvent,
+            Source = chart,
+        };
+        chart.Focus();
+        chart.RaiseEvent(routed);
+    }
+
+    public void RelayDirectEditMouseUp(FrameworkElement host, MouseButtonEventArgs eFromGrid)
+    {
+        if (host is not Border { Child: CalibrationCurveControl chart })
+        {
+            return;
+        }
+
+        var routed = new MouseButtonEventArgs(eFromGrid.MouseDevice, eFromGrid.Timestamp, eFromGrid.ChangedButton)
+        {
+            RoutedEvent = Mouse.MouseUpEvent,
             Source = chart,
         };
         chart.Focus();

@@ -51,4 +51,13 @@ public interface IGriddoHostedColumnView : IGriddoColumnView
     void RelayDirectEditMouseDown(FrameworkElement host, MouseButtonEventArgs eFromGrid)
     {
     }
+
+    /// <summary>
+    /// Optional companion for <see cref="RelayDirectEditMouseDown"/> when hosted editors need mouse-up state transitions
+    /// (e.g. delayed context-menu opening after right-button release).
+    /// Default: no-op.
+    /// </summary>
+    void RelayDirectEditMouseUp(FrameworkElement host, MouseButtonEventArgs eFromGrid)
+    {
+    }
 }
