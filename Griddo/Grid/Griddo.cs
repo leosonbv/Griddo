@@ -116,6 +116,14 @@ public sealed class Griddo : FrameworkElement
     private double _viewportBodyWidth;
     private double _viewportBodyHeight;
     private double _rowHeaderWidth = 40;
+    private string _findText = string.Empty;
+    private GriddoCellAddress _findMatchCell = new(-1, -1);
+    private readonly HashSet<GriddoCellAddress> _findMatchedCells = [];
+    private readonly List<string> _findHistory = [];
+    private bool _pendingAutoFocus = true;
+    private bool _hasAutoSizedColumns;
+    private bool _initialSampleAutoSizeScheduled;
+    private int _visibleRowCount;
 
     public Griddo()
     {
@@ -166,6 +174,48 @@ public sealed class Griddo : FrameworkElement
         Rows.CollectionChanged += OnGridCollectionChanged;
         Columns.CollectionChanged += OnGridCollectionChanged;
         UpdateRowHeaderWidth();
+        Loaded += OnLoadedRequestFocus;
+        IsVisibleChanged += OnIsVisibleChangedRequestFocus;
+    }
+
+    private void OnLoadedRequestFocus(object sender, RoutedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        RequestAutoFocus();
+    }
+
+    private void OnIsVisibleChangedRequestFocus(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        _ = sender;
+        if (e.NewValue is true)
+        {
+            _pendingAutoFocus = true;
+            RequestAutoFocus();
+        }
+    }
+
+    private void RequestAutoFocus()
+    {
+        if (!_pendingAutoFocus || !IsVisible)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+        {
+            if (!_pendingAutoFocus || !IsVisible)
+            {
+                return;
+            }
+
+            Focus();
+            Keyboard.Focus(this);
+            if (IsKeyboardFocusWithin)
+            {
+                _pendingAutoFocus = false;
+            }
+        }));
     }
 
     public ObservableCollection<object> Rows { get; }
@@ -193,11 +243,35 @@ public sealed class Griddo : FrameworkElement
         }
     }
 
+    /// <summary>
+    /// 0 (X) = use <see cref="UniformRowHeight"/>. 1..10 = fit exactly this many rows into visible body height.
+    /// </summary>
+    public int VisibleRowCount
+    {
+        get => _visibleRowCount;
+        set
+        {
+            var clamped = Math.Clamp(value, 0, 10);
+            if (_visibleRowCount == clamped)
+            {
+                return;
+            }
+
+            _visibleRowCount = clamped;
+            InvalidateMeasure();
+            InvalidateVisual();
+        }
+    }
+
     public Brush GridLineBrush { get; set; } = Brushes.LightGray;
     public Brush HeaderBackground { get; set; } = new SolidColorBrush(Color.FromRgb(245, 245, 245));
     public Brush SelectionBackground { get; set; } = new SolidColorBrush(Color.FromArgb(120, 102, 178, 255));
     public Brush CurrentCellBorderBrush { get; set; } = Brushes.DodgerBlue;
+    public Brush FindMatchBackground { get; set; } = new SolidColorBrush(Color.FromArgb(170, 255, 235, 120));
     public bool HideCellSelectionColoring { get; set; }
+    public bool HideHeaderSelectionColoring { get; set; }
+    public bool HideCurrentCellColor { get; set; }
+    public bool HideEditCellColor { get; set; }
 
     /// <summary>Pen stroke for the right edge of the last fixed column only (freeze boundary before scrollable columns).</summary>
     public Brush FixedColumnRightBorderBrush { get; set; } = new SolidColorBrush(Color.FromRgb(118, 118, 118));
@@ -675,6 +749,13 @@ public sealed class Griddo : FrameworkElement
             {
                 if (e.ClickCount == 2)
                 {
+                    if (isCtrlPressed)
+                    {
+                        AutoSizeAllColumns();
+                        e.Handled = true;
+                        return;
+                    }
+
                     AutoSizeColumn(dividerColumn);
                     e.Handled = true;
                     return;
@@ -694,6 +775,13 @@ public sealed class Griddo : FrameworkElement
             {
                 if (e.ClickCount == 2)
                 {
+                    if (isCtrlPressed)
+                    {
+                        AutoSizeAllColumns();
+                        e.Handled = true;
+                        return;
+                    }
+
                     AutoSizeRow(dividerRow);
                     e.Handled = true;
                     return;
@@ -1728,6 +1816,57 @@ public sealed class Griddo : FrameworkElement
         var isShiftPressed = (modifiers & ModifierKeys.Shift) != 0;
         var isHostedEditing = IsCurrentHostedCellInEditMode();
 
+        if (isCtrlPressed && e.Key == Key.F)
+        {
+            if (TryPromptFindText(out var findText))
+            {
+                _findText = findText;
+                AddFindHistory(findText);
+                RebuildFindMatches();
+                FindNextMatch(forward: true, fromCurrentMatch: false);
+                InvalidateVisual();
+            }
+
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.F3)
+        {
+            if (string.IsNullOrWhiteSpace(_findText))
+            {
+                if (!TryPromptFindText(out var prompted))
+                {
+                    e.Handled = true;
+                    return;
+                }
+
+                _findText = prompted;
+                AddFindHistory(prompted);
+                RebuildFindMatches();
+                FindNextMatch(forward: !isShiftPressed, fromCurrentMatch: false);
+            }
+            else
+            {
+                RebuildFindMatches();
+                FindNextMatch(forward: !isShiftPressed, fromCurrentMatch: true);
+            }
+
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Escape && !string.IsNullOrEmpty(_findText))
+        {
+            _findText = string.Empty;
+            _findMatchCell = new GriddoCellAddress(-1, -1);
+            _findMatchedCells.Clear();
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+
         if ((isCtrlPressed && e.Key == Key.C) || (isCtrlPressed && e.Key == Key.Insert))
         {
             if (_isEditing)
@@ -1909,7 +2048,7 @@ public sealed class Griddo : FrameworkElement
     {
         var width = GetColumnWidth(col);
         var rect = new Rect(x, 0, width, ScaledColumnHeaderHeight);
-        var headerBackground = IsColumnSelected(col) ? SelectionBackground : HeaderBackground;
+        var headerBackground = (IsColumnSelected(col) && !HideHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
         dc.DrawRectangle(headerBackground, null, rect);
         var pen = new Pen(GridLineBrush, GridPenThickness);
         // Top edge of header strip is drawn once in DrawOuterWorksheetFrame (matches DrawLine rasterization for scroll columns).
@@ -1986,6 +2125,11 @@ public sealed class Griddo : FrameworkElement
         var address = new GriddoCellAddress(row, col);
 
         var isHostedCellEditing = IsHostedCellInEditMode(address);
+        if (_findMatchedCells.Contains(address))
+        {
+            dc.DrawRectangle(FindMatchBackground, null, rect);
+        }
+
         if (_selectedCells.Contains(address) && !isHostedCellEditing && !HideCellSelectionColoring)
         {
             dc.DrawRectangle(SelectionBackground, null, rect);
@@ -2079,7 +2223,7 @@ public sealed class Griddo : FrameworkElement
             for (var row = startRow; row <= endRow; row++)
             {
                 var rect = new Rect(0, y, _rowHeaderWidth, rowHeight);
-                var rowHeaderBackground = IsRowSelected(row) ? SelectionBackground : HeaderBackground;
+                var rowHeaderBackground = (IsRowSelected(row) && !HideHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
                 dc.DrawRectangle(rowHeaderBackground, null, rect);
                 // Top + bottom only; outer x=0 edge is one DrawLine in DrawOuterWorksheetFrame (avoids path vs line mismatch).
                 dc.DrawLine(rowHeaderPen, new Point(rect.Left, rect.Top), new Point(rect.Right, rect.Top));
@@ -2202,7 +2346,14 @@ public sealed class Griddo : FrameworkElement
             Math.Max(0, rect.Width - (currentCellInset * 2)),
             Math.Max(0, rect.Height - (currentCellInset * 2)));
         var isHostedEditMode = IsCurrentHostedCellInEditMode();
-        var borderBrush = (_isEditing || isHostedEditMode) ? Brushes.Red : CurrentCellBorderBrush;
+        var isEditCell = _isEditing || isHostedEditMode;
+        if ((isEditCell && HideEditCellColor) || (!isEditCell && HideCurrentCellColor))
+        {
+            dc.Pop();
+            return;
+        }
+
+        var borderBrush = isEditCell ? Brushes.Red : CurrentCellBorderBrush;
         dc.DrawRectangle(null, new Pen(borderBrush, ScaledCurrentCellBorder), insetRect);
         dc.Pop();
     }
@@ -3258,6 +3409,234 @@ public sealed class Griddo : FrameworkElement
         return _selectedCells.Any(c => c.ColumnIndex == columnIndex);
     }
 
+    private bool FindNextMatch(bool forward, bool fromCurrentMatch)
+    {
+        if (_findMatchedCells.Count == 0 || Rows.Count == 0 || Columns.Count == 0)
+        {
+            _findMatchCell = new GriddoCellAddress(-1, -1);
+            return false;
+        }
+
+        var matchedFlat = _findMatchedCells
+            .Select(a => (a.RowIndex * Columns.Count) + a.ColumnIndex)
+            .OrderBy(i => i)
+            .ToList();
+
+        if (matchedFlat.Count == 0)
+        {
+            _findMatchCell = new GriddoCellAddress(-1, -1);
+            return false;
+        }
+
+        var selectedFlat = _findMatchCell.IsValid
+            ? (_findMatchCell.RowIndex * Columns.Count) + _findMatchCell.ColumnIndex
+            : -1;
+
+        var pickedFlat = matchedFlat[0];
+        if (!fromCurrentMatch || selectedFlat < 0)
+        {
+            pickedFlat = forward ? matchedFlat[0] : matchedFlat[^1];
+        }
+        else
+        {
+            if (forward)
+            {
+                pickedFlat = matchedFlat.FirstOrDefault(i => i > selectedFlat);
+                if (pickedFlat == 0 && !matchedFlat.Contains(0))
+                {
+                    pickedFlat = matchedFlat[0];
+                }
+            }
+            else
+            {
+                pickedFlat = matchedFlat.LastOrDefault(i => i < selectedFlat);
+                if (pickedFlat == 0 && !matchedFlat.Contains(0))
+                {
+                    pickedFlat = matchedFlat[^1];
+                }
+            }
+        }
+
+        _findMatchCell = new GriddoCellAddress(pickedFlat / Columns.Count, pickedFlat % Columns.Count);
+        _currentCell = _findMatchCell;
+        CenterCellInViewport(_findMatchCell);
+        return true;
+    }
+
+    private void RebuildFindMatches()
+    {
+        _findMatchedCells.Clear();
+        if (Rows.Count == 0 || Columns.Count == 0 || string.IsNullOrWhiteSpace(_findText))
+        {
+            _findMatchCell = new GriddoCellAddress(-1, -1);
+            return;
+        }
+
+        var normalizedNeedle = _findText.Trim();
+        for (var row = 0; row < Rows.Count; row++)
+        {
+            for (var col = 0; col < Columns.Count; col++)
+            {
+                var text = GetCellFindText(row, col);
+                if (text.IndexOf(normalizedNeedle, StringComparison.CurrentCultureIgnoreCase) >= 0)
+                {
+                    _findMatchedCells.Add(new GriddoCellAddress(row, col));
+                }
+            }
+        }
+
+        if (_findMatchCell.IsValid && !_findMatchedCells.Contains(_findMatchCell))
+        {
+            _findMatchCell = new GriddoCellAddress(-1, -1);
+        }
+    }
+
+    private bool TryPromptFindText(out string findText)
+    {
+        var owner = Window.GetWindow(this);
+        return FindTextDialog.TryShow(owner, _findHistory, _findText, out findText);
+    }
+
+    private void AddFindHistory(string findText)
+    {
+        if (string.IsNullOrWhiteSpace(findText))
+        {
+            return;
+        }
+
+        _findHistory.RemoveAll(x => string.Equals(x, findText, StringComparison.CurrentCulture));
+        _findHistory.Insert(0, findText);
+        const int maxHistory = 12;
+        if (_findHistory.Count > maxHistory)
+        {
+            _findHistory.RemoveRange(maxHistory, _findHistory.Count - maxHistory);
+        }
+    }
+
+    private string GetCellFindText(int row, int col)
+    {
+        if (row < 0 || row >= Rows.Count || col < 0 || col >= Columns.Count)
+        {
+            return string.Empty;
+        }
+
+        var column = Columns[col];
+        var value = column.GetValue(Rows[row]);
+        return column.FormatValue(value) ?? string.Empty;
+    }
+
+    private void CenterCellInViewport(GriddoCellAddress cell)
+    {
+        if (!cell.IsValid || Rows.Count == 0 || Columns.Count == 0 || _viewportBodyWidth <= 0 || _viewportBodyHeight <= 0)
+        {
+            return;
+        }
+
+        var rect = GetCellRect(cell.RowIndex, cell.ColumnIndex);
+        if (rect.IsEmpty)
+        {
+            return;
+        }
+
+        var targetCenterY = ScaledColumnHeaderHeight + (_viewportBodyHeight / 2.0);
+        var deltaY = rect.Y + (rect.Height / 2.0) - targetCenterY;
+        SetVerticalOffset(_verticalOffset + deltaY);
+
+        if (cell.ColumnIndex >= _fixedColumnCount)
+        {
+            var targetCenterX = _rowHeaderWidth + (_viewportBodyWidth / 2.0);
+            var deltaX = rect.X + (rect.Width / 2.0) - targetCenterX;
+            SetHorizontalOffset(_horizontalOffset + deltaX);
+        }
+    }
+
+    private sealed class FindTextDialog : Window
+    {
+        private readonly ComboBox _input;
+
+        private FindTextDialog(IEnumerable<string> history, string currentValue)
+        {
+            Title = "Find";
+            WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            ResizeMode = ResizeMode.NoResize;
+            ShowInTaskbar = false;
+            Width = 360;
+            Height = 142;
+
+            var root = new Grid { Margin = new Thickness(12) };
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            root.Children.Add(new TextBlock
+            {
+                Text = "Find text:",
+                Margin = new Thickness(0, 0, 0, 6)
+            });
+
+            _input = new ComboBox
+            {
+                IsEditable = true,
+                IsTextSearchEnabled = false,
+                StaysOpenOnEdit = true,
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            foreach (var entry in history)
+            {
+                _input.Items.Add(entry);
+            }
+
+            _input.Text = currentValue ?? string.Empty;
+            Grid.SetRow(_input, 1);
+            root.Children.Add(_input);
+
+            var buttons = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+
+            var ok = new Button
+            {
+                Content = "OK",
+                MinWidth = 72,
+                Margin = new Thickness(0, 0, 8, 0),
+                IsDefault = true
+            };
+            ok.Click += (_, _) => DialogResult = true;
+            buttons.Children.Add(ok);
+
+            var cancel = new Button
+            {
+                Content = "Cancel",
+                MinWidth = 72,
+                IsCancel = true
+            };
+            buttons.Children.Add(cancel);
+            Grid.SetRow(buttons, 2);
+            root.Children.Add(buttons);
+
+            Content = root;
+            Loaded += (_, _) =>
+            {
+                _input.Focus();
+                _input.IsDropDownOpen = _input.Items.Count > 0;
+                if (_input.Template.FindName("PART_EditableTextBox", _input) is TextBox tb)
+                {
+                    tb.SelectAll();
+                }
+            };
+        }
+
+        public static bool TryShow(Window? owner, IEnumerable<string> history, string currentValue, out string findText)
+        {
+            var dlg = new FindTextDialog(history, currentValue) { Owner = owner };
+            var result = dlg.ShowDialog() == true;
+            findText = (dlg._input.Text ?? string.Empty).Trim();
+            return result && !string.IsNullOrWhiteSpace(findText);
+        }
+    }
+
     private List<int> GetSelectedColumnIndices()
     {
         return _selectedCells
@@ -3738,6 +4117,11 @@ public sealed class Griddo : FrameworkElement
     private double GetRowHeight(int rowIndex)
     {
         _ = rowIndex;
+        if (_visibleRowCount > 0 && _viewportBodyHeight > 0)
+        {
+            return _viewportBodyHeight / _visibleRowCount;
+        }
+
         return Math.Max(MinRowHeight, _uniformRowHeight) * ContentScale;
     }
 
@@ -3903,18 +4287,31 @@ public sealed class Griddo : FrameworkElement
         var max = MeasureTextWidth(Columns[columnIndex].Header, typeface, EffectiveFontSize) + pad;
         for (var row = 0; row < Rows.Count; row++)
         {
-            if (Columns[columnIndex] is IGriddoHostedColumnView)
+            var column = Columns[columnIndex];
+            if (column is IGriddoHostedColumnView)
             {
                 continue;
             }
 
-            var value = Columns[columnIndex].GetValue(Rows[row]);
-            if (Columns[columnIndex].IsHtml || value is ImageSource or Geometry)
+            var value = column.GetValue(Rows[row]);
+            if (value is ImageSource or Geometry)
             {
                 continue;
             }
 
-            var text = Columns[columnIndex].FormatValue(value);
+            if (column.IsHtml)
+            {
+                // Measure HTML using rendered run widths without editor/body wrapping constraints.
+                var renderedWidth = GriddoValuePainter.MeasureRenderedWidth(value, typeface, EffectiveFontSize, treatAsHtml: true);
+                if (renderedWidth > 0)
+                {
+                    max = Math.Max(max, renderedWidth + pad);
+                }
+
+                continue;
+            }
+
+            var text = column.FormatValue(value);
             if (string.IsNullOrEmpty(text))
             {
                 continue;
@@ -3924,7 +4321,109 @@ public sealed class Griddo : FrameworkElement
         }
 
         SetColumnWidth(columnIndex, max);
+        _hasAutoSizedColumns = true;
         InvalidateVisual();
+    }
+
+    public void AutoSizeAllColumns()
+    {
+        if (Columns.Count == 0)
+        {
+            return;
+        }
+
+        for (var columnIndex = 0; columnIndex < Columns.Count; columnIndex++)
+        {
+            AutoSizeColumn(columnIndex);
+        }
+
+        _hasAutoSizedColumns = true;
+        InvalidateVisual();
+    }
+
+    private void AutoSizeColumnsFromSampleRows()
+    {
+        if (Columns.Count == 0 || Rows.Count == 0)
+        {
+            return;
+        }
+
+        var sampledRows = new HashSet<int> { 0, Rows.Count - 1 };
+        var randomTargetCount = Math.Min(10, Math.Max(0, Rows.Count - sampledRows.Count));
+        while (sampledRows.Count < randomTargetCount + 2 && sampledRows.Count < Rows.Count)
+        {
+            sampledRows.Add(Random.Shared.Next(0, Rows.Count));
+        }
+
+        var typeface = new Typeface("Segoe UI");
+        var pad = 12 * _contentScale;
+        for (var columnIndex = 0; columnIndex < Columns.Count; columnIndex++)
+        {
+            var column = Columns[columnIndex];
+            if (column is IGriddoHostedColumnView)
+            {
+                continue;
+            }
+
+            var max = MeasureTextWidth(column.Header, typeface, EffectiveFontSize) + pad;
+            foreach (var rowIndex in sampledRows)
+            {
+                if (rowIndex < 0 || rowIndex >= Rows.Count)
+                {
+                    continue;
+                }
+
+                var value = column.GetValue(Rows[rowIndex]);
+                if (value is ImageSource or Geometry)
+                {
+                    continue;
+                }
+
+                if (column.IsHtml)
+                {
+                    var renderedWidth = GriddoValuePainter.MeasureRenderedWidth(value, typeface, EffectiveFontSize, treatAsHtml: true);
+                    if (renderedWidth > 0)
+                    {
+                        max = Math.Max(max, renderedWidth + pad);
+                    }
+
+                    continue;
+                }
+
+                var text = column.FormatValue(value);
+                if (string.IsNullOrEmpty(text))
+                {
+                    continue;
+                }
+
+                max = Math.Max(max, MeasureTextWidth(text, typeface, EffectiveFontSize) + pad);
+            }
+
+            SetColumnWidth(columnIndex, max);
+        }
+
+        _hasAutoSizedColumns = true;
+        InvalidateVisual();
+    }
+
+    private void ScheduleInitialSampleAutoSize()
+    {
+        if (_initialSampleAutoSizeScheduled)
+        {
+            return;
+        }
+
+        _initialSampleAutoSizeScheduled = true;
+        Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        {
+            _initialSampleAutoSizeScheduled = false;
+            if (_hasAutoSizedColumns || _columnWidthOverrides.Count > 0 || Rows.Count == 0 || Columns.Count == 0)
+            {
+                return;
+            }
+
+            AutoSizeColumnsFromSampleRows();
+        }));
     }
 
     private void AutoSizeRow(int rowIndex)
@@ -4086,6 +4585,17 @@ public sealed class Griddo : FrameworkElement
         _ = sender;
         _ = e;
         _fixedColumnCount = Math.Clamp(_fixedColumnCount, 0, Math.Max(0, Columns.Count));
+        if (Rows.Count == 0)
+        {
+            _hasAutoSizedColumns = false;
+            _initialSampleAutoSizeScheduled = false;
+        }
+
+        if (Rows.Count > 0 && Columns.Count > 0 && !_hasAutoSizedColumns && _columnWidthOverrides.Count == 0)
+        {
+            ScheduleInitialSampleAutoSize();
+        }
+
         UpdateRowHeaderWidth();
         UpdateScrollBars();
         UpdateHostCanvasClips();

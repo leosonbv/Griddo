@@ -71,6 +71,10 @@ namespace GriddoTest
             };
             menu.Items.Add(fillItem);
 
+            var autoWidthAllColumnsItem = new MenuItem { Header = "Auto width all columns" };
+            autoWidthAllColumnsItem.Click += (_, _) => DemoGrid.AutoSizeAllColumns();
+            menu.Items.Add(autoWidthAllColumnsItem);
+
             var hideItem = new MenuItem
             {
                 Header = targetColumns.Count > 1 ? "Hide selected columns" : "Hide column"
@@ -121,6 +125,67 @@ namespace GriddoTest
                 DemoGrid.InvalidateVisual();
             };
             menu.Items.Add(hideSelectionColoringItem);
+
+            var hideHeaderSelectionColoringItem = new MenuItem
+            {
+                Header = "Hide row/col header selection color",
+                IsCheckable = true,
+                IsChecked = DemoGrid.HideHeaderSelectionColoring
+            };
+            hideHeaderSelectionColoringItem.Click += (_, _) =>
+            {
+                DemoGrid.HideHeaderSelectionColoring = hideHeaderSelectionColoringItem.IsChecked;
+                DemoGrid.InvalidateVisual();
+            };
+            menu.Items.Add(hideHeaderSelectionColoringItem);
+
+            var hideCurrentCellColorItem = new MenuItem
+            {
+                Header = "Hide current cell color",
+                IsCheckable = true,
+                IsChecked = DemoGrid.HideCurrentCellColor
+            };
+            hideCurrentCellColorItem.Click += (_, _) =>
+            {
+                DemoGrid.HideCurrentCellColor = hideCurrentCellColorItem.IsChecked;
+                DemoGrid.InvalidateVisual();
+            };
+            menu.Items.Add(hideCurrentCellColorItem);
+
+            var hideEditCellColorItem = new MenuItem
+            {
+                Header = "Hide edit cell color",
+                IsCheckable = true,
+                IsChecked = DemoGrid.HideEditCellColor
+            };
+            hideEditCellColorItem.Click += (_, _) =>
+            {
+                DemoGrid.HideEditCellColor = hideEditCellColorItem.IsChecked;
+                DemoGrid.InvalidateVisual();
+            };
+            menu.Items.Add(hideEditCellColorItem);
+            menu.Items.Add(new Separator());
+
+            var visibleRowsSubmenu = new MenuItem { Header = "Visible row count" };
+            for (var mode = 0; mode <= 10; mode++)
+            {
+                var localMode = mode;
+                var label = localMode == 0 ? "X" : localMode.ToString();
+                var modeItem = new MenuItem
+                {
+                    Header = label,
+                    IsCheckable = true,
+                    IsChecked = DemoGrid.VisibleRowCount == localMode
+                };
+                modeItem.Click += (_, _) =>
+                {
+                    DemoGrid.VisibleRowCount = localMode;
+                    DemoGrid.InvalidateMeasure();
+                    DemoGrid.InvalidateVisual();
+                };
+                visibleRowsSubmenu.Items.Add(modeItem);
+            }
+            menu.Items.Add(visibleRowsSubmenu);
             menu.Items.Add(new Separator());
 
             var columnsSubmenu = new MenuItem { Header = "Columns" };
