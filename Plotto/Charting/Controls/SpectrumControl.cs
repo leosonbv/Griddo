@@ -1,5 +1,6 @@
 using SkiaSharp;
 using Plotto.Charting.Core;
+using Plotto.Charting.Rendering;
 
 namespace Plotto.Charting.Controls;
 
@@ -13,22 +14,6 @@ public class SpectrumControl : SkiaChartBaseControl
         _stickPaint.StrokeWidth = Math.Max(0.5f, 1f * PlotUiScale);
     }
 
-    protected override void DrawSeries(SKCanvas canvas, IReadOnlyList<ChartPoint> points, SKRect plotRect)
-    {
-        if (points.Count == 0)
-        {
-            return;
-        }
-
-        var baseline = ToPixelY(Viewport.YMin, plotRect);
-        var count = Math.Min(points.Count, Math.Max(200, (int)plotRect.Width));
-        var step = (double)points.Count / count;
-        for (var i = 0d; i < points.Count; i += step)
-        {
-            var point = points[(int)i];
-            var x = ToPixelX(point.X, plotRect);
-            var y = ToPixelY(point.Y, plotRect);
-            canvas.DrawLine(x, baseline, x, y, _stickPaint);
-        }
-    }
+    protected override void DrawSeries(SKCanvas canvas, IReadOnlyList<ChartPoint> points, SKRect plotRect) =>
+        ChartSkiaSpectrumSticks.DrawSticks(canvas, points, plotRect, Viewport.YMin, ToPixelX, ToPixelY, _stickPaint);
 }

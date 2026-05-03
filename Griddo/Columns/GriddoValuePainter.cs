@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
 namespace Griddo.Columns;
+
 public static class GriddoValuePainter
 {
     public static void Paint(
