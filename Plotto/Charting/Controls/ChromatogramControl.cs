@@ -104,6 +104,12 @@ public class ChromatogramControl : SkiaChartBaseControl
     {
         if (RequireActivationClick && RenderMode == ChartRenderMode.Renderer && e.ChangedButton == MouseButton.Left)
         {
+            if (DeferRendererActivationToParent)
+            {
+                base.OnMouseDown(e);
+                return;
+            }
+
             Focus();
             _activationPressPosition = e.GetPosition(this);
             _awaitingActivationClick = true;

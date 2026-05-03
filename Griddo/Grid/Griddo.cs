@@ -155,6 +155,12 @@ public sealed class Griddo : FrameworkElement
 
     public event EventHandler<GriddoColumnHeaderMouseEventArgs>? ColumnHeaderRightClick;
 
+    /// <summary>Optional context menu for body-cell right-click (after selection rules are applied).</summary>
+    public ContextMenu? CellContextMenu { get; set; }
+
+    /// <summary>Fires before <see cref="CellContextMenu"/> opens; set <see cref="GriddoCellContextMenuEventArgs.Handled"/> to suppress the default menu.</summary>
+    public event EventHandler<GriddoCellContextMenuEventArgs>? CellContextMenuOpening;
+
     /// <summary>Uniform row height for all rows (minimum applies).</summary>
     public double UniformRowHeight
     {
@@ -195,6 +201,25 @@ public sealed class Griddo : FrameworkElement
     }
 
     private double _contentScale = 1.0;
+    private bool _hostedPlotDirectEditOnMouseDown;
+
+    /// <summary>
+    /// When true, a single left click on a hosted Plot column activates chart edit mode on mouse down and forwards that press to the chart.
+    /// </summary>
+    public bool HostedPlotDirectEditOnMouseDown
+    {
+        get => _hostedPlotDirectEditOnMouseDown;
+        set
+        {
+            if (_hostedPlotDirectEditOnMouseDown == value)
+            {
+                return;
+            }
+
+            _hostedPlotDirectEditOnMouseDown = value;
+            InvalidateVisual();
+        }
+    }
 
     /// <summary>Ctrl+mouse wheel: scales row/column sizes, cell fonts, grid lines, and hosted Plotto stroke widths.</summary>
     public double ContentScale
@@ -518,6 +543,7 @@ public sealed class Griddo : FrameworkElement
             var isSelected = _selectedCells.Contains(addr);
             var isCurrent = _currentCell == addr;
             hostedColumn.UpdateHostElement(host, rowData, isSelected, isCurrent);
+            hostedColumn.ApplyPlotDirectEditOption(host, HostedPlotDirectEditOnMouseDown);
             hostedColumn.SyncHostedUiScale(host, ContentScale);
 
             var rect = GetCellRect(addr.RowIndex, addr.ColumnIndex);
@@ -725,6 +751,24 @@ public sealed class Griddo : FrameworkElement
             return;
         }
 
+        if (e.ChangedButton == MouseButton.Right)
+        {
+            var wasSelected = _selectedCells.Contains(clicked);
+            if (!wasSelected)
+            {
+                _selectedCells.Clear();
+                _selectedCells.Add(clicked);
+                _currentCell = clicked;
+            }
+
+            _isEditing = false;
+            InvalidateVisual();
+            OpenCellContextMenu(e, clicked, wasSelected);
+            e.Handled = true;
+            base.OnMouseDown(e);
+            return;
+        }
+
         if (e.ChangedButton == MouseButton.Left
             && !isShiftPressed
             && !isCtrlPressed)
@@ -738,6 +782,36 @@ public sealed class Griddo : FrameworkElement
                 if (Columns[clicked.ColumnIndex] is not IGriddoHostedColumnView)
                 {
                     BeginEditWithoutReplacing();
+                }
+
+                InvalidateVisual();
+                e.Handled = true;
+                base.OnMouseDown(e);
+                return;
+            }
+
+            if (HostedPlotDirectEditOnMouseDown
+                && e.ClickCount == 1
+                && Columns[clicked.ColumnIndex] is IGriddoHostedColumnView hostedDirect)
+            {
+                if (TryGetHostedElement(clicked) is FrameworkElement hostedForDirect
+                    && hostedDirect.IsHostInEditMode(hostedForDirect))
+                {
+                    InvalidateVisual();
+                    base.OnMouseDown(e);
+                    return;
+                }
+
+                _selectedCells.Clear();
+                _selectedCells.Add(clicked);
+                _currentCell = clicked;
+                _isDraggingSelection = false;
+                _pendingHostedEditActivation = false;
+                SyncHostedCells();
+                SetCurrentHostedCellEditMode(true);
+                if (TryGetHostedElement(clicked) is FrameworkElement hostForRelay)
+                {
+                    hostedDirect.RelayDirectEditMouseDown(hostForRelay, e);
                 }
 
                 InvalidateVisual();
@@ -778,7 +852,11 @@ public sealed class Griddo : FrameworkElement
             }
         }
 
-        if (isShiftPressed && oldCurrentCell.IsValid && Rows.Count > 0 && Columns.Count > 0)
+        if (e.ChangedButton == MouseButton.Left
+            && isShiftPressed
+            && oldCurrentCell.IsValid
+            && Rows.Count > 0
+            && Columns.Count > 0)
         {
             SelectRange(oldCurrentCell, clicked, isCtrlPressed);
             _currentCell = clicked;
@@ -789,7 +867,8 @@ public sealed class Griddo : FrameworkElement
             return;
         }
 
-        if (Columns[clicked.ColumnIndex] is IGriddoHostedColumnView hostedForEdit
+        if (e.ChangedButton == MouseButton.Left
+            && Columns[clicked.ColumnIndex] is IGriddoHostedColumnView hostedForEdit
             && TryGetHostedElement(clicked) is FrameworkElement hostedElement
             && hostedForEdit.IsHostInEditMode(hostedElement))
         {
@@ -807,6 +886,12 @@ public sealed class Griddo : FrameworkElement
             _isDraggingSelection = false;
             _isEditing = false;
             InvalidateVisual();
+            base.OnMouseDown(e);
+            return;
+        }
+
+        if (e.ChangedButton != MouseButton.Left)
+        {
             base.OnMouseDown(e);
             return;
         }
@@ -835,6 +920,23 @@ public sealed class Griddo : FrameworkElement
         InvalidateVisual();
         e.Handled = true;
         base.OnMouseDown(e);
+    }
+
+    private void OpenCellContextMenu(MouseButtonEventArgs e, GriddoCellAddress cell, bool cellWasAlreadySelected)
+    {
+        var pos = e.GetPosition(this);
+        var args = new GriddoCellContextMenuEventArgs(cell, pos, cellWasAlreadySelected);
+        CellContextMenuOpening?.Invoke(this, args);
+        if (args.Handled || CellContextMenu is null)
+        {
+            return;
+        }
+
+        CellContextMenu.PlacementTarget = this;
+        CellContextMenu.Placement = PlacementMode.RelativePoint;
+        CellContextMenu.HorizontalOffset = pos.X;
+        CellContextMenu.VerticalOffset = pos.Y;
+        CellContextMenu.IsOpen = true;
     }
 
     protected override void OnPreviewMouseDown(MouseButtonEventArgs e)
@@ -987,7 +1089,9 @@ public sealed class Griddo : FrameworkElement
             return;
         }
 
-        if (!_isDraggingSelection || !IsMouseCaptured)
+        if (!_isDraggingSelection
+            || !IsMouseCaptured
+            || e.LeftButton != MouseButtonState.Pressed)
         {
             UpdateResizeCursor(pointer);
             base.OnMouseMove(e);

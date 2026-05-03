@@ -29,6 +29,7 @@ namespace GriddoTest
             DemoGrid.ColumnHeaderRightClick += DemoGrid_ColumnHeaderRightClick;
             DemoGrid.UniformRowHeight = 132;
             DemoGrid.FixedColumnCount = 1;
+            DemoGrid.HostedPlotDirectEditOnMouseDown = true;
         }
 
         private void DemoGrid_ColumnHeaderRightClick(object? sender, GriddoColumnHeaderMouseEventArgs e)
@@ -130,6 +131,16 @@ namespace GriddoTest
                 header: CalibrationColumnHeader,
                 width: 240,
                 seedGetter: row => ((DemoRow)row).PlottoSeed));
+
+            DemoGrid.CellContextMenu = new ContextMenu
+            {
+                Items =
+                {
+                    new MenuItem { Header = "Demo: cell context menu" },
+                    new Separator(),
+                    new MenuItem { Header = "Second item" },
+                },
+            };
 
             for (var i = 1; i <= 50_000; i++)
             {

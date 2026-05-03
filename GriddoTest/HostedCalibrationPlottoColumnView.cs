@@ -218,6 +218,42 @@ public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView
         }
     }
 
+    public void ApplyPlotDirectEditOption(FrameworkElement host, bool gridUsesHostedPlotDirectMouseDown)
+    {
+        static void ApplyOne(SkiaChartBaseControl? chart, bool enabled)
+        {
+            if (chart is null)
+            {
+                return;
+            }
+
+            chart.DeferRendererActivationToParent = enabled;
+        }
+
+        if (host is Border { Child: CalibrationCurveControl ch })
+        {
+            ApplyOne(ch, gridUsesHostedPlotDirectMouseDown);
+        }
+
+        ApplyOne(global::Plotto.PlottoPresetCharts.CalibrationEditor, gridUsesHostedPlotDirectMouseDown);
+    }
+
+    public void RelayDirectEditMouseDown(FrameworkElement host, MouseButtonEventArgs eFromGrid)
+    {
+        if (host is not Border { Child: CalibrationCurveControl chart })
+        {
+            return;
+        }
+
+        var routed = new MouseButtonEventArgs(eFromGrid.MouseDevice, eFromGrid.Timestamp, MouseButton.Left)
+        {
+            RoutedEvent = Mouse.MouseDownEvent,
+            Source = chart,
+        };
+        chart.Focus();
+        chart.RaiseEvent(routed);
+    }
+
     public bool TryGetClipboardHtmlFragment(
         FrameworkElement? host,
         object rowSource,

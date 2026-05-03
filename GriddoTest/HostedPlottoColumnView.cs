@@ -222,6 +222,42 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView
         }
     }
 
+    public void ApplyPlotDirectEditOption(FrameworkElement host, bool gridUsesHostedPlotDirectMouseDown)
+    {
+        static void ApplyOne(ChromatogramControl? chart, bool enabled)
+        {
+            if (chart is null)
+            {
+                return;
+            }
+
+            chart.DeferRendererActivationToParent = enabled;
+        }
+
+        if (host is Border { Child: ChromatogramControl ch })
+        {
+            ApplyOne(ch, gridUsesHostedPlotDirectMouseDown);
+        }
+
+        ApplyOne(global::Plotto.PlottoPresetCharts.Editor, gridUsesHostedPlotDirectMouseDown);
+    }
+
+    public void RelayDirectEditMouseDown(FrameworkElement host, MouseButtonEventArgs eFromGrid)
+    {
+        if (host is not Border { Child: ChromatogramControl chart })
+        {
+            return;
+        }
+
+        var routed = new MouseButtonEventArgs(eFromGrid.MouseDevice, eFromGrid.Timestamp, MouseButton.Left)
+        {
+            RoutedEvent = Mouse.MouseDownEvent,
+            Source = chart,
+        };
+        chart.Focus();
+        chart.RaiseEvent(routed);
+    }
+
     public bool TryGetClipboardHtmlFragment(
         FrameworkElement? host,
         object rowSource,

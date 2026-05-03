@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Windows;
+using System.Windows.Controls;
 using Plotto.Charting.Controls;
 using Plotto.Charting.Core;
 
@@ -18,7 +19,7 @@ public static class PlottoPresetCharts
 
     private static ChromatogramControl CreateEditor()
     {
-        return new ChromatogramControl
+        var chart = new ChromatogramControl
         {
             RequireActivationClick = true,
             RenderMode = ChartRenderMode.Renderer,
@@ -28,13 +29,15 @@ public static class PlottoPresetCharts
             AxisLabelX = "Time",
             AxisLabelY = "Intensity",
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch
+            VerticalAlignment = VerticalAlignment.Stretch,
         };
+        chart.ContextMenu = CreateDefaultChartContextMenu(chart, "Chromatogram: editor menu");
+        return chart;
     }
 
     private static CalibrationCurveControl CreateCalibrationEditor()
     {
-        return new CalibrationCurveControl
+        var chart = new CalibrationCurveControl
         {
             RequireActivationClick = true,
             RenderMode = ChartRenderMode.Renderer,
@@ -46,7 +49,27 @@ public static class PlottoPresetCharts
             FitMode = CalibrationFitMode.Linear,
             CalibrationPoints = DemoCalibrationPoints,
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch
+            VerticalAlignment = VerticalAlignment.Stretch,
+        };
+        chart.ContextMenu = CreateDefaultChartContextMenu(chart, "Calibration: editor menu");
+        return chart;
+    }
+
+    private static ContextMenu CreateDefaultChartContextMenu(SkiaChartBaseControl chart, string demoSectionHeader)
+    {
+        var zoomOut = new MenuItem { Header = "Zoom out completely (Z)" };
+        zoomOut.Click += (_, _) => chart.ZoomOutCompletely();
+
+        return new ContextMenu
+        {
+            Items =
+            {
+                zoomOut,
+                new Separator(),
+                new MenuItem { Header = demoSectionHeader },
+                new Separator(),
+                new MenuItem { Header = "Chart action (demo)" },
+            },
         };
     }
 

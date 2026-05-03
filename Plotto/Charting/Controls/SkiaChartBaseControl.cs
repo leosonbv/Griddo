@@ -1,8 +1,11 @@
 using System;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using SkiaSharp;
 using SkiaSharp.Views.Desktop;
 using SkiaSharp.Views.WPF;
@@ -28,7 +31,9 @@ public abstract class SkiaChartBaseControl : SKElement
     protected readonly SKFont AxisFont = new() { Size = 10f };
     private readonly SKPaint _overlayFill = new() { IsAntialias = true, Style = SKPaintStyle.Fill, Color = new SKColor(80, 180, 250, 70) };
     private readonly SKPaint _overlayStroke = new() { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1f, Color = new SKColor(80, 180, 250) };
-    private readonly SKPaint _zoomRubberPaint = new() { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1f, Color = new SKColor(255, 180, 0) };
+    /// <summary>Right-drag zoom rectangle fill — translucent blue similar to grid selection tint.</summary>
+    private readonly SKPaint _zoomRubberFillPaint = new() { IsAntialias = true, Style = SKPaintStyle.Fill, Color = new SKColor(102, 178, 255, 100) };
+    private readonly SKPaint _zoomRubberStrokePaint = new() { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1f, Color = new SKColor(30, 90, 200) };
     private int _surfacePixelWidth = 1;
     private int _surfacePixelHeight = 1;
     private Point _lastMousePos;
@@ -47,6 +52,14 @@ public abstract class SkiaChartBaseControl : SKElement
 
     /// <summary>Right-drag zoom box: capture only after movement so a plain click is not a drag zoom.</summary>
     private bool _rightZoomRubberPending;
+
+    /// <summary>Deferred open so double right-click can reach the chart before the menu popup steals focus.</summary>
+    private DispatcherTimer? _deferredContextMenuTimer;
+
+    private Point _deferredContextMenuPosition;
+
+    /// <summary>Slightly above typical OS double-click time so the second click is recognized before the menu opens.</summary>
+    private const int DeferredContextMenuDelayMs = 450;
 
     /// <summary>Wheel zoom / pan X limits: plot xmin/xmax ± 5% of (xmax−xmin).</summary>
     private double _zoomClampXMin;
@@ -67,7 +80,7 @@ public abstract class SkiaChartBaseControl : SKElement
         AxisStrokePaint.StrokeWidth = Math.Max(0.5f, 1f * s);
         AxisFont.Size = 10f * s;
         _overlayStroke.StrokeWidth = Math.Max(0.5f, 1f * s);
-        _zoomRubberPaint.StrokeWidth = Math.Max(0.5f, 1f * s);
+        _zoomRubberStrokePaint.StrokeWidth = Math.Max(0.5f, 1f * s);
     }
 
     /// <summary>SKElement is not a <see cref="Control"/>; ensure the full bounds participate in hit-testing so mouse zoom/pan work.</summary>
@@ -124,6 +137,23 @@ public abstract class SkiaChartBaseControl : SKElement
             typeof(bool),
             typeof(SkiaChartBaseControl),
             new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    /// <summary>
+    /// When true with <see cref="RequireActivationClick"/>, leaves renderer activation to the parent grid (which switches to
+    /// <see cref="ChartRenderMode.Editor"/> and re-raises the mouse down). Avoids capturing the first click on the chart.
+    /// </summary>
+    public bool DeferRendererActivationToParent
+    {
+        get => (bool)GetValue(DeferRendererActivationToParentProperty);
+        set => SetValue(DeferRendererActivationToParentProperty, value);
+    }
+
+    public static readonly DependencyProperty DeferRendererActivationToParentProperty =
+        DependencyProperty.Register(
+            nameof(DeferRendererActivationToParent),
+            typeof(bool),
+            typeof(SkiaChartBaseControl),
+            new FrameworkPropertyMetadata(false));
 
     public bool EnableMouseInteractions
     {
@@ -420,6 +450,30 @@ public abstract class SkiaChartBaseControl : SKElement
     protected override void OnMouseDown(MouseButtonEventArgs e)
     {
         base.OnMouseDown(e);
+
+        if (e.ChangedButton == MouseButton.Right && e.ClickCount == 2)
+        {
+            CancelDeferredContextMenu();
+
+            if (ContextMenu is { } menu)
+            {
+                menu.IsOpen = false;
+            }
+
+            Focus();
+            FitViewportToAllData();
+            _rightZoomRubberPending = false;
+            _isRightDragZoom = false;
+            _isDragging = false;
+            if (IsMouseCaptured)
+            {
+                ReleaseMouseCapture();
+            }
+
+            e.Handled = true;
+            return;
+        }
+
         if (!CanInteract())
         {
             return;
@@ -436,20 +490,14 @@ public abstract class SkiaChartBaseControl : SKElement
 
         if (e.ChangedButton == MouseButton.Right)
         {
-            if (e.ClickCount == 2)
-            {
-                UpdateViewportFromData();
-                InvalidateVisual();
-                _rightZoomRubberPending = false;
-                _isRightDragZoom = false;
-                e.Handled = true;
-                return;
-            }
+            CancelDeferredContextMenu();
 
             _rightZoomRubberPending = true;
             _zoomRectStart = LogicalPointToSurface(_lastMousePos);
             _zoomRectCurrent = _zoomRectStart;
+            CaptureMouse();
             InvalidateVisual();
+            e.Handled = true;
             return;
         }
 
@@ -532,10 +580,16 @@ public abstract class SkiaChartBaseControl : SKElement
 
         if (e.ChangedButton == MouseButton.Right)
         {
+            var rubberWasPending = _rightZoomRubberPending;
             if (canInteract && _isRightDragZoom)
             {
                 SyncZoomClampBoundsFromPoints();
                 ApplyRightDragZoom(_zoomRectStart, _zoomRectCurrent);
+            }
+            else if (canInteract && rubberWasPending && !_isRightDragZoom)
+            {
+                // Same place as mouse down (no drag-zoom threshold): editor context menu; otherwise rubber-band zoom on mouse up.
+                TryOpenEditorContextMenu(e);
             }
 
             _rightZoomRubberPending = false;
@@ -569,6 +623,64 @@ public abstract class SkiaChartBaseControl : SKElement
 
         _isDragging = false;
         ReleaseMouseCapture();
+    }
+
+    /// <summary>
+    /// Schedules <see cref="FrameworkElement.ContextMenu"/> after a short delay so a fast second click can register as double-click on this element.
+    /// </summary>
+    protected virtual bool TryOpenEditorContextMenu(MouseButtonEventArgs e)
+    {
+        if (ContextMenu is null)
+        {
+            return false;
+        }
+
+        ScheduleDeferredContextMenu(e.GetPosition(this));
+        return true;
+    }
+
+    private void CancelDeferredContextMenu()
+    {
+        if (_deferredContextMenuTimer is null)
+        {
+            return;
+        }
+
+        _deferredContextMenuTimer.Stop();
+        _deferredContextMenuTimer.Tick -= OnDeferredContextMenuTick;
+        _deferredContextMenuTimer = null;
+    }
+
+    private void ScheduleDeferredContextMenu(Point positionInChart)
+    {
+        CancelDeferredContextMenu();
+        _deferredContextMenuPosition = positionInChart;
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(DeferredContextMenuDelayMs) };
+        timer.Tick += OnDeferredContextMenuTick;
+        _deferredContextMenuTimer = timer;
+        timer.Start();
+    }
+
+    private void OnDeferredContextMenuTick(object? sender, EventArgs e)
+    {
+        CancelDeferredContextMenu();
+        OpenDeferredEditorContextMenu();
+    }
+
+    private void OpenDeferredEditorContextMenu()
+    {
+        var menu = ContextMenu;
+        if (menu is null)
+        {
+            return;
+        }
+
+        menu.Focusable = false;
+        menu.PlacementTarget = this;
+        menu.Placement = PlacementMode.RelativePoint;
+        menu.HorizontalOffset = _deferredContextMenuPosition.X;
+        menu.VerticalOffset = _deferredContextMenuPosition.Y;
+        menu.IsOpen = true;
     }
 
     protected virtual void OnChartMouseDown(ChartPoint point, MouseButtonEventArgs e)
@@ -742,7 +854,9 @@ public abstract class SkiaChartBaseControl : SKElement
             var y0 = (float)Math.Min(_zoomRectStart.Y, _zoomRectCurrent.Y);
             var x1 = (float)Math.Max(_zoomRectStart.X, _zoomRectCurrent.X);
             var y1 = (float)Math.Max(_zoomRectStart.Y, _zoomRectCurrent.Y);
-            canvas.DrawRect(new SKRect(x0, y0, x1, y1), _zoomRubberPaint);
+            var rubber = new SKRect(x0, y0, x1, y1);
+            canvas.DrawRect(rubber, _zoomRubberFillPaint);
+            canvas.DrawRect(rubber, _zoomRubberStrokePaint);
         }
 
     }
@@ -995,6 +1109,45 @@ public abstract class SkiaChartBaseControl : SKElement
         ApplyViewportInteractionClamp();
         ViewportChanged?.Invoke(this, EventArgs.Empty);
         InvalidateVisual();
+    }
+
+    /// <summary>
+    /// Fits the viewport to all data (full zoom out). Requires edit mode — use double right-click on the chart for reset while viewing in renderer mode.
+    /// </summary>
+    public void ZoomOutCompletely()
+    {
+        if (!CanInteract())
+        {
+            return;
+        }
+
+        FitViewportToAllData();
+    }
+
+    private void FitViewportToAllData()
+    {
+        UpdateViewportFromData();
+        InvalidateVisual();
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Handled)
+        {
+            return;
+        }
+
+        if (!CanInteract())
+        {
+            return;
+        }
+
+        if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            ZoomOutCompletely();
+            e.Handled = true;
+        }
     }
 
     private static IReadOnlyList<ChartPoint> Downsample(IReadOnlyList<ChartPoint> points, int targetCount)

@@ -35,4 +35,20 @@ public interface IGriddoHostedColumnView : IGriddoColumnView
 
     /// <summary>Sync chart stroke/font scale with grid <see cref="Griddo.ContentScale"/> (Ctrl+wheel).</summary>
     void SyncHostedUiScale(FrameworkElement host, double contentScale);
+
+    /// <summary>
+    /// When <see cref="Griddo.HostedPlotDirectEditOnMouseDown"/> changes, update hosted Plotto flags (e.g. defer renderer activation).
+    /// Default: no-op.
+    /// </summary>
+    void ApplyPlotDirectEditOption(FrameworkElement host, bool gridUsesHostedPlotDirectMouseDown)
+    {
+    }
+
+    /// <summary>
+    /// After the grid enables hosted edit mode on mouse down, forward the activating click to the chart so editor gestures run on the same press.
+    /// Default: no-op.
+    /// </summary>
+    void RelayDirectEditMouseDown(FrameworkElement host, MouseButtonEventArgs eFromGrid)
+    {
+    }
 }
