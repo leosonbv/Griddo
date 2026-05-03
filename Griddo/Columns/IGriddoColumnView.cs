@@ -7,6 +7,7 @@ public interface IGriddoColumnView
 {
     string Header { get; }
     double Width { get; }
+    bool Fill { get; set; }
     bool IsHtml { get; }
     TextAlignment ContentAlignment { get; }
     IGriddoCellEditor Editor { get; }

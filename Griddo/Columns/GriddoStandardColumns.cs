@@ -14,10 +14,12 @@ public sealed class GriddoColumnView : IGriddoColumnView
         Func<object, object?> valueGetter,
         Func<object, object?, bool> valueSetter,
         IGriddoCellEditor? editor = null,
-        TextAlignment? contentAlignment = null)
+        TextAlignment? contentAlignment = null,
+        bool fill = false)
     {
         Header = header;
         Width = width;
+        Fill = fill;
         _valueGetter = valueGetter;
         _valueSetter = valueSetter;
         Editor = editor ?? GriddoCellEditors.Text;
@@ -26,6 +28,7 @@ public sealed class GriddoColumnView : IGriddoColumnView
 
     public string Header { get; }
     public double Width { get; }
+    public bool Fill { get; set; }
     public bool IsHtml => false;
     public TextAlignment ContentAlignment { get; }
     public IGriddoCellEditor Editor { get; }
@@ -57,10 +60,12 @@ public sealed class HtmlGriddoColumnView : IGriddoColumnView
         Func<object, string> valueGetter,
         Func<object, string, bool> valueSetter,
         IGriddoCellEditor? editor = null,
-        TextAlignment contentAlignment = TextAlignment.Left)
+        TextAlignment contentAlignment = TextAlignment.Left,
+        bool fill = false)
     {
         Header = header;
         Width = width;
+        Fill = fill;
         _valueGetter = valueGetter;
         _valueSetter = valueSetter;
         Editor = editor ?? GriddoCellEditors.Text;
@@ -69,6 +74,7 @@ public sealed class HtmlGriddoColumnView : IGriddoColumnView
 
     public string Header { get; }
     public double Width { get; }
+    public bool Fill { get; set; }
     public bool IsHtml => true;
     public TextAlignment ContentAlignment { get; }
     public IGriddoCellEditor Editor { get; }

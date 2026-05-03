@@ -25,6 +25,7 @@ public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView
 
     public string Header { get; }
     public double Width { get; }
+    public bool Fill { get; set; }
     public bool IsHtml => false;
     public TextAlignment ContentAlignment { get; }
     public IGriddoCellEditor Editor { get; }

@@ -7,6 +7,7 @@ using SkiaSharp;
 using Plotto.Charting.Controls;
 using Plotto.Charting.Core;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 
 namespace GriddoTest
 {
@@ -14,6 +15,7 @@ namespace GriddoTest
     {
         private const string PlottoColumnHeader = "Plotto Cell";
         private const string CalibrationColumnHeader = "Calibration";
+        private readonly List<IGriddoColumnView> _allColumns = [];
 
         private readonly ChromatogramControl _plotConfigFallback = new()
         {
@@ -39,13 +41,116 @@ namespace GriddoTest
                 return;
             }
 
-            if (!string.Equals(DemoGrid.Columns[e.ColumnIndex].Header, PlottoColumnHeader, StringComparison.Ordinal))
+            var column = DemoGrid.Columns[e.ColumnIndex];
+            var selectedColumns = GetSelectedVisibleColumns();
+            var targetColumns =
+                selectedColumns.Count > 1 && selectedColumns.Contains(column)
+                    ? selectedColumns
+                    : [column];
+            var menu = new ContextMenu
             {
-                return;
+                PlacementTarget = DemoGrid,
+                Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint
+            };
+
+            var fillItem = new MenuItem
+            {
+                Header = targetColumns.Count > 1 ? "Fill selected columns" : "Fill column",
+                IsCheckable = true,
+                IsChecked = targetColumns.All(c => c.Fill)
+            };
+            fillItem.Click += (_, _) =>
+            {
+                foreach (var target in targetColumns)
+                {
+                    target.Fill = fillItem.IsChecked;
+                }
+
+                DemoGrid.InvalidateMeasure();
+                DemoGrid.InvalidateVisual();
+            };
+            menu.Items.Add(fillItem);
+
+            var hideItem = new MenuItem
+            {
+                Header = targetColumns.Count > 1 ? "Hide selected columns" : "Hide column"
+            };
+            hideItem.Click += (_, _) =>
+            {
+                var visibleCount = DemoGrid.Columns.Count;
+                var removable = targetColumns
+                    .Where(c => DemoGrid.Columns.Contains(c))
+                    .ToList();
+                if (visibleCount - removable.Count < 1)
+                {
+                    return;
+                }
+
+                foreach (var target in removable)
+                {
+                    DemoGrid.Columns.Remove(target);
+                }
+
+                DemoGrid.InvalidateMeasure();
+                DemoGrid.InvalidateVisual();
+            };
+            menu.Items.Add(hideItem);
+            menu.Items.Add(new Separator());
+
+            var immediateEditItem = new MenuItem
+            {
+                Header = "Immediate edit",
+                IsCheckable = true,
+                IsChecked = DemoGrid.HostedPlotDirectEditOnMouseDown
+            };
+            immediateEditItem.Click += (_, _) =>
+            {
+                DemoGrid.HostedPlotDirectEditOnMouseDown = immediateEditItem.IsChecked;
+            };
+            menu.Items.Add(immediateEditItem);
+
+            var hideSelectionColoringItem = new MenuItem
+            {
+                Header = "Hide cell selection coloring",
+                IsCheckable = true,
+                IsChecked = DemoGrid.HideCellSelectionColoring
+            };
+            hideSelectionColoringItem.Click += (_, _) =>
+            {
+                DemoGrid.HideCellSelectionColoring = hideSelectionColoringItem.IsChecked;
+                DemoGrid.InvalidateVisual();
+            };
+            menu.Items.Add(hideSelectionColoringItem);
+            menu.Items.Add(new Separator());
+
+            var columnsSubmenu = new MenuItem { Header = "Columns" };
+            foreach (var col in _allColumns)
+            {
+                var colMenuItem = new MenuItem
+                {
+                    Header = col.Header,
+                    IsCheckable = true,
+                    IsChecked = DemoGrid.Columns.Contains(col),
+                    StaysOpenOnClick = true
+                };
+                colMenuItem.Click += (_, _) => ToggleColumnVisibility(col, colMenuItem.IsChecked);
+                columnsSubmenu.Items.Add(colMenuItem);
+            }
+            menu.Items.Add(columnsSubmenu);
+
+            if (string.Equals(column.Header, PlottoColumnHeader, StringComparison.Ordinal))
+            {
+                menu.Items.Add(new Separator());
+                var configurePlottoItem = new MenuItem { Header = "Configure Plotto..." };
+                configurePlottoItem.Click += (_, _) =>
+                {
+                    var dlg = new PlotConfigurationDialog(ResolvePlotConfigurationChart()) { Owner = this };
+                    dlg.ShowDialog();
+                };
+                menu.Items.Add(configurePlottoItem);
             }
 
-            var dlg = new PlotConfigurationDialog(ResolvePlotConfigurationChart()) { Owner = this };
-            dlg.ShowDialog();
+            menu.IsOpen = true;
         }
 
         private ChromatogramControl ResolvePlotConfigurationChart()
@@ -61,7 +166,7 @@ namespace GriddoTest
 
         private void ConfigureGrid()
         {
-            DemoGrid.Columns.Add(new GriddoColumnView(
+            RegisterColumn(new GriddoColumnView(
                 header: "ID",
                 width: 70,
                 valueGetter: row => ((DemoRow)row).Id,
@@ -78,7 +183,7 @@ namespace GriddoTest
                 },
                 editor: GriddoCellEditors.Number));
 
-            DemoGrid.Columns.Add(new GriddoColumnView(
+            RegisterColumn(new GriddoColumnView(
                 header: "Name",
                 width: 180,
                 valueGetter: row => ((DemoRow)row).Name,
@@ -88,7 +193,7 @@ namespace GriddoTest
                     return true;
                 }));
 
-            DemoGrid.Columns.Add(new GriddoColumnView(
+            RegisterColumn(new GriddoColumnView(
                 header: "Score",
                 width: 100,
                 valueGetter: row => ((DemoRow)row).Score,
@@ -105,7 +210,7 @@ namespace GriddoTest
                 },
                 editor: GriddoCellEditors.Number));
 
-            DemoGrid.Columns.Add(new HtmlGriddoColumnView(
+            RegisterColumn(new HtmlGriddoColumnView(
                 header: "Html",
                 width: 260,
                 valueGetter: row => ((DemoRow)row).HtmlSnippet,
@@ -115,19 +220,19 @@ namespace GriddoTest
                     return true;
                 }));
 
-            DemoGrid.Columns.Add(new GriddoColumnView(
+            RegisterColumn(new GriddoColumnView(
                 header: "Graphic",
                 width: 120,
                 valueGetter: row => ((DemoRow)row).Graphic,
                 valueSetter: (_, _) => false,
                 editor: GriddoCellEditors.Text));
 
-            DemoGrid.Columns.Add(new HostedPlottoColumnView(
+            RegisterColumn(new HostedPlottoColumnView(
                 header: PlottoColumnHeader,
                 width: 220,
                 plottoSeedGetter: row => ((DemoRow)row).PlottoSeed));
 
-            DemoGrid.Columns.Add(new HostedCalibrationPlottoColumnView(
+            RegisterColumn(new HostedCalibrationPlottoColumnView(
                 header: CalibrationColumnHeader,
                 width: 240,
                 seedGetter: row => ((DemoRow)row).PlottoSeed));
@@ -156,6 +261,71 @@ namespace GriddoTest
                     PlottoSeed = i
                 });
             }
+        }
+
+        private void RegisterColumn(IGriddoColumnView column)
+        {
+            _allColumns.Add(column);
+            DemoGrid.Columns.Add(column);
+        }
+
+        private void ToggleColumnVisibility(IGriddoColumnView column, bool shouldShow)
+        {
+            var isVisible = DemoGrid.Columns.Contains(column);
+            if (shouldShow == isVisible)
+            {
+                return;
+            }
+
+            if (!shouldShow)
+            {
+                if (DemoGrid.Columns.Count <= 1)
+                {
+                    return;
+                }
+
+                DemoGrid.Columns.Remove(column);
+            }
+            else
+            {
+                var insertIndex = 0;
+                foreach (var orderedColumn in _allColumns)
+                {
+                    if (ReferenceEquals(orderedColumn, column))
+                    {
+                        break;
+                    }
+
+                    if (DemoGrid.Columns.Contains(orderedColumn))
+                    {
+                        insertIndex++;
+                    }
+                }
+
+                insertIndex = Math.Clamp(insertIndex, 0, DemoGrid.Columns.Count);
+                DemoGrid.Columns.Insert(insertIndex, column);
+            }
+
+            DemoGrid.InvalidateMeasure();
+            DemoGrid.InvalidateVisual();
+        }
+
+        private List<IGriddoColumnView> GetSelectedVisibleColumns()
+        {
+            var selectedIndices = DemoGrid.SelectedCells
+                .Select(c => c.ColumnIndex)
+                .Where(index => index >= 0 && index < DemoGrid.Columns.Count)
+                .Distinct()
+                .OrderBy(index => index)
+                .ToList();
+
+            var selectedColumns = new List<IGriddoColumnView>(selectedIndices.Count);
+            foreach (var index in selectedIndices)
+            {
+                selectedColumns.Add(DemoGrid.Columns[index]);
+            }
+
+            return selectedColumns;
         }
 
         /// <summary>Five calibration standards; Y values vary slightly by row seed. Fit mode cycles Linear / LinearThroughOrigin / Quadratic / QuadraticThroughOrigin by seed.</summary>

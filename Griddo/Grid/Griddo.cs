@@ -197,6 +197,7 @@ public sealed class Griddo : FrameworkElement
     public Brush HeaderBackground { get; set; } = new SolidColorBrush(Color.FromRgb(245, 245, 245));
     public Brush SelectionBackground { get; set; } = new SolidColorBrush(Color.FromArgb(120, 102, 178, 255));
     public Brush CurrentCellBorderBrush { get; set; } = Brushes.DodgerBlue;
+    public bool HideCellSelectionColoring { get; set; }
 
     /// <summary>Pen stroke for the right edge of the last fixed column only (freeze boundary before scrollable columns).</summary>
     public Brush FixedColumnRightBorderBrush { get; set; } = new SolidColorBrush(Color.FromRgb(118, 118, 118));
@@ -651,6 +652,16 @@ public sealed class Griddo : FrameworkElement
 
         if (e.ChangedButton == MouseButton.Right && HitTestColumnHeader(pointer) is var rightHeader && rightHeader >= 0)
         {
+            if (!IsColumnSelected(rightHeader))
+            {
+                SelectColumn(rightHeader, additive: false);
+                _currentCell = new GriddoCellAddress(
+                    Rows.Count == 0 ? 0 : Math.Clamp(_currentCell.RowIndex, 0, Rows.Count - 1),
+                    rightHeader);
+                _isEditing = false;
+                InvalidateVisual();
+            }
+
             ColumnHeaderRightClick?.Invoke(this, new GriddoColumnHeaderMouseEventArgs(rightHeader));
             e.Handled = true;
             base.OnMouseDown(e);
@@ -1575,6 +1586,7 @@ public sealed class Griddo : FrameworkElement
         }
 
         if (e.ChangedButton == MouseButton.Right
+            && ReferenceEquals(e.OriginalSource, this)
             && _currentCell.IsValid
             && _currentCell.RowIndex >= 0
             && _currentCell.RowIndex < Rows.Count
@@ -1974,7 +1986,7 @@ public sealed class Griddo : FrameworkElement
         var address = new GriddoCellAddress(row, col);
 
         var isHostedCellEditing = IsHostedCellInEditMode(address);
-        if (_selectedCells.Contains(address) && !isHostedCellEditing)
+        if (_selectedCells.Contains(address) && !isHostedCellEditing && !HideCellSelectionColoring)
         {
             dc.DrawRectangle(SelectionBackground, null, rect);
         }
@@ -2306,7 +2318,8 @@ public sealed class Griddo : FrameworkElement
         var typeface = new Typeface("Segoe UI");
         var fontSize = EffectiveFontSize;
         var verticalAlignment = VerticalAlignment.Center;
-        GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, column.IsHtml, true, column.ContentAlignment, verticalAlignment);
+        // Edit mode should show the literal source text (including HTML markup), not rendered HTML.
+        GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, false, false, column.ContentAlignment, verticalAlignment);
 
         var displayText = _editSession.Buffer;
         var editText = new FormattedText(
@@ -2335,7 +2348,6 @@ public sealed class Griddo : FrameworkElement
             1.0);
         var contentWidth = Math.Max(1, editContentRect.Width - 8);
         var totalTextWidth = Math.Min(editText.WidthIncludingTrailingWhitespace, contentWidth);
-        var prefixWidth = Math.Min(prefixFormattedText.WidthIncludingTrailingWhitespace, contentWidth);
         var textStartX = editContentRect.X + 4;
         if (column.ContentAlignment == TextAlignment.Right)
         {
@@ -2348,44 +2360,103 @@ public sealed class Griddo : FrameworkElement
 
         if (_editSession.TryGetSelection(out var selectionStart, out var selectionEnd))
         {
-            var beforeSelection = displayText[..selectionStart];
-            var selectedText = displayText[selectionStart..selectionEnd];
-            var beforeWidth = new FormattedText(
-                beforeSelection,
-                System.Globalization.CultureInfo.CurrentCulture,
-                FlowDirection.LeftToRight,
-                typeface,
-                fontSize,
-                Brushes.Black,
-                1.0).WidthIncludingTrailingWhitespace;
-            var selectedWidth = new FormattedText(
-                selectedText,
-                System.Globalization.CultureInfo.CurrentCulture,
-                FlowDirection.LeftToRight,
-                typeface,
-                fontSize,
-                Brushes.Black,
-                1.0).WidthIncludingTrailingWhitespace;
-            var selectionX = Math.Clamp(textStartX + Math.Min(beforeWidth, contentWidth), editContentRect.X + 2, editContentRect.Right - 2);
-            var selectionRight = Math.Clamp(selectionX + Math.Min(selectedWidth, contentWidth), editContentRect.X + 2, editContentRect.Right - 2);
-            if (selectionRight > selectionX)
+            if (column.IsHtml)
             {
-                var selectionRect = new Rect(selectionX, caretOriginY, selectionRight - selectionX, Math.Max(1, editText.Height));
-                dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(120, 102, 178, 255)), null, selectionRect);
-                GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, column.IsHtml, true, column.ContentAlignment, verticalAlignment);
+                var selectionGeometry = editText.BuildHighlightGeometry(new Point(textStartX, caretOriginY), selectionStart, selectionEnd - selectionStart);
+                if (selectionGeometry is not null && !selectionGeometry.Bounds.IsEmpty)
+                {
+                    dc.PushClip(new RectangleGeometry(editContentRect));
+                    dc.DrawGeometry(new SolidColorBrush(Color.FromArgb(120, 102, 178, 255)), null, selectionGeometry);
+                    GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, false, false, column.ContentAlignment, verticalAlignment);
+                    dc.Pop();
+                }
+            }
+            else
+            {
+                var beforeSelection = displayText[..selectionStart];
+                var selectedText = displayText[selectionStart..selectionEnd];
+                var beforeWidth = new FormattedText(
+                    beforeSelection,
+                    System.Globalization.CultureInfo.CurrentCulture,
+                    FlowDirection.LeftToRight,
+                    typeface,
+                    fontSize,
+                    Brushes.Black,
+                    1.0).WidthIncludingTrailingWhitespace;
+                var selectedWidth = new FormattedText(
+                    selectedText,
+                    System.Globalization.CultureInfo.CurrentCulture,
+                    FlowDirection.LeftToRight,
+                    typeface,
+                    fontSize,
+                    Brushes.Black,
+                    1.0).WidthIncludingTrailingWhitespace;
+                var selectionX = Math.Clamp(textStartX + Math.Min(beforeWidth, contentWidth), editContentRect.X + 2, editContentRect.Right - 2);
+                var selectionRight = Math.Clamp(selectionX + Math.Min(selectedWidth, contentWidth), editContentRect.X + 2, editContentRect.Right - 2);
+                if (selectionRight > selectionX)
+                {
+                    var selectionRect = new Rect(selectionX, caretOriginY, selectionRight - selectionX, Math.Max(1, editText.Height));
+                    dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(120, 102, 178, 255)), null, selectionRect);
+                    GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, false, false, column.ContentAlignment, verticalAlignment);
+                }
             }
         }
 
-        var caretX = textStartX + prefixWidth;
-        caretX = Math.Clamp(caretX, editContentRect.X + 2, editContentRect.Right - 2);
+        var textOrigin = new Point(textStartX, caretOriginY);
+        var caretX = textStartX;
         var caretTop = caretOriginY;
         var caretBottom = Math.Min(editContentRect.Bottom - 2, caretOriginY + editText.Height);
+        if (TryGetCaretBounds(editText, textOrigin, _editSession.CaretIndex, out var caretBounds))
+        {
+            caretX = caretBounds.X;
+            caretTop = caretBounds.Top;
+            caretBottom = caretBounds.Bottom;
+        }
+
+        caretX = Math.Clamp(caretX, editContentRect.X + 2, editContentRect.Right - 2);
+        caretTop = Math.Clamp(caretTop, editContentRect.Y + 1, editContentRect.Bottom - 1);
+        caretBottom = Math.Clamp(caretBottom, caretTop + 1, editContentRect.Bottom - 1);
         if (caretBottom > caretTop)
         {
             dc.DrawLine(new Pen(Brushes.Black, 1), new Point(caretX, caretTop), new Point(caretX, caretBottom));
         }
 
         dc.Pop();
+    }
+
+    private static bool TryGetCaretBounds(FormattedText formattedText, Point origin, int caretIndex, out Rect bounds)
+    {
+        bounds = Rect.Empty;
+        var text = formattedText.Text ?? string.Empty;
+        if (text.Length == 0)
+        {
+            return false;
+        }
+
+        var clampedCaret = Math.Clamp(caretIndex, 0, text.Length);
+        if (clampedCaret < text.Length)
+        {
+            var geometryAtCaret = formattedText.BuildHighlightGeometry(origin, clampedCaret, 1);
+            if (geometryAtCaret is not null && !geometryAtCaret.Bounds.IsEmpty)
+            {
+                bounds = geometryAtCaret.Bounds;
+                bounds = new Rect(bounds.Left, bounds.Top, 0, Math.Max(1, bounds.Height));
+                return true;
+            }
+        }
+
+        if (clampedCaret > 0)
+        {
+            var geometryAtPrevious = formattedText.BuildHighlightGeometry(origin, clampedCaret - 1, 1);
+            if (geometryAtPrevious is not null && !geometryAtPrevious.Bounds.IsEmpty)
+            {
+                var prev = geometryAtPrevious.Bounds;
+                bounds = new Rect(prev.Right, prev.Top, 0, Math.Max(1, prev.Height));
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private bool TryGetCurrentColumn(out IGriddoColumnView column)
@@ -3615,10 +3686,42 @@ public sealed class Griddo : FrameworkElement
 
     private double GetColumnWidth(int columnIndex)
     {
+        if (columnIndex >= 0 && columnIndex < Columns.Count && Columns[columnIndex].Fill)
+        {
+            return GetFillColumnWidth();
+        }
+
+        return GetColumnBaseWidth(columnIndex);
+    }
+
+    private double GetColumnBaseWidth(int columnIndex)
+    {
         var logical = _columnWidthOverrides.TryGetValue(columnIndex, out var o)
             ? o
             : Columns[columnIndex].Width;
         return Math.Max(MinColumnWidth, logical) * ContentScale;
+    }
+
+    private double GetFillColumnWidth()
+    {
+        var fillCount = Columns.Count(c => c.Fill);
+        if (fillCount <= 0)
+        {
+            return MinColumnWidth * ContentScale;
+        }
+
+        var nonFillWidth = 0.0;
+        for (var i = 0; i < Columns.Count; i++)
+        {
+            if (!Columns[i].Fill)
+            {
+                nonFillWidth += GetColumnBaseWidth(i);
+            }
+        }
+
+        var remaining = Math.Max(0, _viewportBodyWidth - nonFillWidth);
+        var perFill = fillCount > 0 ? remaining / fillCount : 0;
+        return Math.Max(MinColumnWidth * ContentScale, perFill);
     }
 
     private void SetColumnWidth(int columnIndex, double screenPixelWidth)
