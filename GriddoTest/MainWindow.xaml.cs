@@ -28,6 +28,7 @@ namespace GriddoTest
             ConfigureGrid();
             DemoGrid.ColumnHeaderRightClick += DemoGrid_ColumnHeaderRightClick;
             DemoGrid.UniformRowHeight = 132;
+            DemoGrid.FixedColumnCount = 1;
         }
 
         private void DemoGrid_ColumnHeaderRightClick(object? sender, GriddoColumnHeaderMouseEventArgs e)
@@ -138,9 +139,9 @@ namespace GriddoTest
                     Name = $"Item {i:000}",
                     Score = Math.Round(40 + Random.Shared.NextDouble() * 60, 2),
                     HtmlSnippet = i % 3 == 0
-                        ? $"<table style=\"width:100%;height:100%;border-collapse:collapse;border:none\"><tr><th>R{i}</th><th>Q{i % 4}</th></tr><tr><td>{i * 2}</td><td><b>{Math.Round(i / 3.0, 2)}</b></td></tr></table>"
+                        ? $"<table><tr><th>R{i}</th><th>Q{i % 4}</th></tr><tr><td>{i * 2}</td><td><b>{Math.Round(i / 3.0, 2)}</b></td></tr></table>"
                         : $"<b>Row {i}</b> has <i>formatted</i> text",
-                    Graphic = CreateTriangle(i),
+                    Graphic = CreatePathMarkupDemo(i),
                     PlottoSeed = i
                 });
             }
@@ -196,18 +197,46 @@ namespace GriddoTest
             return Math.Exp(-0.5 * z * z);
         }
 
-        private static Geometry CreateTriangle(int seed)
+        /// <summary>
+        /// Row-dependent mini drawings (~60×56 logical coords); scaled into the cell by Griddo.
+        /// Cycles <see cref="PathMarkupVariants"/> so adjacent rows usually differ.
+        /// </summary>
+        private static Geometry CreatePathMarkupDemo(int seed)
         {
-            var size = 5 + (seed % 10);
-            var center = 8 + (seed % 5);
-            var geometry = new StreamGeometry();
-            using var ctx = geometry.Open();
-            ctx.BeginFigure(new Point(center, 2), true, true);
-            ctx.LineTo(new Point(center + size, 18), true, false);
-            ctx.LineTo(new Point(center - size, 18), true, false);
-            geometry.Freeze();
-            return geometry;
+            var pathData = PathMarkupVariants[seed % PathMarkupVariants.Length];
+            var g = Geometry.Parse(pathData);
+            g.Freeze();
+            return g;
         }
+
+        /// <summary>WPF path markup samples—triangle, circle, diamond, rect, hexagon, heart-ish, wave, etc.</summary>
+        private static readonly string[] PathMarkupVariants =
+        [
+            // Triangle
+            "M 30,10 L 48,46 L 12,46 Z",
+            // Circle (two arcs)
+            "M 50,28 A 20,20 0 1 1 10,28 A 20,20 0 1 1 50,28",
+            // Diamond
+            "M 30,8 L 50,30 L 30,52 L 10,30 Z",
+            // Rounded square (Q corners)
+            "M 18,16 Q 14,16 14,20 V 40 Q 14,44 18,44 H 42 Q 46,44 46,40 V 20 Q 46,16 42,16 Z",
+            // House (square + roof)
+            "M 16,40 V 22 H 44 V 40 Z M 30,10 L 44,22 H 16 Z",
+            // Hexagon
+            "M 30,8 L 49,19 L 49,41 L 30,52 L 11,41 L 11,19 Z",
+            // Heart (two cubics)
+            "M 30,46 C 14,34 8,22 30,14 C 52,22 46,34 30,46 Z",
+            // S-curve ribbon (C/S)
+            "M 8,40 C 8,14 52,46 52,20 L 52,46 H 8 Z",
+            // Arrow (filled chevron)
+            "M 10,30 L 36,12 L 36,22 H 50 V 38 H 36 L 36,48 Z",
+            // Ellipse (two arcs)
+            "M 54,30 A 22,12 0 1 1 6,30 A 22,12 0 1 1 54,30",
+            // Plus (fat cross)
+            "M 22,14 H 38 V 22 H 46 V 38 H 38 V 46 H 22 V 38 H 14 V 22 H 22 Z",
+            // Star (5-point)
+            "M 30,10 L 36,26 L 52,26 L 40,36 L 46,52 L 30,42 L 14,52 L 20,36 L 8,26 L 24,26 Z"
+        ];
     }
 
     public sealed class DemoRow

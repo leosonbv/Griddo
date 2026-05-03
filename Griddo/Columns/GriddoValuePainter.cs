@@ -35,7 +35,7 @@ public static class GriddoValuePainter
 
         if (value is Geometry geometry)
         {
-            drawingContext.DrawGeometry(foregroundBrush, null, geometry);
+            DrawGeometryInBounds(drawingContext, geometry, bounds, foregroundBrush);
             return;
         }
 
@@ -49,11 +49,11 @@ public static class GriddoValuePainter
         {
             if (LooksLikeHtmlTable(text))
             {
-                DrawHtmlTable(drawingContext, text, bounds, typeface, fontSize, foregroundBrush);
+                DrawHtmlTable(drawingContext, text, bounds, typeface, fontSize, foregroundBrush, verticalAlignment);
                 return;
             }
 
-            DrawHtmlText(drawingContext, text, bounds, typeface, fontSize, foregroundBrush, alignment);
+            DrawHtmlText(drawingContext, text, bounds, typeface, fontSize, foregroundBrush, alignment, verticalAlignment);
             return;
         }
 
@@ -75,6 +75,49 @@ public static class GriddoValuePainter
             ? bounds.Y + Math.Max(0, (bounds.Height - formatted.Height) / 2)
             : bounds.Y + topPadding;
         drawingContext.DrawText(formatted, new Point(bounds.X + 4, y));
+    }
+
+    /// <summary>Places geometry in world space so it scales uniformly and centers inside <paramref name="bounds"/>.</summary>
+    private static void DrawGeometryInBounds(DrawingContext drawingContext, Geometry geometry, Rect bounds, Brush foregroundBrush)
+    {
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return;
+        }
+
+        var gb = geometry.Bounds;
+        if (gb.IsEmpty || gb.Width <= 0 || gb.Height <= 0)
+        {
+            return;
+        }
+
+        const double pad = 4.0;
+        var inner = new Rect(
+            bounds.X + pad,
+            bounds.Y + pad,
+            Math.Max(0, bounds.Width - pad * 2),
+            Math.Max(0, bounds.Height - pad * 2));
+        if (inner.Width <= 0 || inner.Height <= 0)
+        {
+            return;
+        }
+
+        var scale = Math.Min(inner.Width / gb.Width, inner.Height / gb.Height);
+        if (scale <= 0 || double.IsNaN(scale) || double.IsInfinity(scale))
+        {
+            return;
+        }
+
+        var group = new TransformGroup();
+        group.Children.Add(new TranslateTransform(-gb.Left, -gb.Top));
+        group.Children.Add(new ScaleTransform(scale, scale));
+        group.Children.Add(new TranslateTransform(
+            inner.X + (inner.Width - gb.Width * scale) / 2,
+            inner.Y + (inner.Height - gb.Height * scale) / 2));
+
+        drawingContext.PushTransform(group);
+        drawingContext.DrawGeometry(foregroundBrush, null, geometry);
+        drawingContext.Pop();
     }
 
     /// <summary>Rasterize HTML cell content like on-screen paint (white background), for clipboard PNG.</summary>
@@ -110,7 +153,7 @@ public static class GriddoValuePainter
                 treatAsHtml: true,
                 autoDetectHtml: true,
                 alignment,
-                VerticalAlignment.Top);
+                VerticalAlignment.Center);
         }
 
         var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
@@ -199,7 +242,8 @@ public static class GriddoValuePainter
         Typeface typeface,
         double fontSize,
         Brush foregroundBrush,
-        TextAlignment alignment)
+        TextAlignment alignment,
+        VerticalAlignment verticalAlignment = VerticalAlignment.Center)
     {
         var formatted = BuildHtmlFormattedText(html, typeface, fontSize, foregroundBrush);
         if (formatted.Text.Length == 0)
@@ -213,10 +257,33 @@ public static class GriddoValuePainter
             return;
         }
 
-        formatted.MaxTextWidth = Math.Max(1, bounds.Width - 8);
-        formatted.MaxTextHeight = Math.Max(1, bounds.Height - 4);
-        formatted.Trimming = TextTrimming.CharacterEllipsis;
-        drawingContext.DrawText(formatted, new Point(bounds.X + 4, bounds.Y + 2));
+        const double padX = 4.0;
+        const double padY = 2.0;
+        // Fill cell width for wrapping; do not force full cell height—use natural height, then cap if needed.
+        formatted.MaxTextWidth = Math.Max(1, bounds.Width - padX * 2);
+
+        var innerH = Math.Max(1, bounds.Height - padY * 2);
+        if (formatted.Height > innerH)
+        {
+            formatted.MaxTextHeight = innerH;
+            formatted.Trimming = TextTrimming.CharacterEllipsis;
+        }
+
+        double y;
+        switch (verticalAlignment)
+        {
+            case VerticalAlignment.Top:
+                y = bounds.Y + padY;
+                break;
+            case VerticalAlignment.Bottom:
+                y = bounds.Bottom - padY - formatted.Height;
+                break;
+            default:
+                y = bounds.Y + padY + Math.Max(0, (innerH - formatted.Height) / 2.0);
+                break;
+        }
+
+        drawingContext.DrawText(formatted, new Point(bounds.X + padX, y));
     }
 
     private static FormattedText BuildHtmlFormattedText(string html, Typeface typeface, double fontSize, Brush foregroundBrush)
@@ -496,12 +563,13 @@ public static class GriddoValuePainter
         Rect bounds,
         Typeface typeface,
         double fontSize,
-        Brush foregroundBrush)
+        Brush foregroundBrush,
+        VerticalAlignment verticalAlignment)
     {
         var rows = ParseHtmlTable(html);
         if (rows.Count == 0)
         {
-            DrawHtmlText(drawingContext, html, bounds, typeface, fontSize, foregroundBrush, TextAlignment.Left);
+            DrawHtmlText(drawingContext, html, bounds, typeface, fontSize, foregroundBrush, TextAlignment.Left, VerticalAlignment.Center);
             return;
         }
 
@@ -511,21 +579,114 @@ public static class GriddoValuePainter
             return;
         }
 
-        var tableRect = new Rect(bounds.X + 1, bounds.Y + 1, Math.Max(0, bounds.Width - 2), Math.Max(0, bounds.Height - 2));
-        var rowHeight = tableRect.Height / rows.Count;
-        var colWidth = tableRect.Width / columnCount;
-        var lineW = Math.Max(0.5, fontSize / 12.0);
-        var borderPen = new Pen(new SolidColorBrush(Color.FromRgb(176, 176, 176)), lineW);
+        const double tableMargin = 5.0;
+        const double cellPadX = 2.0;
+        const double cellPadY = 1.0;
+        const double minColWidth = 28.0;
+        var cellFont = Math.Max(4, fontSize - 1);
 
+        var availW = Math.Max(0, bounds.Width - tableMargin * 2);
+        var availH = Math.Max(0, bounds.Height - tableMargin * 2);
+
+        var colWidths = new double[columnCount];
+        for (var col = 0; col < columnCount; col++)
+        {
+            var maxIntrinsic = 0.0;
+            for (var row = 0; row < rows.Count; row++)
+            {
+                var cellText = col < rows[row].Count ? rows[row][col] : string.Empty;
+                var ft = new FormattedText(
+                    cellText,
+                    CultureInfo.CurrentCulture,
+                    FlowDirection.LeftToRight,
+                    typeface,
+                    cellFont,
+                    foregroundBrush,
+                    1.0);
+                maxIntrinsic = Math.Max(maxIntrinsic, ft.WidthIncludingTrailingWhitespace);
+            }
+
+            colWidths[col] = Math.Max(minColWidth, maxIntrinsic + cellPadX * 2);
+        }
+
+        var naturalTableWidth = colWidths.Sum();
+        var tableWidth = naturalTableWidth;
+        if (naturalTableWidth > availW && naturalTableWidth > 0)
+        {
+            var sx = availW / naturalTableWidth;
+            for (var c = 0; c < columnCount; c++)
+            {
+                colWidths[c] *= sx;
+            }
+
+            tableWidth = availW;
+        }
+
+        var tableLeft = bounds.X + tableMargin;
+        var maxTableHeight = availH;
+
+        var rowHeights = new double[rows.Count];
         for (var row = 0; row < rows.Count; row++)
         {
+            var maxContentH = 0.0;
             for (var col = 0; col < columnCount; col++)
             {
-                var cellRect = new Rect(
-                    tableRect.X + col * colWidth,
-                    tableRect.Y + row * rowHeight,
-                    colWidth,
-                    rowHeight);
+                var cellText = col < rows[row].Count ? rows[row][col] : string.Empty;
+                var formatted = new FormattedText(
+                    cellText,
+                    CultureInfo.CurrentCulture,
+                    FlowDirection.LeftToRight,
+                    typeface,
+                    cellFont,
+                    foregroundBrush,
+                    1.0);
+                formatted.MaxTextWidth = Math.Max(1, colWidths[col] - cellPadX * 2);
+                maxContentH = Math.Max(maxContentH, formatted.Height);
+            }
+
+            rowHeights[row] = maxContentH + cellPadY * 2;
+        }
+
+        var naturalTotalHeight = rowHeights.Sum();
+        var yStart = bounds.Y + tableMargin;
+        if (naturalTotalHeight <= maxTableHeight)
+        {
+            var slack = maxTableHeight - naturalTotalHeight;
+            switch (verticalAlignment)
+            {
+                case VerticalAlignment.Bottom:
+                    yStart += slack;
+                    break;
+                case VerticalAlignment.Top:
+                    break;
+                default:
+                    yStart += slack / 2.0;
+                    break;
+            }
+        }
+        else
+        {
+            var scale = maxTableHeight / naturalTotalHeight;
+            for (var i = 0; i < rowHeights.Length; i++)
+            {
+                rowHeights[i] *= scale;
+            }
+        }
+
+        var lineW = Math.Max(0.5, fontSize / 12.0);
+        var innerBorderPen = new Pen(new SolidColorBrush(Color.FromRgb(176, 176, 176)), lineW);
+        var outerBorderPen = new Pen(new SolidColorBrush(Color.FromRgb(90, 90, 90)), Math.Max(1, lineW * 1.25));
+
+        var currentY = yStart;
+        for (var row = 0; row < rows.Count; row++)
+        {
+            var rowH = rowHeights[row];
+            var maxCellTextH = Math.Max(1, rowH - cellPadY * 2);
+            var cellX = tableLeft;
+            for (var col = 0; col < columnCount; col++)
+            {
+                var cw = colWidths[col];
+                var cellRect = new Rect(cellX, currentY, cw, rowH);
 
                 var cellText = col < rows[row].Count ? rows[row][col] : string.Empty;
                 var formatted = new FormattedText(
@@ -533,29 +694,37 @@ public static class GriddoValuePainter
                     CultureInfo.CurrentCulture,
                     FlowDirection.LeftToRight,
                     typeface,
-                    fontSize - 1,
+                    cellFont,
                     foregroundBrush,
                     1.0);
 
-                formatted.MaxTextWidth = Math.Max(1, cellRect.Width - 4);
-                formatted.MaxTextHeight = Math.Max(1, cellRect.Height - 2);
+                formatted.MaxTextWidth = Math.Max(1, cw - cellPadX * 2);
+                formatted.MaxTextHeight = maxCellTextH;
                 formatted.Trimming = TextTrimming.CharacterEllipsis;
-                drawingContext.DrawText(formatted, new Point(cellRect.X + 2, cellRect.Y + 1));
+                drawingContext.DrawText(formatted, new Point(cellRect.X + cellPadX, cellRect.Y + cellPadY));
+                cellX += cw;
             }
+
+            currentY += rowH;
         }
 
-        // Collapsed borders: draw only internal separators, no outer border.
+        var tableRect = new Rect(tableLeft, yStart, tableWidth, currentY - yStart);
+
+        var xSep = tableLeft;
         for (var col = 1; col < columnCount; col++)
         {
-            var x = tableRect.X + col * colWidth;
-            drawingContext.DrawLine(borderPen, new Point(x, tableRect.Y), new Point(x, tableRect.Bottom));
+            xSep += colWidths[col - 1];
+            drawingContext.DrawLine(innerBorderPen, new Point(xSep, tableRect.Top), new Point(xSep, tableRect.Bottom));
         }
 
+        var lineY = yStart;
         for (var row = 1; row < rows.Count; row++)
         {
-            var y = tableRect.Y + row * rowHeight;
-            drawingContext.DrawLine(borderPen, new Point(tableRect.X, y), new Point(tableRect.Right, y));
+            lineY += rowHeights[row - 1];
+            drawingContext.DrawLine(innerBorderPen, new Point(tableLeft, lineY), new Point(tableLeft + tableWidth, lineY));
         }
+
+        drawingContext.DrawRectangle(null, outerBorderPen, tableRect);
     }
 
     private static List<List<string>> ParseHtmlTable(string html)

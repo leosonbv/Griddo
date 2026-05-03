@@ -38,7 +38,14 @@ public sealed class Griddo : FrameworkElement
     private readonly Dictionary<int, double> _columnWidthOverrides = [];
     private readonly GriddoTextEditSession _editSession = new();
     private readonly VisualCollection _children;
-    private readonly Canvas _hostCanvas = new()
+    private readonly Canvas _scrollHostCanvas = new()
+    {
+        ClipToBounds = true,
+        SnapsToDevicePixels = true,
+        IsHitTestVisible = true,
+        Focusable = false
+    };
+    private readonly Canvas _fixedHostCanvas = new()
     {
         ClipToBounds = true,
         SnapsToDevicePixels = true,
@@ -84,6 +91,7 @@ public sealed class Griddo : FrameworkElement
     private int _columnMoveCueIndex = -1;
     private Point _columnMoveStartPoint;
     private double _horizontalOffset;
+    private int _fixedColumnCount;
     private double _verticalOffset;
     private double _viewportBodyWidth;
     private double _viewportBodyHeight;
@@ -105,7 +113,7 @@ public sealed class Griddo : FrameworkElement
         };
         _horizontalScrollBar.ValueChanged += OnHorizontalScrollChanged;
 
-        _children.Add(_hostCanvas);
+        _children.Add(_scrollHostCanvas);
 
         _verticalScrollBar = new ScrollBar
         {
@@ -130,6 +138,8 @@ public sealed class Griddo : FrameworkElement
 
         _scaleFeedbackTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         _scaleFeedbackTimer.Tick += OnScaleFeedbackTimerTick;
+
+        _children.Add(_fixedHostCanvas);
 
         _children.Add(_scaleFeedbackLayer);
 
@@ -161,6 +171,28 @@ public sealed class Griddo : FrameworkElement
     public Brush HeaderBackground { get; set; } = new SolidColorBrush(Color.FromRgb(245, 245, 245));
     public Brush SelectionBackground { get; set; } = new SolidColorBrush(Color.FromArgb(120, 102, 178, 255));
     public Brush CurrentCellBorderBrush { get; set; } = Brushes.DodgerBlue;
+
+    /// <summary>Pen stroke for the right edge of the last fixed column only (freeze boundary before scrollable columns).</summary>
+    public Brush FixedColumnRightBorderBrush { get; set; } = new SolidColorBrush(Color.FromRgb(118, 118, 118));
+
+    /// <summary>Number of leading columns that remain fixed on the left when scrolling horizontally (0 = off).</summary>
+    public int FixedColumnCount
+    {
+        get => _fixedColumnCount;
+        set
+        {
+            var v = Math.Clamp(value, 0, Math.Max(0, Columns.Count));
+            if (v == _fixedColumnCount)
+            {
+                return;
+            }
+
+            _fixedColumnCount = v;
+            UpdateScrollBars();
+            UpdateHostCanvasClips();
+            InvalidateVisual();
+        }
+    }
 
     private double _contentScale = 1.0;
 
@@ -196,6 +228,114 @@ public sealed class Griddo : FrameworkElement
     {
         _scaleFeedbackTimer.Stop();
         _scaleFeedbackLayer.Visibility = Visibility.Collapsed;
+    }
+
+    private double GetFixedColumnsWidth()
+    {
+        var n = Math.Clamp(_fixedColumnCount, 0, Columns.Count);
+        var w = 0.0;
+        for (var i = 0; i < n; i++)
+        {
+            w += GetColumnWidth(i);
+        }
+
+        return w;
+    }
+
+    private double GetScrollViewportWidth() => Math.Max(0, _viewportBodyWidth - GetFixedColumnsWidth());
+
+    private double GetScrollableContentWidth()
+    {
+        var total = 0.0;
+        for (var col = _fixedColumnCount; col < Columns.Count; col++)
+        {
+            total += GetColumnWidth(col);
+        }
+
+        return total;
+    }
+
+    /// <summary>Maps a point in the column area to horizontal content X (0 = left edge of column 0).</summary>
+    private bool TryMapViewportPointToContentX(double pointX, out double contentX)
+    {
+        if (pointX < _rowHeaderWidth || pointX > _rowHeaderWidth + _viewportBodyWidth)
+        {
+            contentX = 0;
+            return false;
+        }
+
+        var rel = pointX - _rowHeaderWidth;
+        var fixedW = GetFixedColumnsWidth();
+        if (rel < fixedW)
+        {
+            contentX = rel;
+        }
+        else
+        {
+            contentX = fixedW + (rel - fixedW) + _horizontalOffset;
+        }
+
+        return true;
+    }
+
+    private void GetVisibleScrollColumnRange(out int startCol, out int endCol, out double startX)
+    {
+        startCol = _fixedColumnCount;
+        endCol = _fixedColumnCount - 1;
+        startX = _rowHeaderWidth + GetFixedColumnsWidth();
+
+        if (Columns.Count == 0 || _viewportBodyWidth <= 0 || _fixedColumnCount >= Columns.Count)
+        {
+            return;
+        }
+
+        var scrollVp = GetScrollViewportWidth();
+        if (scrollVp <= 0)
+        {
+            return;
+        }
+
+        var contentLeft = _horizontalOffset;
+        var contentRight = _horizontalOffset + scrollVp;
+
+        var x = 0.0;
+        var col = _fixedColumnCount;
+        while (col < Columns.Count)
+        {
+            var width = GetColumnWidth(col);
+            if (x + width > contentLeft)
+            {
+                break;
+            }
+
+            x += width;
+            col++;
+        }
+
+        if (col >= Columns.Count)
+        {
+            startCol = Columns.Count - 1;
+            endCol = Columns.Count - 1;
+            startX = _rowHeaderWidth + GetFixedColumnsWidth() + x - _horizontalOffset;
+            return;
+        }
+
+        startCol = col;
+        startX = _rowHeaderWidth + GetFixedColumnsWidth() + x - _horizontalOffset;
+        endCol = startCol;
+        var cursor = x;
+        while (endCol < Columns.Count)
+        {
+            cursor += GetColumnWidth(endCol);
+            if (cursor >= contentRight)
+            {
+                break;
+            }
+
+            endCol++;
+        }
+
+        endCol = Math.Clamp(endCol, startCol, Columns.Count - 1);
     }
 
     private static double StepContentScaleStop(double current, bool zoomIn)
@@ -249,7 +389,11 @@ public sealed class Griddo : FrameworkElement
     {
         _horizontalScrollBar.Measure(availableSize);
         _verticalScrollBar.Measure(availableSize);
-        _hostCanvas.Measure(new Size(Math.Max(0, availableSize.Width - _rowHeaderWidth - ScrollBarSize), Math.Max(0, availableSize.Height - ScaledColumnHeaderHeight - ScrollBarSize)));
+        var bodyW = Math.Max(0, availableSize.Width - _rowHeaderWidth - ScrollBarSize);
+        var bodyH = Math.Max(0, availableSize.Height - ScaledColumnHeaderHeight - ScrollBarSize);
+        var bodySize = new Size(bodyW, bodyH);
+        _scrollHostCanvas.Measure(bodySize);
+        _fixedHostCanvas.Measure(bodySize);
         _scaleFeedbackLayer.Measure(availableSize);
         return availableSize;
     }
@@ -273,7 +417,11 @@ public sealed class Griddo : FrameworkElement
 
         UpdateScrollBars();
 
-        _hostCanvas.Arrange(new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, _viewportBodyWidth, _viewportBodyHeight));
+        UpdateHostCanvasClips();
+
+        var bodyRect = new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
+        _scrollHostCanvas.Arrange(bodyRect);
+        _fixedHostCanvas.Arrange(bodyRect);
 
         _scaleFeedbackLayer.Arrange(new Rect(0, 0, finalSize.Width, finalSize.Height));
         return finalSize;
@@ -294,28 +442,54 @@ public sealed class Griddo : FrameworkElement
 
         var needed = new HashSet<GriddoCellAddress>();
         GetVisibleRowRange(out var startRow, out var endRow);
-        GetVisibleColumnRange(out var startCol, out var endCol, out _);
-        if (endRow < startRow || endCol < startCol)
+        if (endRow < startRow)
         {
             ClearHostedCells();
             return;
         }
 
-        for (var row = startRow; row <= endRow; row++)
+        void AddHostedInColumnRange(int c0, int c1)
         {
-            for (var col = startCol; col <= endCol; col++)
+            for (var col = c0; col <= c1; col++)
             {
-                if (Columns[col] is IGriddoHostedColumnView)
+                if (Columns[col] is not IGriddoHostedColumnView)
+                {
+                    continue;
+                }
+
+                for (var row = startRow; row <= endRow; row++)
                 {
                     needed.Add(new GriddoCellAddress(row, col));
                 }
             }
         }
 
+        if (_fixedColumnCount > 0 && Columns.Count > 0)
+        {
+            AddHostedInColumnRange(0, Math.Min(_fixedColumnCount, Columns.Count) - 1);
+        }
+
+        GetVisibleScrollColumnRange(out var scrollStart, out var scrollEnd, out _);
+        if (scrollEnd >= scrollStart)
+        {
+            AddHostedInColumnRange(scrollStart, scrollEnd);
+        }
+
+        if (needed.Count == 0)
+        {
+            ClearHostedCells();
+            return;
+        }
+
         var stale = _hostedCells.Keys.Where(k => !needed.Contains(k)).ToList();
         foreach (var key in stale)
         {
-            _hostCanvas.Children.Remove(_hostedCells[key]);
+            var fe = _hostedCells[key];
+            if (fe.Parent is Panel p)
+            {
+                p.Children.Remove(fe);
+            }
+
             _hostedCells.Remove(key);
         }
 
@@ -327,11 +501,17 @@ public sealed class Griddo : FrameworkElement
                 continue;
             }
 
+            var dest = HostCanvasForColumn(addr.ColumnIndex);
             if (!_hostedCells.TryGetValue(addr, out var host))
             {
                 host = hostedColumn.CreateHostElement();
                 _hostedCells[addr] = host;
-                _hostCanvas.Children.Add(host);
+                dest.Children.Add(host);
+            }
+            else if (host.Parent is Panel parent && !ReferenceEquals(parent, dest))
+            {
+                parent.Children.Remove(host);
+                dest.Children.Add(host);
             }
 
             var rowData = Rows[addr.RowIndex];
@@ -353,11 +533,44 @@ public sealed class Griddo : FrameworkElement
         }
     }
 
+    private Canvas HostCanvasForColumn(int columnIndex) =>
+        columnIndex < _fixedColumnCount ? _fixedHostCanvas : _scrollHostCanvas;
+
+    /// <summary>
+    /// Fixed vs scroll body rectangle (below headers). Used to clip current-cell / inline edit visuals so they do not paint over the other band when a cell slides under frozen columns.
+    /// </summary>
+    private Rect GetColumnBodyBandClipRect(int columnIndex)
+    {
+        var fixedW = GetFixedColumnsWidth();
+        var scrollLeft = _rowHeaderWidth + fixedW;
+
+        if (columnIndex < _fixedColumnCount)
+        {
+            var w = Math.Min(fixedW, _viewportBodyWidth);
+            return new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, w, _viewportBodyHeight);
+        }
+
+        var scrollW = Math.Max(0, _viewportBodyWidth - fixedW);
+        return new Rect(scrollLeft, ScaledColumnHeaderHeight, scrollW, _viewportBodyHeight);
+    }
+
+    private void UpdateHostCanvasClips()
+    {
+        var fixedW = GetFixedColumnsWidth();
+        var fw = Math.Min(fixedW, _viewportBodyWidth);
+        var sw = Math.Max(0, _viewportBodyWidth - fixedW);
+        _fixedHostCanvas.Clip = new RectangleGeometry(new Rect(0, 0, fw, _viewportBodyHeight));
+        _scrollHostCanvas.Clip = new RectangleGeometry(new Rect(fixedW, 0, sw, _viewportBodyHeight));
+    }
+
     private void ClearHostedCells()
     {
         foreach (var kv in _hostedCells.Values.ToList())
         {
-            _hostCanvas.Children.Remove(kv);
+            if (kv.Parent is Panel p)
+            {
+                p.Children.Remove(kv);
+            }
         }
 
         _hostedCells.Clear();
@@ -1172,41 +1385,139 @@ public sealed class Griddo : FrameworkElement
         base.OnKeyDown(e);
     }
 
+    private void DrawColumnHeader(DrawingContext dc, int col, double x, Typeface typeface)
+    {
+        var width = GetColumnWidth(col);
+        var rect = new Rect(x, 0, width, ScaledColumnHeaderHeight);
+        dc.DrawRectangle(HeaderBackground, null, rect);
+        var pen = new Pen(GridLineBrush, GridPenThickness);
+        // Top edge of header strip is drawn once in DrawOuterWorksheetFrame (matches DrawLine rasterization for scroll columns).
+        dc.DrawLine(pen, rect.TopRight, rect.BottomRight);
+        if (col == 0)
+        {
+            dc.DrawLine(pen, rect.TopLeft, rect.BottomLeft);
+        }
+        var headerText = new FormattedText(
+            Columns[col].Header,
+            System.Globalization.CultureInfo.CurrentCulture,
+            FlowDirection.LeftToRight,
+            typeface,
+            EffectiveFontSize,
+            Brushes.Black,
+            1.0);
+        headerText.SetFontWeight(FontWeights.Bold);
+        headerText.MaxTextWidth = Math.Max(1, rect.Width - 8);
+        headerText.MaxTextHeight = Math.Max(1, rect.Height - 4);
+        headerText.Trimming = TextTrimming.CharacterEllipsis;
+        var headerY = rect.Y + Math.Max(0, (rect.Height - headerText.Height) / 2);
+        dc.DrawText(headerText, new Point(rect.X + 4, headerY));
+
+        if (_fixedColumnCount > 0 && col == _fixedColumnCount - 1)
+        {
+            dc.DrawLine(
+                new Pen(FixedColumnRightBorderBrush, GridPenThickness),
+                new Point(rect.Right, rect.Top),
+                new Point(rect.Right, rect.Bottom));
+        }
+    }
+
+    private void DrawBodyCell(
+        DrawingContext dc,
+        int row,
+        int col,
+        double x,
+        double y,
+        double rowHeight,
+        object rowData,
+        Rect bodyViewport,
+        Typeface typeface)
+    {
+        var colWidth = GetColumnWidth(col);
+        var rect = new Rect(x, y, colWidth, rowHeight);
+        var address = new GriddoCellAddress(row, col);
+
+        var isHostedCellEditing = IsHostedCellInEditMode(address);
+        if (_selectedCells.Contains(address) && !isHostedCellEditing)
+        {
+            dc.DrawRectangle(SelectionBackground, null, rect);
+        }
+
+        dc.DrawRectangle(null, new Pen(GridLineBrush, GridPenThickness), rect);
+        if (_fixedColumnCount > 0 && col == _fixedColumnCount - 1)
+        {
+            dc.DrawLine(
+                new Pen(FixedColumnRightBorderBrush, GridPenThickness),
+                new Point(rect.Right, rect.Top),
+                new Point(rect.Right, rect.Bottom));
+        }
+
+        if (Columns[col] is IGriddoHostedColumnView)
+        {
+            return;
+        }
+
+        var value = Columns[col].GetValue(rowData);
+        var isGraphic = value is ImageSource or Geometry;
+        // Intersect with viewport so HTML (and plain text) centers in the visible strip when the row is clipped vertically.
+        var paintBounds = isGraphic ? rect : Rect.Intersect(rect, bodyViewport);
+        if (!paintBounds.IsEmpty)
+        {
+            GriddoValuePainter.Paint(
+                dc,
+                value,
+                paintBounds,
+                typeface,
+                EffectiveFontSize,
+                Brushes.Black,
+                Columns[col].IsHtml,
+                true,
+                Columns[col].ContentAlignment,
+                isGraphic ? VerticalAlignment.Top : VerticalAlignment.Center);
+        }
+    }
+
     private void DrawHeaders(DrawingContext dc)
     {
-        // Fixed top-left corner header cell (row-header column title area).
+        // Fixed top-left corner header cell (row-header column title area). Outer top/left strokes live in DrawOuterWorksheetFrame only.
         var cornerRect = new Rect(0, 0, _rowHeaderWidth, ScaledColumnHeaderHeight);
-        dc.DrawRectangle(HeaderBackground, new Pen(GridLineBrush, GridPenThickness), cornerRect);
+        dc.DrawRectangle(HeaderBackground, null, cornerRect);
 
         var typeface = new Typeface("Segoe UI");
-        var columnHeaderClip = new Rect(_rowHeaderWidth, 0, _viewportBodyWidth, ScaledColumnHeaderHeight);
-        dc.PushClip(new RectangleGeometry(columnHeaderClip));
+        var fixedW = GetFixedColumnsWidth();
+        var scrollLeft = _rowHeaderWidth + fixedW;
+
+        if (_fixedColumnCount < Columns.Count && scrollLeft < _rowHeaderWidth + _viewportBodyWidth)
         {
-            GetVisibleColumnRange(out var startCol, out var endCol, out var startX);
-            var x = startX;
-            for (var col = startCol; col <= endCol; col++)
+            var scrollClipW = Math.Max(0, _viewportBodyWidth - fixedW);
+            var scrollClip = new Rect(scrollLeft, 0, scrollClipW, ScaledColumnHeaderHeight);
+            dc.PushClip(new RectangleGeometry(scrollClip));
+            GetVisibleScrollColumnRange(out var sCol, out var eCol, out var x);
+            if (eCol >= sCol)
             {
-                var width = GetColumnWidth(col);
-                var rect = new Rect(x, 0, width, ScaledColumnHeaderHeight);
-                dc.DrawRectangle(HeaderBackground, new Pen(GridLineBrush, GridPenThickness), rect);
-                var headerText = new FormattedText(
-                    Columns[col].Header,
-                    System.Globalization.CultureInfo.CurrentCulture,
-                    FlowDirection.LeftToRight,
-                    typeface,
-                    EffectiveFontSize,
-                    Brushes.Black,
-                    1.0);
-                headerText.SetFontWeight(FontWeights.Bold);
-                headerText.MaxTextWidth = Math.Max(1, rect.Width - 8);
-                headerText.MaxTextHeight = Math.Max(1, rect.Height - 4);
-                headerText.Trimming = TextTrimming.CharacterEllipsis;
-                var headerY = rect.Y + Math.Max(0, (rect.Height - headerText.Height) / 2);
-                dc.DrawText(headerText, new Point(rect.X + 4, headerY));
-                x += width;
+                for (var col = sCol; col <= eCol; col++)
+                {
+                    DrawColumnHeader(dc, col, x, typeface);
+                    x += GetColumnWidth(col);
+                }
             }
+
+            dc.Pop();
         }
-        dc.Pop();
+
+        if (_fixedColumnCount > 0)
+        {
+            var fixedClipW = Math.Min(fixedW, _viewportBodyWidth);
+            var fixedClip = new Rect(_rowHeaderWidth, 0, fixedClipW, ScaledColumnHeaderHeight);
+            dc.PushClip(new RectangleGeometry(fixedClip));
+            var fx = _rowHeaderWidth;
+            for (var col = 0; col < _fixedColumnCount; col++)
+            {
+                DrawColumnHeader(dc, col, fx, typeface);
+                fx += GetColumnWidth(col);
+            }
+
+            dc.Pop();
+        }
 
         DrawColumnMoveCue(dc);
 
@@ -1216,10 +1527,14 @@ public sealed class Griddo : FrameworkElement
             GetVisibleRowRange(out var startRow, out var endRow);
             var rowHeight = GetRowHeight(0);
             var y = ScaledColumnHeaderHeight + (startRow * rowHeight) - _verticalOffset;
+            var rowHeaderPen = new Pen(GridLineBrush, GridPenThickness);
             for (var row = startRow; row <= endRow; row++)
             {
                 var rect = new Rect(0, y, _rowHeaderWidth, rowHeight);
-                dc.DrawRectangle(HeaderBackground, new Pen(GridLineBrush, GridPenThickness), rect);
+                dc.DrawRectangle(HeaderBackground, null, rect);
+                // Top + bottom only; outer x=0 edge is one DrawLine in DrawOuterWorksheetFrame (avoids path vs line mismatch).
+                dc.DrawLine(rowHeaderPen, new Point(rect.Left, rect.Top), new Point(rect.Right, rect.Top));
+                dc.DrawLine(rowHeaderPen, new Point(rect.Left, rect.Bottom), new Point(rect.Right, rect.Bottom));
                 var visibleRect = Rect.Intersect(rect, rowHeaderClip);
                 if (!visibleRect.IsEmpty)
                 {
@@ -1230,69 +1545,86 @@ public sealed class Griddo : FrameworkElement
             }
         }
         dc.Pop();
+
+        DrawOuterWorksheetFrame(dc);
+    }
+
+    /// <summary>
+    /// Single DrawLine for the outermost top and left grid edges so they match column header strokes (PathGeometry stroke looked thicker under AA).
+    /// </summary>
+    private void DrawOuterWorksheetFrame(DrawingContext dc)
+    {
+        if (ActualWidth <= 0 || ActualHeight <= 0)
+        {
+            return;
+        }
+
+        var pen = new Pen(GridLineBrush, GridPenThickness);
+        var topRight = Math.Max(0, ActualWidth - ScrollBarSize);
+        var stripBottom = ScaledColumnHeaderHeight + Math.Max(0, _viewportBodyHeight);
+        var layoutBottom = Math.Max(0, ActualHeight - ScrollBarSize);
+        var leftBottom = Math.Min(stripBottom, layoutBottom);
+        dc.DrawLine(pen, new Point(0, 0), new Point(topRight, 0));
+        dc.DrawLine(pen, new Point(0, 0), new Point(0, leftBottom));
     }
 
     private void DrawBody(DrawingContext dc)
     {
         var bodyViewport = new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
-        dc.PushClip(new RectangleGeometry(bodyViewport));
-
         var typeface = new Typeface("Segoe UI");
         GetVisibleRowRange(out var startRow, out var endRow);
-        GetVisibleColumnRange(out var startCol, out var endCol, out var startX);
-        var rowHeight = GetRowHeight(0);
-        var y = ScaledColumnHeaderHeight + (startRow * rowHeight) - _verticalOffset;
-
-        for (var row = startRow; row <= endRow; row++)
+        if (endRow < startRow)
         {
-            var x = startX;
-            var rowData = Rows[row];
-            for (var col = startCol; col <= endCol; col++)
-            {
-                var colWidth = GetColumnWidth(col);
-                var rect = new Rect(x, y, colWidth, rowHeight);
-                var address = new GriddoCellAddress(row, col);
-
-                var isHostedCellEditing = IsHostedCellInEditMode(address);
-                if (_selectedCells.Contains(address) && !isHostedCellEditing)
-                {
-                    dc.DrawRectangle(SelectionBackground, null, rect);
-                }
-
-                dc.DrawRectangle(null, new Pen(GridLineBrush, GridPenThickness), rect);
-                if (Columns[col] is IGriddoHostedColumnView)
-                {
-                    x += colWidth;
-                    continue;
-                }
-
-                var value = Columns[col].GetValue(rowData);
-                var isGraphic = value is ImageSource or Geometry;
-                var paintBounds = (!Columns[col].IsHtml && !isGraphic)
-                    ? Rect.Intersect(rect, bodyViewport)
-                    : rect;
-                if (!paintBounds.IsEmpty)
-                {
-                    GriddoValuePainter.Paint(
-                        dc,
-                        value,
-                        paintBounds,
-                        typeface,
-                        EffectiveFontSize,
-                        Brushes.Black,
-                        Columns[col].IsHtml,
-                        true,
-                        Columns[col].ContentAlignment,
-                        (!Columns[col].IsHtml && !isGraphic) ? VerticalAlignment.Center : VerticalAlignment.Top);
-                }
-
-                x += colWidth;
-            }
-
-            y += rowHeight;
+            return;
         }
 
-        dc.Pop();
+        var rowHeight = GetRowHeight(0);
+        var fixedW = GetFixedColumnsWidth();
+        var scrollLeft = _rowHeaderWidth + fixedW;
+
+        if (_fixedColumnCount < Columns.Count && scrollLeft < _rowHeaderWidth + _viewportBodyWidth)
+        {
+            var scrollClipW = Math.Max(0, _viewportBodyWidth - fixedW);
+            var scrollClip = new Rect(scrollLeft, ScaledColumnHeaderHeight, scrollClipW, _viewportBodyHeight);
+            dc.PushClip(new RectangleGeometry(scrollClip));
+            GetVisibleScrollColumnRange(out var sCol, out var eCol, out var startX);
+            if (eCol >= sCol)
+            {
+                for (var row = startRow; row <= endRow; row++)
+                {
+                    var y = ScaledColumnHeaderHeight + (row * rowHeight) - _verticalOffset;
+                    var rowData = Rows[row];
+                    var x = startX;
+                    for (var col = sCol; col <= eCol; col++)
+                    {
+                        DrawBodyCell(dc, row, col, x, y, rowHeight, rowData, bodyViewport, typeface);
+                        x += GetColumnWidth(col);
+                    }
+                }
+            }
+
+            dc.Pop();
+        }
+
+        if (_fixedColumnCount > 0)
+        {
+            var fixedClipW = Math.Min(fixedW, _viewportBodyWidth);
+            var fixedClip = new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, fixedClipW, _viewportBodyHeight);
+            dc.PushClip(new RectangleGeometry(fixedClip));
+            for (var row = startRow; row <= endRow; row++)
+            {
+                var y = ScaledColumnHeaderHeight + (row * rowHeight) - _verticalOffset;
+                var rowData = Rows[row];
+                var x = _rowHeaderWidth;
+                for (var col = 0; col < _fixedColumnCount; col++)
+                {
+                    DrawBodyCell(dc, row, col, x, y, rowHeight, rowData, bodyViewport, typeface);
+                    x += GetColumnWidth(col);
+                }
+            }
+
+            dc.Pop();
+        }
     }
 
     private void DrawCurrentCellOverlay(DrawingContext dc)
@@ -1308,6 +1640,8 @@ public sealed class Griddo : FrameworkElement
             return;
         }
 
+        dc.PushClip(new RectangleGeometry(GetColumnBodyBandClipRect(_currentCell.ColumnIndex)));
+
         const double currentCellInset = 0.5;
         var insetRect = new Rect(
             rect.X + currentCellInset,
@@ -1317,6 +1651,7 @@ public sealed class Griddo : FrameworkElement
         var isHostedEditMode = IsCurrentHostedCellInEditMode();
         var borderBrush = (_isEditing || isHostedEditMode) ? Brushes.Red : CurrentCellBorderBrush;
         dc.DrawRectangle(null, new Pen(borderBrush, ScaledCurrentCellBorder), insetRect);
+        dc.Pop();
     }
 
     private bool IsCurrentHostedCellInEditMode()
@@ -1404,6 +1739,8 @@ public sealed class Griddo : FrameworkElement
             return;
         }
 
+        dc.PushClip(new RectangleGeometry(GetColumnBodyBandClipRect(_currentCell.ColumnIndex)));
+
         // Keep editor visuals inside the cell border so the edit outline thickness stays consistent.
         const double editContentInset = 1.0;
         var editContentRect = new Rect(
@@ -1411,11 +1748,24 @@ public sealed class Griddo : FrameworkElement
             rect.Y + editContentInset,
             Math.Max(0, rect.Width - (editContentInset * 2)),
             Math.Max(0, rect.Height - (editContentInset * 2)));
+
+        if (column.IsHtml)
+        {
+            var bodyCellsViewport = new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
+            editContentRect = Rect.Intersect(editContentRect, bodyCellsViewport);
+        }
+
+        if (editContentRect.IsEmpty)
+        {
+            dc.Pop();
+            return;
+        }
+
         dc.DrawRectangle(Brushes.White, null, editContentRect);
         var typeface = new Typeface("Segoe UI");
         var fontSize = EffectiveFontSize;
-        var verticalAlignment = column.IsHtml ? VerticalAlignment.Top : VerticalAlignment.Center;
-        GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, false, false, column.ContentAlignment, verticalAlignment);
+        var verticalAlignment = VerticalAlignment.Center;
+        GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, column.IsHtml, true, column.ContentAlignment, verticalAlignment);
 
         var displayText = _editSession.Buffer;
         var editText = new FormattedText(
@@ -1481,7 +1831,7 @@ public sealed class Griddo : FrameworkElement
             {
                 var selectionRect = new Rect(selectionX, caretOriginY, selectionRight - selectionX, Math.Max(1, editText.Height));
                 dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(120, 102, 178, 255)), null, selectionRect);
-                GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, false, false, column.ContentAlignment, verticalAlignment);
+                GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, column.IsHtml, true, column.ContentAlignment, verticalAlignment);
             }
         }
 
@@ -1493,6 +1843,8 @@ public sealed class Griddo : FrameworkElement
         {
             dc.DrawLine(new Pen(Brushes.Black, 1), new Point(caretX, caretTop), new Point(caretX, caretBottom));
         }
+
+        dc.Pop();
     }
 
     private bool TryGetCurrentColumn(out IGriddoColumnView column)
@@ -1897,13 +2249,27 @@ public sealed class Griddo : FrameworkElement
             return Rect.Empty;
         }
 
-        var x = _rowHeaderWidth - _horizontalOffset;
-        for (var col = 0; col < columnIndex; col++)
+        double left;
+        if (columnIndex < _fixedColumnCount)
         {
-            x += GetColumnWidth(col);
+            left = _rowHeaderWidth;
+            for (var col = 0; col < columnIndex; col++)
+            {
+                left += GetColumnWidth(col);
+            }
+        }
+        else
+        {
+            left = _rowHeaderWidth + GetFixedColumnsWidth();
+            for (var col = _fixedColumnCount; col < columnIndex; col++)
+            {
+                left += GetColumnWidth(col);
+            }
+
+            left -= _horizontalOffset;
         }
 
-        return new Rect(x, 0, GetColumnWidth(columnIndex), ScaledColumnHeaderHeight);
+        return new Rect(left, 0, GetColumnWidth(columnIndex), ScaledColumnHeaderHeight);
     }
 
     private void SelectRow(int rowIndex, bool additive)
@@ -2058,7 +2424,11 @@ public sealed class Griddo : FrameworkElement
             return default;
         }
 
-        var contentX = point.X - _rowHeaderWidth + _horizontalOffset;
+        if (!TryMapViewportPointToContentX(point.X, out var contentX))
+        {
+            return default;
+        }
+
         var x = 0.0;
         for (var col = 0; col < Columns.Count; col++)
         {
@@ -2081,15 +2451,29 @@ public sealed class Griddo : FrameworkElement
             return Rect.Empty;
         }
 
-        var x = _rowHeaderWidth;
-        for (var i = 0; i < col; i++)
+        double x;
+        if (col < _fixedColumnCount)
         {
-            x += GetColumnWidth(i);
+            x = _rowHeaderWidth;
+            for (var i = 0; i < col; i++)
+            {
+                x += GetColumnWidth(i);
+            }
+        }
+        else
+        {
+            x = _rowHeaderWidth + GetFixedColumnsWidth();
+            for (var i = _fixedColumnCount; i < col; i++)
+            {
+                x += GetColumnWidth(i);
+            }
+
+            x -= _horizontalOffset;
         }
 
         var y = GetRowTop(row);
         return new Rect(
-            x - _horizontalOffset,
+            x,
             ScaledColumnHeaderHeight + y - _verticalOffset,
             GetColumnWidth(col),
             GetRowHeight(row));
@@ -2320,8 +2704,12 @@ public sealed class Griddo : FrameworkElement
             return -1;
         }
 
+        if (!TryMapViewportPointToContentX(point.X, out var contentX))
+        {
+            return -1;
+        }
+
         var x = 0.0;
-        var contentX = point.X - _rowHeaderWidth + _horizontalOffset;
         for (var col = 0; col < Columns.Count; col++)
         {
             x += GetColumnWidth(col);
@@ -2349,7 +2737,11 @@ public sealed class Griddo : FrameworkElement
             return -1;
         }
 
-        var contentX = point.X - _rowHeaderWidth + _horizontalOffset;
+        if (!TryMapViewportPointToContentX(point.X, out var contentX))
+        {
+            return -1;
+        }
+
         var x = 0.0;
         for (var col = 0; col < Columns.Count; col++)
         {
@@ -2493,9 +2885,10 @@ public sealed class Griddo : FrameworkElement
 
     private void UpdateScrollBars()
     {
-        var contentWidth = GetContentWidth();
+        var scrollViewport = GetScrollViewportWidth();
+        var scrollContent = GetScrollableContentWidth();
         var contentHeight = GetContentHeight();
-        var maxHorizontal = Math.Max(0, contentWidth - _viewportBodyWidth);
+        var maxHorizontal = Math.Max(0, scrollContent - scrollViewport);
         var maxVertical = Math.Max(0, contentHeight - _viewportBodyHeight);
 
         _horizontalScrollBar.LargeChange = Math.Max(1, _viewportBodyWidth);
@@ -2508,17 +2901,6 @@ public sealed class Griddo : FrameworkElement
 
         SetHorizontalOffset(_horizontalOffset);
         SetVerticalOffset(_verticalOffset);
-    }
-
-    private double GetContentWidth()
-    {
-        var total = 0.0;
-        for (var col = 0; col < Columns.Count; col++)
-        {
-            total += GetColumnWidth(col);
-        }
-
-        return total;
     }
 
     private double GetContentHeight()
@@ -2538,58 +2920,6 @@ public sealed class Griddo : FrameworkElement
         var rowHeight = GetRowHeight(0);
         startRow = Math.Clamp((int)(_verticalOffset / rowHeight), 0, Rows.Count - 1);
         endRow = Math.Clamp((int)Math.Ceiling((_verticalOffset + _viewportBodyHeight) / rowHeight) - 1, 0, Rows.Count - 1);
-    }
-
-    private void GetVisibleColumnRange(out int startCol, out int endCol, out double startX)
-    {
-        startCol = 0;
-        endCol = -1;
-        startX = _rowHeaderWidth;
-
-        if (Columns.Count == 0 || _viewportBodyWidth <= 0)
-        {
-            return;
-        }
-
-        var contentLeft = _horizontalOffset;
-        var contentRight = _horizontalOffset + _viewportBodyWidth;
-
-        var x = 0.0;
-        while (startCol < Columns.Count)
-        {
-            var width = GetColumnWidth(startCol);
-            if (x + width > contentLeft)
-            {
-                break;
-            }
-
-            x += width;
-            startCol++;
-        }
-
-        if (startCol >= Columns.Count)
-        {
-            startCol = Columns.Count - 1;
-            endCol = Columns.Count - 1;
-            startX = _rowHeaderWidth + x - _horizontalOffset;
-            return;
-        }
-
-        startX = _rowHeaderWidth + x - _horizontalOffset;
-        endCol = startCol;
-        var cursor = x;
-        while (endCol < Columns.Count)
-        {
-            cursor += GetColumnWidth(endCol);
-            if (cursor >= contentRight)
-            {
-                break;
-            }
-
-            endCol++;
-        }
-
-        endCol = Math.Clamp(endCol, startCol, Columns.Count - 1);
     }
 
     private void SetHorizontalOffset(double value)
@@ -2642,8 +2972,10 @@ public sealed class Griddo : FrameworkElement
     {
         _ = sender;
         _ = e;
+        _fixedColumnCount = Math.Clamp(_fixedColumnCount, 0, Math.Max(0, Columns.Count));
         UpdateRowHeaderWidth();
         UpdateScrollBars();
+        UpdateHostCanvasClips();
         InvalidateVisual();
     }
 
