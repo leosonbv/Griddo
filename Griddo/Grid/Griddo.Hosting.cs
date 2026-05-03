@@ -1,16 +1,16 @@
-using System.Collections.Generic;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using Griddo.Columns;
+using Griddo.Primitives;
 
-namespace Griddo;
+namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
     public FrameworkElement? TryGetHostedElement(GriddoCellAddress address)
     {
-        return _hostedCells.TryGetValue(address, out var fe) ? fe : null;
+        return _hostedCells.GetValueOrDefault(address);
     }
 
     private void SyncHostedCells()

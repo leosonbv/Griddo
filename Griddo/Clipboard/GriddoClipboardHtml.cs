@@ -2,7 +2,7 @@
 using System.Net;
 using System.Text;
 
-namespace Griddo;
+namespace Griddo.Clipboard;
 
 /// <summary>Windows CF_HTML clipboard wrapper for rich paste into Word, Excel, browsers.</summary>
 internal static class GriddoClipboardHtml

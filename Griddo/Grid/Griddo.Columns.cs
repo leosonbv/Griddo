@@ -1,10 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Griddo.Columns;
 
-namespace Griddo;
+namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
@@ -44,7 +42,7 @@ public sealed partial class Griddo
         }
 
         var remaining = Math.Max(0, _viewportBodyWidth - nonFillWidth);
-        var perFill = fillCount > 0 ? remaining / fillCount : 0;
+        var perFill = remaining / fillCount;
         return Math.Max(MinColumnWidth * ContentScale, perFill);
     }
 

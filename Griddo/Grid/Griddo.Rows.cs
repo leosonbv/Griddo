@@ -1,7 +1,8 @@
 using System.Windows;
 using System.Windows.Media;
+using Griddo.Columns;
 
-namespace Griddo;
+namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
@@ -56,9 +57,9 @@ public sealed partial class Griddo
         var typeface = new Typeface("Segoe UI");
         var pad = 6 * _contentScale;
         var max = MeasureTextHeight((rowIndex + 1).ToString(), typeface, EffectiveFontSize) + pad;
-        for (var col = 0; col < Columns.Count; col++)
+        foreach (var columnView in Columns)
         {
-            var value = Columns[col].GetValue(Rows[rowIndex]);
+            var value = columnView.GetValue(Rows[rowIndex]);
             max = Math.Max(max, MeasureCellHeight(value, typeface, EffectiveFontSize) + pad);
         }
 

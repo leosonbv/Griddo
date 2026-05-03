@@ -6,6 +6,8 @@ using System.ComponentModel;
 using Plotto.Charting.Controls;
 using Plotto.Charting.Core;
 using Griddo;
+using Griddo.Columns;
+using Griddo.Editing;
 
 namespace GriddoTest;
 
@@ -71,7 +73,7 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView
         var seed = _plottoSeedGetter(rowSource);
         border.Tag = seed;
         var points = MainWindow.CreateChromatogramPoints(seed);
-        var sharedEditor = global::Plotto.PlottoPresetCharts.Editor;
+        var sharedEditor = global::Plotto.Hosting.PlottoPresetCharts.Editor;
         EnsureSharedEditorHook(sharedEditor);
         if (isCurrentCell)
         {
@@ -172,7 +174,7 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView
         var current = node;
         while (current is not null)
         {
-            if (current is global::Griddo.Griddo griddo)
+            if (current is global::Griddo.Grid.Griddo griddo)
             {
                 griddo.InvalidateVisual();
                 return;
@@ -185,7 +187,7 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView
     public bool IsHostInEditMode(FrameworkElement host)
     {
         return host is Border { Child: ChromatogramControl chart } &&
-               ReferenceEquals(chart, global::Plotto.PlottoPresetCharts.Editor) &&
+               ReferenceEquals(chart, global::Plotto.Hosting.PlottoPresetCharts.Editor) &&
                chart.RenderMode == ChartRenderMode.Editor;
     }
 
@@ -240,7 +242,7 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView
             ApplyOne(ch, gridUsesHostedPlotDirectMouseDown);
         }
 
-        ApplyOne(global::Plotto.PlottoPresetCharts.Editor, gridUsesHostedPlotDirectMouseDown);
+        ApplyOne(global::Plotto.Hosting.PlottoPresetCharts.Editor, gridUsesHostedPlotDirectMouseDown);
     }
 
     public void RelayDirectEditMouseDown(FrameworkElement host, MouseButtonEventArgs eFromGrid)

@@ -1,4 +1,4 @@
-﻿namespace Griddo;
+﻿namespace Griddo.Primitives;
 
 public readonly record struct GriddoCellAddress(int RowIndex, int ColumnIndex)
 {

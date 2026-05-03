@@ -1,10 +1,9 @@
-using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using Plotto.Charting.Controls;
 using Plotto.Charting.Core;
 
-namespace Plotto;
+namespace Plotto.Hosting;
 
 /// <summary>
 /// Shared singleton chart instances and demo data used when Plotto is hosted in grid cells (chromatogram editor,

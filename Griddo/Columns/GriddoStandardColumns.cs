@@ -1,7 +1,8 @@
 ﻿using System.Globalization;
 using System.Windows;
+using Griddo.Editing;
 
-namespace Griddo;
+namespace Griddo.Columns;
 
 public sealed class GriddoColumnView : IGriddoColumnView
 {

@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace Griddo;
+﻿namespace Griddo.Columns;
 
 public sealed class GriddoColumnHeaderMouseEventArgs : EventArgs
 {

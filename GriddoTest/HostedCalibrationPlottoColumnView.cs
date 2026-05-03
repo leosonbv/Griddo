@@ -6,6 +6,8 @@ using System.ComponentModel;
 using Plotto.Charting.Controls;
 using Plotto.Charting.Core;
 using Griddo;
+using Griddo.Columns;
+using Griddo.Editing;
 
 namespace GriddoTest;
 
@@ -76,7 +78,7 @@ public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView
         var calibrationPoints = MainWindow.CreateCalibrationPoints(seed);
         var fitMode = (CalibrationFitMode)(Math.Abs(seed) % 4);
 
-        var sharedEditor = global::Plotto.PlottoPresetCharts.CalibrationEditor;
+        var sharedEditor = global::Plotto.Hosting.PlottoPresetCharts.CalibrationEditor;
         EnsureSharedEditorHook(sharedEditor);
 
         if (isCurrentCell)
@@ -168,7 +170,7 @@ public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView
         var current = node;
         while (current is not null)
         {
-            if (current is global::Griddo.Griddo griddo)
+            if (current is global::Griddo.Grid.Griddo griddo)
             {
                 griddo.InvalidateVisual();
                 return;
@@ -181,7 +183,7 @@ public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView
     public bool IsHostInEditMode(FrameworkElement host)
     {
         return host is Border { Child: CalibrationCurveControl chart } &&
-               ReferenceEquals(chart, global::Plotto.PlottoPresetCharts.CalibrationEditor) &&
+               ReferenceEquals(chart, global::Plotto.Hosting.PlottoPresetCharts.CalibrationEditor) &&
                chart.RenderMode == ChartRenderMode.Editor;
     }
 
@@ -236,7 +238,7 @@ public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView
             ApplyOne(ch, gridUsesHostedPlotDirectMouseDown);
         }
 
-        ApplyOne(global::Plotto.PlottoPresetCharts.CalibrationEditor, gridUsesHostedPlotDirectMouseDown);
+        ApplyOne(global::Plotto.Hosting.PlottoPresetCharts.CalibrationEditor, gridUsesHostedPlotDirectMouseDown);
     }
 
     public void RelayDirectEditMouseDown(FrameworkElement host, MouseButtonEventArgs eFromGrid)

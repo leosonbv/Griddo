@@ -1,8 +1,10 @@
 using System.Windows;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using Griddo.Columns;
+using Griddo.Primitives;
 
-namespace Griddo;
+namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
@@ -241,7 +243,7 @@ public sealed partial class Griddo
             _pendingHostedEditActivation = false;
             SyncHostedCells();
             SetCurrentHostedCellEditMode(true);
-            if (TryGetHostedElement(clicked) is FrameworkElement hostForRightRelay)
+            if (TryGetHostedElement(clicked) is { } hostForRightRelay)
             {
                 hostedRightDirect.RelayDirectEditMouseDown(hostForRightRelay, e);
             }
@@ -296,7 +298,7 @@ public sealed partial class Griddo
                 && e.ClickCount == 1
                 && Columns[clicked.ColumnIndex] is IGriddoHostedColumnView hostedDirect)
             {
-                if (TryGetHostedElement(clicked) is FrameworkElement hostedForDirect
+                if (TryGetHostedElement(clicked) is { } hostedForDirect
                     && hostedDirect.IsHostInEditMode(hostedForDirect))
                 {
                     InvalidateVisual();
@@ -311,7 +313,7 @@ public sealed partial class Griddo
                 _pendingHostedEditActivation = false;
                 SyncHostedCells();
                 SetCurrentHostedCellEditMode(true);
-                if (TryGetHostedElement(clicked) is FrameworkElement hostForRelay)
+                if (TryGetHostedElement(clicked) is { } hostForRelay)
                 {
                     hostedDirect.RelayDirectEditMouseDown(hostForRelay, e);
                 }
@@ -328,7 +330,7 @@ public sealed partial class Griddo
             {
                 if (Columns[clicked.ColumnIndex] is IGriddoHostedColumnView hostedSameCell)
                 {
-                    if (TryGetHostedElement(clicked) is FrameworkElement hostedSameElement
+                    if (TryGetHostedElement(clicked) is { } hostedSameElement
                         && hostedSameCell.IsHostInEditMode(hostedSameElement))
                     {
                         InvalidateVisual();
@@ -371,7 +373,7 @@ public sealed partial class Griddo
 
         if (e.ChangedButton == MouseButton.Left
             && Columns[clicked.ColumnIndex] is IGriddoHostedColumnView hostedForEdit
-            && TryGetHostedElement(clicked) is FrameworkElement hostedElement
+            && TryGetHostedElement(clicked) is { } hostedElement
             && hostedForEdit.IsHostInEditMode(hostedElement))
         {
             if (isCtrlPressed)
@@ -975,7 +977,7 @@ public sealed partial class Griddo
             && _currentCell.ColumnIndex >= 0
             && _currentCell.ColumnIndex < Columns.Count
             && Columns[_currentCell.ColumnIndex] is IGriddoHostedColumnView hostedUp
-            && TryGetHostedElement(_currentCell) is FrameworkElement hostUp)
+            && TryGetHostedElement(_currentCell) is { } hostUp)
         {
             hostedUp.RelayDirectEditMouseUp(hostUp, e);
             e.Handled = true;
@@ -1029,7 +1031,7 @@ public sealed partial class Griddo
             return false;
         }
 
-        if (TryGetHostedElement(cell) is not FrameworkElement host)
+        if (TryGetHostedElement(cell) is not { } host)
         {
             return false;
         }
@@ -1046,7 +1048,7 @@ public sealed partial class Griddo
             return false;
         }
 
-        if (TryGetHostedElement(cell) is not FrameworkElement host)
+        if (TryGetHostedElement(cell) is not { } host)
         {
             return false;
         }

@@ -1,6 +1,6 @@
 ﻿using System.Globalization;
 
-namespace Griddo;
+namespace Griddo.Editing;
 
 public interface IGriddoCellEditor
 {

@@ -1,17 +1,17 @@
 ﻿using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Globalization;
-using System.IO;
-using System.Linq;
-using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Griddo.Columns;
+using Griddo.Editing;
+using Griddo.Primitives;
 
-namespace Griddo;
+namespace Griddo.Grid;
 
 public sealed partial class Griddo : FrameworkElement
 {
@@ -55,7 +55,7 @@ public sealed partial class Griddo : FrameworkElement
     private readonly Dictionary<GriddoCellAddress, FrameworkElement> _hostedCells = [];
     private readonly ScrollBar _horizontalScrollBar;
     private readonly ScrollBar _verticalScrollBar;
-    private readonly Grid _scaleFeedbackLayer = new()
+    private readonly System.Windows.Controls.Grid _scaleFeedbackLayer = new()
     {
         IsHitTestVisible = false,
         Visibility = Visibility.Collapsed
@@ -364,7 +364,7 @@ public sealed partial class Griddo : FrameworkElement
                 }
             }
 
-            return stops[stops.Length - 1];
+            return stops[^1];
         }
 
         for (var i = stops.Length - 1; i >= 0; i--)

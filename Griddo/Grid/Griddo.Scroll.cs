@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace Griddo;
+namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {

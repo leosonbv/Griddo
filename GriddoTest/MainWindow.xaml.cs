@@ -1,13 +1,11 @@
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Griddo;
-using SkiaSharp;
+using Griddo.Columns;
+using Griddo.Editing;
 using Plotto.Charting.Controls;
 using Plotto.Charting.Core;
-using System.Collections.Generic;
-using System.Collections.ObjectModel;
 
 namespace GriddoTest
 {

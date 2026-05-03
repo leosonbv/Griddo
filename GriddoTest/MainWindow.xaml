@@ -5,11 +5,12 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:griddo="clr-namespace:Griddo;assembly=Griddo"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:grid="clr-namespace:Griddo.Grid;assembly=Griddo"
     mc:Ignorable="d"
     Title="Griddo Test"
     Width="1100"
     Height="720">
     <Grid Margin="12">
-        <griddo:Griddo x:Name="DemoGrid" />
+        <grid:Griddo x:Name="DemoGrid" />
     </Grid>
 </Window>

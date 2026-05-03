@@ -1,7 +1,8 @@
 ﻿using System.Windows;
 using System.Windows.Media;
+using Griddo.Editing;
 
-namespace Griddo;
+namespace Griddo.Columns;
 
 public interface IGriddoColumnView
 {

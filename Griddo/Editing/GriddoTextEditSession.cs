@@ -1,7 +1,4 @@
-﻿using System.Windows;
-using System.Windows.Input;
-
-namespace Griddo;
+﻿namespace Griddo.Editing;
 
 internal sealed class GriddoTextEditSession
 {
@@ -136,12 +133,12 @@ internal sealed class GriddoTextEditSession
 
     public string GetSanitizedClipboardText()
     {
-        if (!Clipboard.ContainsText())
+        if (!System.Windows.Clipboard.ContainsText())
         {
             return string.Empty;
         }
 
-        return Clipboard.GetText().Replace("\r\n", " ").Replace('\n', ' ').Replace('\r', ' ');
+        return System.Windows.Clipboard.GetText().Replace("\r\n", " ").Replace('\n', ' ').Replace('\r', ' ');
     }
 
     private void MoveCaret(int targetIndex, bool extendSelection)

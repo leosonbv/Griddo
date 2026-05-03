@@ -1,7 +1,8 @@
-using System;
 using System.Windows;
+using Griddo.Grid;
+using Griddo.Primitives;
 
-namespace Griddo;
+namespace Griddo.Columns;
 
 public sealed class GriddoCellContextMenuEventArgs : EventArgs
 {

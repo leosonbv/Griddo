@@ -1,13 +1,12 @@
-using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Windows;
-using System.Windows.Media;
+using Griddo.Clipboard;
+using Griddo.Columns;
+using Griddo.Primitives;
 
-namespace Griddo;
+namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
@@ -167,12 +166,12 @@ public sealed partial class Griddo
         var htmlBytes = utf8.GetBytes(cfHtml);
         dataObject.SetData(DataFormats.Html, new MemoryStream(htmlBytes, writable: false));
 
-        Clipboard.SetDataObject(dataObject, copy: true);
+        System.Windows.Clipboard.SetDataObject(dataObject, copy: true);
     }
 
     private void PasteClipboardIntoGrid()
     {
-        if (!Clipboard.ContainsText())
+        if (!System.Windows.Clipboard.ContainsText())
         {
             return;
         }
@@ -187,7 +186,7 @@ public sealed partial class Griddo
             return;
         }
 
-        var text = Clipboard.GetText();
+        var text = System.Windows.Clipboard.GetText();
         var rowChunks = text.Replace("\r\n", "\n").Split('\n', StringSplitOptions.None);
 
         for (var rowOffset = 0; rowOffset < rowChunks.Length; rowOffset++)

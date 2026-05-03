@@ -1,7 +1,8 @@
 using System.Windows;
-using System.Windows.Controls;
+using Griddo.Columns;
+using Griddo.Primitives;
 
-namespace Griddo;
+namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
@@ -17,7 +18,7 @@ public sealed partial class Griddo
             return false;
         }
 
-        return TryGetHostedElement(_currentCell) is FrameworkElement host && hostedColumn.IsHostInEditMode(host);
+        return TryGetHostedElement(_currentCell) is { } host && hostedColumn.IsHostInEditMode(host);
     }
 
     private bool IsHostedCellInEditMode(GriddoCellAddress cell)
@@ -32,7 +33,7 @@ public sealed partial class Griddo
             return false;
         }
 
-        return TryGetHostedElement(cell) is FrameworkElement host && hostedColumn.IsHostInEditMode(host);
+        return TryGetHostedElement(cell) is { } host && hostedColumn.IsHostInEditMode(host);
     }
 
     private void SetCurrentHostedCellEditMode(bool isEditing)
@@ -47,7 +48,7 @@ public sealed partial class Griddo
             return;
         }
 
-        if (TryGetHostedElement(_currentCell) is not FrameworkElement host)
+        if (TryGetHostedElement(_currentCell) is not { } host)
         {
             return;
         }
@@ -153,12 +154,12 @@ public sealed partial class Griddo
 
     private void CopyEditBufferToClipboard()
     {
-        Clipboard.SetText(_editSession.GetCopyText());
+        System.Windows.Clipboard.SetText(_editSession.GetCopyText());
     }
 
     private void CutEditBufferToClipboard()
     {
-        Clipboard.SetText(_editSession.CutText());
+        System.Windows.Clipboard.SetText(_editSession.CutText());
         InvalidateVisual();
     }
 }

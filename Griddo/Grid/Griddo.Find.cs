@@ -1,10 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using Griddo.Primitives;
 
-namespace Griddo;
+namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
@@ -162,7 +160,7 @@ public sealed partial class Griddo
             Width = 360;
             Height = 142;
 
-            var root = new Grid { Margin = new Thickness(12) };
+            var root = new System.Windows.Controls.Grid { Margin = new Thickness(12) };
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -186,7 +184,7 @@ public sealed partial class Griddo
             }
 
             _input.Text = currentValue ?? string.Empty;
-            Grid.SetRow(_input, 1);
+            System.Windows.Controls.Grid.SetRow(_input, 1);
             root.Children.Add(_input);
 
             var buttons = new StackPanel
@@ -212,7 +210,7 @@ public sealed partial class Griddo
                 IsCancel = true
             };
             buttons.Children.Add(cancel);
-            Grid.SetRow(buttons, 2);
+            System.Windows.Controls.Grid.SetRow(buttons, 2);
             root.Children.Add(buttons);
 
             Content = root;

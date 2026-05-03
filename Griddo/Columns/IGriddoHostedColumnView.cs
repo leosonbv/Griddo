@@ -1,7 +1,8 @@
 ﻿using System.Windows;
 using System.Windows.Input;
+using Griddo.Grid;
 
-namespace Griddo;
+namespace Griddo.Columns;
 
 /// <summary>
 /// Column that hosts a live <see cref="FrameworkElement"/> per visible cell instead of painting text.

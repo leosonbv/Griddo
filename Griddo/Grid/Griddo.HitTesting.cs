@@ -1,7 +1,8 @@
 using System.Windows;
 using System.Windows.Input;
+using Griddo.Primitives;
 
-namespace Griddo;
+namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {

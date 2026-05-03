@@ -1,7 +1,6 @@
 using System.Windows;
-using System.Windows.Media;
 
-namespace Griddo;
+namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
