@@ -90,7 +90,6 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView, IGriddoCol
 
         var seed = _plottoSeedGetter(rowSource);
         border.Tag = seed;
-        var points = MainWindow.CreateChromatogramPoints(seed);
         var sharedEditor = global::Plotto.Charting.Hosting.PlottoPresetCharts.Editor;
         EnsureSharedEditorHook(sharedEditor);
         if (isCurrentCell)
@@ -114,7 +113,13 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView, IGriddoCol
             var prevSeed = sharedEditor.Tag is int ps ? (int?)ps : null;
             var seedChanged = prevSeed != seed;
 
-            sharedEditor.Points = points;
+            // Griddo calls UpdateHostElement from OnRender every frame; assigning Points with a new list each time
+            // re-triggers SkiaChart DP invalidation during render and can re-enter layout until stack overflow.
+            if (editorMoved || seedChanged)
+            {
+                sharedEditor.Points = MainWindow.CreateChromatogramPoints(seed);
+            }
+
             ApplyChartSettings(sharedEditor);
 
             if (editorMoved || seedChanged)
@@ -136,7 +141,12 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView, IGriddoCol
             }
             else
             {
-                chart.Points = points;
+                if (chart.Tag is not int lastBoundSeed || lastBoundSeed != seed)
+                {
+                    chart.Points = MainWindow.CreateChromatogramPoints(seed);
+                    chart.Tag = seed;
+                }
+
                 chart.IsHitTestVisible = true;
                 ApplyChartSettings(chart);
             }
@@ -167,7 +177,8 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView, IGriddoCol
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
             IsHitTestVisible = true,
-            Points = MainWindow.CreateChromatogramPoints(seed)
+            Points = MainWindow.CreateChromatogramPoints(seed),
+            Tag = seed
         };
         ApplyChartSettings(chart);
         return chart;

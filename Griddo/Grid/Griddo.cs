@@ -159,6 +159,11 @@ public sealed partial class Griddo : FrameworkElement
     private int _visibleRowCount;
     private int _suspendGridCollectionChanged;
 
+    /// <summary>
+    /// Synthetic MouseDown from hosted-plot direct-edit relay bubbles to this element; when non-zero, ignore that re-entrant pass.
+    /// </summary>
+    private int _hostedDirectRelayDepth;
+
     public Griddo()
     {
         Focusable = true;

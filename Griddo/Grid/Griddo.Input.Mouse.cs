@@ -18,6 +18,12 @@ public sealed partial class Griddo
 
     protected override void OnMouseDown(MouseButtonEventArgs e)
     {
+        if (_hostedDirectRelayDepth > 0)
+        {
+            e.Handled = true;
+            return;
+        }
+
         Focus();
         Keyboard.Focus(this);
         _pendingHostedEditActivation = false;
@@ -381,7 +387,15 @@ public sealed partial class Griddo
             {
                 UpdateLayout();
                 hostForRightRelay.UpdateLayout();
-                hostedRightDirect.RelayDirectEditMouseDown(hostForRightRelay, e);
+                _hostedDirectRelayDepth++;
+                try
+                {
+                    hostedRightDirect.RelayDirectEditMouseDown(hostForRightRelay, e);
+                }
+                finally
+                {
+                    _hostedDirectRelayDepth--;
+                }
             }
 
             _isEditing = false;
@@ -454,7 +468,15 @@ public sealed partial class Griddo
                 {
                     UpdateLayout();
                     hostForRelay.UpdateLayout();
-                    hostedDirect.RelayDirectEditMouseDown(hostForRelay, e);
+                    _hostedDirectRelayDepth++;
+                    try
+                    {
+                        hostedDirect.RelayDirectEditMouseDown(hostForRelay, e);
+                    }
+                    finally
+                    {
+                        _hostedDirectRelayDepth--;
+                    }
                 }
 
                 InvalidateVisual();
