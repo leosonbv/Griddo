@@ -248,17 +248,16 @@ public partial class GridConfigurator : Window
             r => FormatFontSummary((ColumnEditRow)r),
             (r, v) =>
             {
-                if (!string.Equals(v?.ToString(), "...", StringComparison.Ordinal))
+                var row = (ColumnEditRow)r;
+                if (string.Equals(v?.ToString(), "...", StringComparison.Ordinal))
                 {
-                    return false;
+                    OpenFontEditor(ResolveTargetsForEdit(row));
+                    return true;
                 }
 
-                var baseRow = (ColumnEditRow)r;
-                var targets = ResolveTargetsForEdit(baseRow);
-                OpenFontEditor(targets);
-                return true;
+                return FontSummaryParser.TryApplyFontSummaryText(row, v?.ToString() ?? string.Empty);
             },
-            GriddoCellEditors.DialogLauncher));
+            new FontSummaryDialogCellEditor()));
         AddColumn(new GriddoColumnView(
             "Back color",
             130,
@@ -840,38 +839,17 @@ public partial class GridConfigurator : Window
                 return;
             }
 
-            var textBlock = content.Content as TextBlock;
-            if (textBlock is null)
+            // Match main grid painting (HTML, geometry, images) — TextBlock only showed literal markup / type names.
+            var needsPaintedPreview = content.Content is not PaintedValueSamplePresenter
+                || content.Tag is IGriddoHostedColumnView;
+            if (needsPaintedPreview)
             {
-                textBlock = new TextBlock
-                {
-                    VerticalAlignment = VerticalAlignment.Center,
-                    TextTrimming = TextTrimming.CharacterEllipsis
-                };
-                content.Content = textBlock;
+                content.Content = new PaintedValueSamplePresenter();
                 content.Tag = null;
             }
 
-            textBlock.Text = FormatSample(row);
-            textBlock.FontSize = row.FontSize > 0 ? row.FontSize : 12;
-            if (!string.IsNullOrWhiteSpace(row.FontFamilyName))
-            {
-                try
-                {
-                    textBlock.FontFamily = new FontFamily(row.FontFamilyName);
-                }
-                catch
-                {
-                    // Keep default font.
-                }
-            }
-
-            var normalizedStyle = NormalizeStyle(row.FontStyleName);
-            textBlock.FontStyle = normalizedStyle.Contains("italic", StringComparison.Ordinal) ? FontStyles.Italic : FontStyles.Normal;
-            textBlock.FontWeight = normalizedStyle.Contains("bold", StringComparison.Ordinal) ? FontWeights.Bold : FontWeights.Normal;
-            textBlock.TextDecorations = normalizedStyle.Contains("underline", StringComparison.Ordinal) ? TextDecorations.Underline : null;
-            textBlock.Foreground = TryBrush(row.ForegroundColor) ?? Brushes.Black;
-            content.Background = TryBrush(row.BackgroundColor);
+            content.Background = null;
+            ((PaintedValueSamplePresenter)content.Content).UpdateRow(row);
         }
 
         public bool IsHostInEditMode(FrameworkElement host)
@@ -900,6 +878,91 @@ public partial class GridConfigurator : Window
         {
             _ = host;
             _ = contentScale;
+        }
+
+        /// <summary>Renders the sample like <see cref="GriddoValuePainter"/> (HTML, Path geometry, images).</summary>
+        private sealed class PaintedValueSamplePresenter : FrameworkElement
+        {
+            private ColumnEditRow? _row;
+
+            public void UpdateRow(ColumnEditRow row)
+            {
+                _row = row;
+                InvalidateVisual();
+            }
+
+            protected override void OnRender(DrawingContext dc)
+            {
+                if (_row is null || ActualWidth <= 0 || ActualHeight <= 0)
+                {
+                    return;
+                }
+
+                var bounds = new Rect(0, 0, ActualWidth, ActualHeight);
+                if (TryBrush(_row.BackgroundColor) is { } bg)
+                {
+                    dc.DrawRectangle(bg, null, bounds);
+                }
+
+                object? rawValue = _row.SampleValue ?? _row.SampleDisplay;
+                var sourceCol = _row.SourceColumnView;
+                var columnIsHtml = sourceCol?.IsHtml ?? false;
+
+                object? checkboxRowContext = _row.SampleRowSource ?? _row;
+                if (sourceCol is IGriddoCheckboxToggleColumnView toggleCol
+                    && toggleCol.IsCheckboxCell(checkboxRowContext))
+                {
+                    object? boolRaw = _row.SampleRowSource is not null
+                        ? sourceCol.GetValue(_row.SampleRowSource)
+                        : rawValue;
+                    var isChecked = boolRaw is true;
+                    GriddoValuePainter.DrawBoolCheckbox(dc, isChecked, bounds, fontSize: _row.FontSize > 0 ? _row.FontSize : 12.0);
+                    return;
+                }
+
+                var isGraphicOrSizedImage = rawValue is ImageSource or Geometry or IGriddoSizedImageValue;
+                object? paintValue = columnIsHtml || isGraphicOrSizedImage
+                    ? rawValue
+                    : FormatSample(_row);
+
+                var typeface = ResolveTypeface(_row);
+                var fontSize = _row.FontSize > 0 ? _row.FontSize : 12.0;
+                var fg = TryBrush(_row.ForegroundColor) ?? Brushes.Black;
+                var normalizedStyle = NormalizeStyle(_row.FontStyleName);
+                var underline = normalizedStyle.Contains("underline", StringComparison.Ordinal);
+
+                var alignment = sourceCol?.ContentAlignment ?? TextAlignment.Left;
+                var vert = isGraphicOrSizedImage ? VerticalAlignment.Top : VerticalAlignment.Center;
+
+                GriddoValuePainter.Paint(
+                    dc,
+                    paintValue,
+                    bounds,
+                    typeface,
+                    fontSize,
+                    fg,
+                    underline,
+                    treatAsHtml: columnIsHtml,
+                    autoDetectHtml: !columnIsHtml,
+                    alignment,
+                    vert);
+            }
+
+            private static Typeface ResolveTypeface(ColumnEditRow row)
+            {
+                var familyName = string.IsNullOrWhiteSpace(row.FontFamilyName) ? "Segoe UI" : row.FontFamilyName.Trim();
+                var normalizedStyle = NormalizeStyle(row.FontStyleName);
+                var style = normalizedStyle.Contains("italic", StringComparison.Ordinal) ? FontStyles.Italic : FontStyles.Normal;
+                var weight = normalizedStyle.Contains("bold", StringComparison.Ordinal) ? FontWeights.Bold : FontWeights.Normal;
+                try
+                {
+                    return new Typeface(new FontFamily(familyName), style, weight, FontStretches.Normal);
+                }
+                catch
+                {
+                    return new Typeface(new FontFamily("Segoe UI"), style, weight, FontStretches.Normal);
+                }
+            }
         }
 
         private static Brush? TryBrush(string text)

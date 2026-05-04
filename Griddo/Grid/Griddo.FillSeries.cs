@@ -138,7 +138,7 @@ public sealed partial class Griddo
     {
         var sourceRow = rowList[0];
         var formatted = column.FormatValue(column.GetValue(Rows[sourceRow]));
-        if (!TryFindLastIntegerSpan(formatted, out var intStart, out var intEnd, out var baseLong))
+        if (!TryFindLastIntegerSpan(formatted, out var intStart, out var intEnd, out var baseLong, out var minMagDigitsFromSource))
         {
             return 0;
         }
@@ -176,7 +176,7 @@ public sealed partial class Griddo
         var written = 0;
         for (var i = 0; i < count; i++)
         {
-            var intText = FormatIncrementInteger(values[i], maxMagLen);
+            var intText = FormatIncrementInteger(values[i], maxMagLen, minMagDigitsFromSource);
             var newText = prefix + intText + suffix;
             if (!column.Editor.TryCommit(newText, out var parsed))
             {
@@ -208,40 +208,76 @@ public sealed partial class Griddo
         return a.ToString(CultureInfo.InvariantCulture).Length;
     }
 
-    private static string FormatIncrementInteger(long v, int paddedMagLen)
+    private static string FormatIncrementInteger(long v, int paddedMagLen, int minMagnitudeDigitsFromSource)
     {
+        var magLen = Math.Max(paddedMagLen, minMagnitudeDigitsFromSource);
         if (v < 0)
         {
             if (v == long.MinValue)
             {
-                return "-" + "9223372036854775808".PadLeft(paddedMagLen, '0');
+                return "-" + "9223372036854775808".PadLeft(magLen, '0');
             }
 
-            var mag = ((ulong)(-v)).ToString(CultureInfo.InvariantCulture).PadLeft(paddedMagLen, '0');
+            var mag = ((ulong)(-v)).ToString(CultureInfo.InvariantCulture).PadLeft(magLen, '0');
             return "-" + mag;
         }
 
-        return ((ulong)v).ToString(CultureInfo.InvariantCulture).PadLeft(paddedMagLen, '0');
+        return ((ulong)v).ToString(CultureInfo.InvariantCulture).PadLeft(magLen, '0');
     }
 
-    private static bool TryFindLastIntegerSpan(string s, out int start, out int end, out long value)
+    private static bool TryFindLastIntegerSpan(
+        string s,
+        out int start,
+        out int end,
+        out long value,
+        out int minMagnitudeDigitWidth)
     {
         start = 0;
         end = 0;
         value = 0;
+        minMagnitudeDigitWidth = 0;
         var matches = Regex.Matches(s, @"-?\d+");
-        if (matches.Count == 0)
+        for (var mi = matches.Count - 1; mi >= 0; mi--)
+        {
+            var m = matches[mi];
+            if (IsDigitMatchEmbeddedInHexColorLiteral(s, m))
+            {
+                continue;
+            }
+
+            var matchStr = m.Value;
+            var negative = matchStr.StartsWith('-');
+            minMagnitudeDigitWidth = negative ? matchStr.Length - 1 : matchStr.Length;
+            start = m.Index;
+            end = m.Index + m.Length;
+            if (long.TryParse(matchStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Skips digit runs inside <c>#RRGGBB</c> / <c>#RGB</c> literals so increment targets field numbers (e.g. font size), not color channels.</summary>
+    private static bool IsDigitMatchEmbeddedInHexColorLiteral(string s, Match m)
+    {
+        var hashIndex = s.LastIndexOf('#', m.Index);
+        if (hashIndex < 0)
         {
             return false;
         }
 
-        var m = matches[^1];
-        start = m.Index;
-        end = m.Index + m.Length;
-        return long.TryParse(
-            m.Value,
-            NumberStyles.Integer,
-            CultureInfo.InvariantCulture,
-            out value);
+        var i = hashIndex + 1;
+        while (i < s.Length && IsAsciiHexDigit(s[i]))
+        {
+            i++;
+        }
+
+        var hexRunEnd = i;
+        return m.Index > hashIndex && m.Index + m.Length <= hexRunEnd;
     }
+
+    private static bool IsAsciiHexDigit(char c) =>
+        c is >= '0' and <= '9' or >= 'A' and <= 'F' or >= 'a' and <= 'f';
 }

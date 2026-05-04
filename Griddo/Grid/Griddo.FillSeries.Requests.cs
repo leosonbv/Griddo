@@ -6,7 +6,7 @@ namespace Griddo.Grid;
 /// </summary>
 /// <remarks>
 /// <para><b>Fill down (Ctrl+D)</b> — copies <see cref="IGriddoColumnView.GetValue"/> from the lowest selected row in each column to all higher selected rows in that column. Hosted columns are skipped.</para>
-/// <para><b>Incremental down (Ctrl+I)</b> — same row ordering; finds the last <c>-?\d+</c> in the formatted top cell, adds 0,1,… per row, then left-pads magnitudes so every replacement has the same digit width.</para>
+/// <para><b>Incremental down (Ctrl+I)</b> — same row ordering; finds the last <c>-?\d+</c> in the formatted top cell (skipping digit runs inside <c>#RRGGBB</c>-style literals), adds 0,1,… per row, then left-pads magnitudes so replacements match both the series width and any leading zeros in the source span.</para>
 /// </remarks>
 internal static class GriddoFillSeriesRequests
 {
