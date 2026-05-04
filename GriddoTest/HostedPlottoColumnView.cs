@@ -11,7 +11,7 @@ using Griddo.Editing;
 
 namespace GriddoTest;
 
-public sealed class HostedPlottoColumnView : IGriddoHostedColumnView, IGriddoColumnSourceMember, IGriddoColumnSourceObject, IPlotColumnLayoutTarget
+public sealed class HostedPlottoColumnView : IGriddoHostedColumnView, IGriddoColumnSourceMember, IGriddoColumnSourceObject, IGriddoColumnDescriptionView, IPlotColumnLayoutTarget
 {
     private static bool _sharedEditorHooked;
     private readonly Func<object, int> _plottoSeedGetter;
@@ -33,6 +33,7 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView, IGriddoCol
     }
 
     public string Header { get; set; }
+    public string Description { get; set; } = string.Empty;
     public string TitleSelection { get; set; } = "Chromatogram";
     public string XAxis { get; set; } = string.Empty;
     public string YAxis { get; set; } = string.Empty;

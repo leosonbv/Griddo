@@ -6,7 +6,7 @@ using Griddo.Editing;
 namespace GriddoUi.ColumnEdit;
 
 /// <summary>Value column for <see cref="GeneralSettingRow"/> rows: unsigned int or bool (checkbox when bool).</summary>
-public sealed class GeneralSettingValueColumnView : IGriddoColumnView, IGriddoCheckboxToggleColumnView
+public sealed class GeneralSettingValueColumnView : IGriddoColumnView, IGriddoCheckboxToggleColumnView, IGriddoColumnDescriptionView
 {
     public GeneralSettingValueColumnView(string header = "Value", double width = 140)
     {
@@ -15,6 +15,7 @@ public sealed class GeneralSettingValueColumnView : IGriddoColumnView, IGriddoCh
     }
 
     public string Header { get; set; }
+    public string Description { get; set; } = string.Empty;
     public double Width { get; }
     public bool Fill { get; set; }
     public bool IsHtml => false;

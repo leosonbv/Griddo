@@ -893,6 +893,12 @@ public partial class MainWindow : Window
             options,
             registry,
             new HashSet<int>(byIndex.Keys));
+
+        if (IsConfiguratorInternalLayoutKey(layoutKey))
+        {
+            grid.ShowColumnHeaderSelectionColoring = false;
+            grid.ShowRowHeaderSelectionColoring = false;
+        }
     }
 
     private void ApplyPersistedPropertyViews()
@@ -1189,8 +1195,18 @@ public partial class MainWindow : Window
             ShowVerticalScrollBar = grid.ShowVerticalScrollBar,
             ImmediatePlottoEdit = grid.HostedPlotDirectEditOnMouseDown
         };
+        if (IsConfiguratorInternalLayoutKey(gridKey))
+        {
+            options.ShowRowSelectionColor = false;
+            options.ShowColSelectionColor = false;
+        }
+
         PersistGridLayout(grid, gridKey, rows, grid.FixedColumnCount, grid.FixedRowCount, options);
     }
+
+    private bool IsConfiguratorInternalLayoutKey(string layoutKey) =>
+        string.Equals(layoutKey, ConfigColumnsGridLayoutKey, StringComparison.Ordinal)
+        || string.Equals(layoutKey, ConfigGeneralGridLayoutKey, StringComparison.Ordinal);
 
     private string ResolveSourcePropertyName(ColumnEditRow row)
     {

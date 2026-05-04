@@ -11,7 +11,7 @@ using Griddo.Editing;
 
 namespace GriddoTest;
 
-public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView, IGriddoColumnSourceMember, IGriddoColumnSourceObject, IPlotColumnLayoutTarget
+public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView, IGriddoColumnSourceMember, IGriddoColumnSourceObject, IGriddoColumnDescriptionView, IPlotColumnLayoutTarget
 {
     private static bool _sharedEditorHooked;
     private readonly Func<object, int> _seedGetter;
@@ -33,6 +33,7 @@ public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView,
     }
 
     public string Header { get; set; }
+    public string Description { get; set; } = string.Empty;
     public string TitleSelection { get; set; } = "Calibration curve";
     public string XAxis { get; set; } = string.Empty;
     public string YAxis { get; set; } = string.Empty;

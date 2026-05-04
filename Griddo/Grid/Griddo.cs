@@ -158,6 +158,10 @@ public sealed partial class Griddo : FrameworkElement
     private bool _initialSampleAutoSizeScheduled;
     private int _visibleRowCount;
     private int _suspendGridCollectionChanged;
+    private readonly ToolTip _columnHeaderToolTip = new();
+    private bool _columnHeaderToolTipNeedsReattach;
+    private bool _priorPointerOnDescribedColumnHeader;
+    private int _columnHeaderToolTipClosedSuppress;
 
     /// <summary>
     /// Synthetic MouseDown from hosted-plot direct-edit relay bubbles to this element; when non-zero, ignore that re-entrant pass.
@@ -213,6 +217,11 @@ public sealed partial class Griddo : FrameworkElement
         Rows.CollectionChanged += OnGridCollectionChanged;
         Columns.CollectionChanged += OnGridCollectionChanged;
         UpdateRowHeaderWidth();
+        _columnHeaderToolTip.HasDropShadow = false;
+        _columnHeaderToolTip.BorderThickness = new Thickness(0);
+        _columnHeaderToolTip.Closed += ColumnHeaderToolTipOnClosed;
+        ToolTip = _columnHeaderToolTip;
+        ToolTipService.SetBetweenShowDelay(this, 0);
         Loaded += OnLoadedRequestFocus;
         IsVisibleChanged += OnIsVisibleChangedRequestFocus;
     }

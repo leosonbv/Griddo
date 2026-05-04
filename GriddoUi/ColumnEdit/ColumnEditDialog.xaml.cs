@@ -232,7 +232,10 @@ public partial class GridConfigurator : Window
                 return false;
             },
             GriddoCellEditors.Number,
-            TextAlignment.Right));
+            TextAlignment.Right)
+        {
+            FormatString = "F0"
+        });
         AddColumn(new GriddoColumnView(
             "Font",
             220,
@@ -767,7 +770,7 @@ public partial class GridConfigurator : Window
         return $"#{c.R:X2}{c.G:X2}{c.B:X2}";
     }
 
-    private sealed class ReadonlyColumn : IGriddoColumnView
+    private sealed class ReadonlyColumn : IGriddoColumnView, IGriddoColumnDescriptionView
     {
         private readonly Func<ColumnEditRow, object?> _get;
 
@@ -779,6 +782,7 @@ public partial class GridConfigurator : Window
         }
 
         public string Header { get; set; }
+        public string Description { get; set; } = string.Empty;
         public double Width { get; }
         public bool Fill { get; set; }
         public bool IsHtml => false;
@@ -792,9 +796,10 @@ public partial class GridConfigurator : Window
         public string FormatValue(object? value) => value?.ToString() ?? string.Empty;
     }
 
-    private sealed class ValuePreviewColumn(string header, double width) : IGriddoColumnView, IGriddoHostedColumnView
+    private sealed class ValuePreviewColumn(string header, double width) : IGriddoColumnView, IGriddoHostedColumnView, IGriddoColumnDescriptionView
     {
         public string Header { get; set; } = header;
+        public string Description { get; set; } = string.Empty;
         public double Width { get; } = width;
         public bool Fill { get; set; }
         public bool IsHtml => false;

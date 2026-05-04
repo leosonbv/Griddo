@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Griddo.Columns;
 using Griddo.Editing;
 using Griddo.Primitives;
@@ -983,7 +984,8 @@ public sealed partial class Griddo
     protected override void OnToolTipOpening(ToolTipEventArgs e)
     {
         UpdateColumnHeaderTooltip(Mouse.GetPosition(this));
-        if (ToolTip is null)
+        if (ReferenceEquals(ToolTip, _columnHeaderToolTip)
+            && IsEmptyColumnHeaderToolTipContent(_columnHeaderToolTip.Content))
         {
             e.Handled = true;
         }
@@ -991,22 +993,150 @@ public sealed partial class Griddo
         base.OnToolTipOpening(e);
     }
 
-    private void UpdateColumnHeaderTooltip(Point pointer)
+    protected override void OnMouseLeave(MouseEventArgs e)
     {
-        var headerCol = HitTestColumnHeader(pointer);
-        if (headerCol >= 0
-            && headerCol < Columns.Count
-            && Columns[headerCol] is IGriddoColumnDescriptionView descriptionView
-            && !string.IsNullOrWhiteSpace(descriptionView.Description))
+        // Pointer left the grid; allow the next header hover to run a fresh ToolTip attach cycle.
+        // Do not reset while the column-header tooltip is open — the pointer often leaves the grid to read the popup.
+        if (ReferenceEquals(ToolTip, _columnHeaderToolTip) && !_columnHeaderToolTip.IsOpen)
         {
-            ToolTip = descriptionView.Description;
+            ClearColumnHeaderToolTipContent();
+            _columnHeaderToolTipNeedsReattach = true;
+            _priorPointerOnDescribedColumnHeader = false;
+        }
+
+        base.OnMouseLeave(e);
+    }
+
+    private void ColumnHeaderToolTipOnClosed(object sender, RoutedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        if (_columnHeaderToolTipClosedSuppress > 0)
+        {
             return;
         }
 
-        if (ToolTip is string)
+        _columnHeaderToolTipNeedsReattach = true;
+        _priorPointerOnDescribedColumnHeader = false;
+        if (ReferenceEquals(ToolTip, _columnHeaderToolTip))
         {
-            ToolTip = null;
+            _columnHeaderToolTip.Content = null;
         }
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, RefreshColumnHeaderTooltipIfApplicable);
+    }
+
+    private void RefreshColumnHeaderTooltipIfApplicable()
+    {
+        if (!IsLoaded || !IsVisible || !ReferenceEquals(ToolTip, _columnHeaderToolTip))
+        {
+            return;
+        }
+
+        UpdateColumnHeaderTooltip(Mouse.GetPosition(this));
+    }
+
+    private void UpdateColumnHeaderTooltip(Point pointer)
+    {
+        if (!ReferenceEquals(ToolTip, _columnHeaderToolTip))
+        {
+            return;
+        }
+
+        var headerCol = HitTestColumnHeader(pointer);
+        var inStrip = headerCol >= 0 && headerCol < Columns.Count;
+        if (inStrip && TryGetColumnHeaderDescription(Columns[headerCol], out var text))
+        {
+            // Reattach when (a) tooltip service asked for it after close, or (b) pointer re-enters a described
+            // header from body / undescribed header — WPF will not reopen on the same attach after leaving the strip
+            // if we only rely on ToolTip.Closed (it may not run when IsOpen is cleared from mouse moves).
+            if (!_priorPointerOnDescribedColumnHeader || _columnHeaderToolTipNeedsReattach)
+            {
+                _columnHeaderToolTipClosedSuppress++;
+                try
+                {
+                    ToolTip = null;
+                    ToolTip = _columnHeaderToolTip;
+                }
+                finally
+                {
+                    _columnHeaderToolTipClosedSuppress--;
+                }
+
+                _columnHeaderToolTipNeedsReattach = false;
+            }
+
+            _priorPointerOnDescribedColumnHeader = true;
+            ApplyColumnHeaderToolTipText(text);
+            return;
+        }
+
+        _priorPointerOnDescribedColumnHeader = false;
+
+        if (inStrip)
+        {
+            if (_columnHeaderToolTip.IsOpen)
+            {
+                _columnHeaderToolTip.IsOpen = false;
+            }
+
+            ClearColumnHeaderToolTipContent();
+            _columnHeaderToolTipNeedsReattach = true;
+            return;
+        }
+
+        if (_columnHeaderToolTip.IsOpen)
+        {
+            _columnHeaderToolTip.IsOpen = false;
+        }
+
+        ClearColumnHeaderToolTipContent();
+        _columnHeaderToolTipNeedsReattach = true;
+    }
+
+    private void ApplyColumnHeaderToolTipText(string text)
+    {
+        if (_columnHeaderToolTip.Content is TextBlock tb)
+        {
+            tb.Text = text;
+            return;
+        }
+
+        _columnHeaderToolTip.Content = new TextBlock
+        {
+            Text = text,
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 480,
+            Focusable = false,
+            Foreground = SystemColors.InfoTextBrush
+        };
+    }
+
+    private void ClearColumnHeaderToolTipContent()
+    {
+        _columnHeaderToolTip.Content = null;
+    }
+
+    private static bool IsEmptyColumnHeaderToolTipContent(object? content) =>
+        content switch
+        {
+            null => true,
+            string s => string.IsNullOrWhiteSpace(s),
+            TextBlock tb => string.IsNullOrWhiteSpace(tb.Text),
+            _ => false
+        };
+
+    private static bool TryGetColumnHeaderDescription(IGriddoColumnView column, out string text)
+    {
+        if (column is IGriddoColumnDescriptionView descriptionView
+            && !string.IsNullOrWhiteSpace(descriptionView.Description))
+        {
+            text = descriptionView.Description.Trim();
+            return true;
+        }
+
+        text = string.Empty;
+        return false;
     }
 
     // -------------------------------------------------------------------------

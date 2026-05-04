@@ -55,6 +55,8 @@
                 <grid:Griddo
                     x:Name="ColumnGrid"
                     Margin="0"
+                    ShowColumnHeaderSelectionColoring="False"
+                    ShowRowHeaderSelectionColoring="False"
                     UniformRowHeight="26" />
             </TabItem>
             <TabItem Header="General settings">
@@ -62,6 +64,8 @@
                     x:Name="GeneralPropertyGrid"
                     Margin="8,6"
                     MinHeight="220"
+                    ShowColumnHeaderSelectionColoring="False"
+                    ShowRowHeaderSelectionColoring="False"
                     UniformRowHeight="26" />
             </TabItem>
         </TabControl>
