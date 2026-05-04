@@ -524,6 +524,13 @@ public sealed partial class Griddo
 
                     _pendingHostedEditActivation = true;
                     _pendingHostedEditCell = clicked;
+                    _dragAnchorCell = clicked;
+                    _dragCurrentCell = clicked;
+                    _isDraggingSelection = true;
+                    CaptureMouse();
+                    InvalidateVisual();
+                    CompleteMouseDown(e, handled: true);
+                    return;
                 }
                 else if (IsCheckboxToggleCell(clicked))
                 {

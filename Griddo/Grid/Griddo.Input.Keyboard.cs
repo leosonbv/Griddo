@@ -1,4 +1,6 @@
+using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;
 using Griddo.Columns;
 using Griddo.Primitives;
 
@@ -87,10 +89,36 @@ public sealed partial class Griddo
         }
         else if (IsCurrentHostedCellInEditMode())
         {
+            if (e.NewFocus is DependencyObject newFocus
+                && TryGetHostedElement(_currentCell) is FrameworkElement host
+                && (ReferenceEquals(newFocus, host) || IsVisualDescendantOf(newFocus, host)))
+            {
+                base.OnLostKeyboardFocus(e);
+                return;
+            }
+
             SetCurrentHostedCellEditMode(false);
         }
 
         base.OnLostKeyboardFocus(e);
+    }
+
+    private static bool IsVisualDescendantOf(DependencyObject? node, DependencyObject ancestor)
+    {
+        if (node is null)
+        {
+            return false;
+        }
+
+        for (var d = node; d is not null; d = VisualTreeHelper.GetParent(d))
+        {
+            if (ReferenceEquals(d, ancestor))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // -------------------------------------------------------------------------
