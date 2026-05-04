@@ -10,6 +10,7 @@ public enum GeneralSettingKind
     ShowSortingIndicators,
     ShowHorizontalScrollBar,
     ShowVerticalScrollBar,
+    TransposeLayout,
     ShowSelectionColor,
     ShowRowSelectionColor,
     ShowColSelectionColor,

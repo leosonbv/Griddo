@@ -12,6 +12,7 @@ public sealed class ColumnChooserGeneralOptions
     public bool ShowSortingIndicators { get; set; } = true;
     public bool ShowHorizontalScrollBar { get; set; } = true;
     public bool ShowVerticalScrollBar { get; set; } = true;
+    public bool IsTransposed { get; set; }
     public bool ImmediatePlottoEdit { get; set; }
 
     public ColumnChooserGeneralOptions Clone() => new()
@@ -26,6 +27,7 @@ public sealed class ColumnChooserGeneralOptions
         ShowSortingIndicators = ShowSortingIndicators,
         ShowHorizontalScrollBar = ShowHorizontalScrollBar,
         ShowVerticalScrollBar = ShowVerticalScrollBar,
+        IsTransposed = IsTransposed,
         ImmediatePlottoEdit = ImmediatePlottoEdit
     };
 }

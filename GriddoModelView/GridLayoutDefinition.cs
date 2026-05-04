@@ -15,6 +15,7 @@ public sealed class GridLayoutDefinition
     public bool ShowSortingIndicators { get; set; } = true;
     public bool ShowHorizontalScrollBar { get; set; } = true;
     public bool ShowVerticalScrollBar { get; set; } = true;
+    public bool IsTransposed { get; set; }
     public bool ImmediatePlottoEdit { get; set; }
     public List<GridColumnLayoutDefinition> Columns { get; set; } = [];
     public List<GridPlotColumnLayoutDefinition> PlotColumns { get; set; } = [];

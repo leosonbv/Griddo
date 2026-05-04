@@ -111,6 +111,7 @@ public sealed partial class Griddo : FrameworkElement
     private double _resizeInitialSize;
     private double _resizePreserveOldRowHeight;
     private double _resizePreserveOldVerticalOffset;
+    private double _resizePreserveOldHorizontalOffset;
     private bool _isTrackingColumnMove;
     private bool _isMovingColumn;
     private bool _isMovingPointerInColumnHeader;
@@ -325,6 +326,30 @@ public sealed partial class Griddo : FrameworkElement
             _visibleRowCount = clamped;
             InvalidateMeasure();
             InvalidateVisual();
+        }
+    }
+
+    private bool _isTransposed;
+
+    /// <summary>
+    /// When true, logical rows extend horizontally and logical columns vertically (row headers on top, column headers on the left).
+    /// Horizontal scroll follows rows; vertical scroll follows columns.
+    /// </summary>
+    public bool IsTransposed
+    {
+        get => _isTransposed;
+        set
+        {
+            if (_isTransposed == value)
+            {
+                return;
+            }
+
+            _isTransposed = value;
+            UpdateScrollBars();
+            InvalidateMeasure();
+            InvalidateVisual();
+            RefreshHostedCells();
         }
     }
 

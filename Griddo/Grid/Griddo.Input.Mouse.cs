@@ -704,6 +704,7 @@ public sealed partial class Griddo
         ExitFillRowsUsingCurrentDisplayedRowHeight();
         _resizePreserveOldRowHeight = GetRowHeight(dividerRow);
         _resizePreserveOldVerticalOffset = _verticalOffset;
+        _resizePreserveOldHorizontalOffset = _horizontalOffset;
         _resizeStartPoint = pointer;
         _resizeInitialSize = GetRowHeight(dividerRow);
         CaptureMouse();
@@ -821,7 +822,7 @@ public sealed partial class Griddo
 
         if (_isResizingColumn)
         {
-            var delta = pointer.X - _resizeStartPoint.X;
+            var delta = IsBodyTransposed ? pointer.Y - _resizeStartPoint.Y : pointer.X - _resizeStartPoint.X;
             SetColumnWidth(_resizingColumnIndex, _resizeInitialSize + delta);
             InvalidateVisual();
             e.Handled = true;
@@ -831,8 +832,18 @@ public sealed partial class Griddo
 
         if (_isResizingRow)
         {
-            var bodyPy = pointer.Y - ScaledColumnHeaderHeight;
-            var requestedHeight = GetUniformRowHeightScreenFromDividerBodyY(_resizingRowIndex, bodyPy);
+            double requestedHeight;
+            if (IsBodyTransposed)
+            {
+                var bodyPx = pointer.X - _rowHeaderWidth;
+                requestedHeight = GetUniformRowHeightScreenFromDividerBodyX(_resizingRowIndex, bodyPx);
+            }
+            else
+            {
+                var bodyPy = pointer.Y - ScaledColumnHeaderHeight;
+                requestedHeight = GetUniformRowHeightScreenFromDividerBodyY(_resizingRowIndex, bodyPy);
+            }
+
             SetRowHeightKeepingRowTop(_resizingRowIndex, requestedHeight);
             InvalidateVisual();
             e.Handled = true;
@@ -1395,7 +1406,7 @@ public sealed partial class Griddo
                 ApplyInteractiveRowResizeScrollPreservation(
                     savedDivider,
                     _resizePreserveOldRowHeight,
-                    _resizePreserveOldVerticalOffset);
+                    IsBodyTransposed ? _resizePreserveOldHorizontalOffset : _resizePreserveOldVerticalOffset);
             }
 
             if (!_isDraggingSelection && IsMouseCaptured)
@@ -1559,6 +1570,21 @@ public sealed partial class Griddo
     {
         if (e.Handled)
         {
+            base.OnMouseWheel(e);
+            return;
+        }
+
+        if (IsBodyTransposed)
+        {
+            if (_verticalScrollBar.Maximum <= 1e-6)
+            {
+                base.OnMouseWheel(e);
+                return;
+            }
+
+            var step = e.Delta > 0 ? -48 : 48;
+            SetVerticalOffset(_verticalOffset + step);
+            e.Handled = true;
             base.OnMouseWheel(e);
             return;
         }

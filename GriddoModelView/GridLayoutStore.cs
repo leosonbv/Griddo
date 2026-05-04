@@ -85,6 +85,7 @@ public sealed class GridLayoutStore
         ShowSortingIndicators = source.ShowSortingIndicators,
         ShowHorizontalScrollBar = source.ShowHorizontalScrollBar,
         ShowVerticalScrollBar = source.ShowVerticalScrollBar,
+        IsTransposed = source.IsTransposed,
         ImmediatePlottoEdit = source.ImmediatePlottoEdit,
         Columns = source.Columns.Select(static c => new GridColumnLayoutDefinition
         {

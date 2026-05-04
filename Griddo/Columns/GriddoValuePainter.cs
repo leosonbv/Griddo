@@ -244,6 +244,43 @@ public static class GriddoValuePainter
         return formatted.WidthIncludingTrailingWhitespace;
     }
 
+    /// <summary>Vertical counterpart to <see cref="MeasureRenderedWidth"/> (transpose column auto-size, etc.).</summary>
+    public static double MeasureRenderedHeight(
+        object? value,
+        Typeface typeface,
+        double fontSize,
+        bool treatAsHtml = false)
+    {
+        if (value is IGriddoSizedImageValue sizedImageValue)
+        {
+            value = sizedImageValue.GetImage(new Size(120, 24));
+        }
+
+        if (value is ImageSource imageSource)
+        {
+            return imageSource.Height;
+        }
+
+        if (value is Geometry geometry)
+        {
+            return geometry.Bounds.Height;
+        }
+
+        var text = value?.ToString() ?? string.Empty;
+        var formatted = (treatAsHtml || LooksLikeHtml(text))
+            ? BuildHtmlFormattedText(text, typeface, fontSize, Brushes.Black)
+            : new FormattedText(
+                text,
+                CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                typeface,
+                fontSize,
+                Brushes.Black,
+                1.0);
+
+        return formatted.Height;
+    }
+
     private static bool LooksLikeHtml(string value)
         => value.Contains('<') && value.Contains('>');
 

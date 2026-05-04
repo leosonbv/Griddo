@@ -55,15 +55,31 @@ public sealed partial class Griddo
             }
         }
 
-        if (_fixedColumnCount > 0 && Columns.Count > 0)
+        if (IsBodyTransposed)
         {
-            AddHostedInColumnRange(0, Math.Min(_fixedColumnCount, Columns.Count) - 1);
+            ForEachVisibleScrollRowForTranspose(row =>
+            {
+                ForEachVisibleColumnForTranspose(col =>
+                {
+                    if (Columns[col] is IGriddoHostedColumnView)
+                    {
+                        needed.Add(new GriddoCellAddress(row, col));
+                    }
+                });
+            });
         }
-
-        GetVisibleScrollColumnRange(out var scrollStart, out var scrollEnd, out _);
-        if (scrollEnd >= scrollStart)
+        else
         {
-            AddHostedInColumnRange(scrollStart, scrollEnd);
+            if (_fixedColumnCount > 0 && Columns.Count > 0)
+            {
+                AddHostedInColumnRange(0, Math.Min(_fixedColumnCount, Columns.Count) - 1);
+            }
+
+            GetVisibleScrollColumnRange(out var scrollStart, out var scrollEnd, out _);
+            if (scrollEnd >= scrollStart)
+            {
+                AddHostedInColumnRange(scrollStart, scrollEnd);
+            }
         }
 
         if (needed.Count == 0)
@@ -133,6 +149,18 @@ public sealed partial class Griddo
     /// </summary>
     private Rect GetColumnBodyBandClipRect(int columnIndex)
     {
+        if (IsBodyTransposed)
+        {
+            var fixedH = Math.Min(GetFixedColumnsWidth(), _viewportBodyHeight);
+            if (columnIndex < _fixedColumnCount)
+            {
+                return new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, _viewportBodyWidth, fixedH);
+            }
+
+            var scrollH = Math.Max(0, _viewportBodyHeight - fixedH);
+            return new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight + fixedH, _viewportBodyWidth, scrollH);
+        }
+
         var fixedW = GetFixedColumnsWidth();
         var scrollLeft = _rowHeaderWidth + fixedW;
 
@@ -148,6 +176,71 @@ public sealed partial class Griddo
 
     private void UpdateHostCanvasClips()
     {
+        if (IsBodyTransposed)
+        {
+            var bodyW = _viewportBodyWidth;
+            var bodyH = _viewportBodyHeight;
+            var fixedRowsW = GetTransposeFixedRowsWidth();
+            var fixedColsH = GetFixedColumnsWidth();
+            var fh = Math.Min(fixedColsH, bodyH);
+            var fixedRowsClipW = Math.Min(fixedRowsW, bodyW);
+            var scrollW = Math.Max(0, bodyW - fixedRowsW);
+            var scrollH = Math.Max(0, bodyH - fh);
+            var belowFrozen = Math.Max(0, bodyH - fh);
+
+            // Fixed-column hosts: union of top-left (frozen×frozen) and top-right (scroll rows × frozen cols).
+            if (fh > 1e-6)
+            {
+                if (fixedRowsClipW > 1e-6 && scrollW > 1e-6)
+                {
+                    var gTopLeft = new RectangleGeometry(new Rect(0, 0, fixedRowsClipW, fh));
+                    var gTopRight = new RectangleGeometry(new Rect(fixedRowsW, 0, scrollW, fh));
+                    _fixedHostCanvas.Clip = new CombinedGeometry(GeometryCombineMode.Union, gTopLeft, gTopRight);
+                }
+                else if (fixedRowsClipW > 1e-6)
+                {
+                    _fixedHostCanvas.Clip = new RectangleGeometry(new Rect(0, 0, fixedRowsClipW, fh));
+                }
+                else
+                {
+                    _fixedHostCanvas.Clip = new RectangleGeometry(new Rect(fixedRowsW, 0, scrollW, fh));
+                }
+            }
+            else
+            {
+                _fixedHostCanvas.Clip = null;
+            }
+
+            // Scroll-column hosts: union of left strip (frozen rows × scroll cols) and bottom-right (scroll×scroll).
+            if (belowFrozen > 1e-6)
+            {
+                if (fixedRowsClipW > 1e-6 && scrollW > 1e-6 && scrollH > 1e-6)
+                {
+                    var gLeft = new RectangleGeometry(new Rect(0, fh, fixedRowsClipW, belowFrozen));
+                    var gRight = new RectangleGeometry(new Rect(fixedRowsW, fh, scrollW, scrollH));
+                    _scrollHostCanvas.Clip = new CombinedGeometry(GeometryCombineMode.Union, gLeft, gRight);
+                }
+                else if (fixedRowsClipW > 1e-6)
+                {
+                    _scrollHostCanvas.Clip = new RectangleGeometry(new Rect(0, fh, fixedRowsClipW, belowFrozen));
+                }
+                else if (scrollW > 1e-6 && scrollH > 1e-6)
+                {
+                    _scrollHostCanvas.Clip = new RectangleGeometry(new Rect(fixedRowsW, fh, scrollW, scrollH));
+                }
+                else
+                {
+                    _scrollHostCanvas.Clip = null;
+                }
+            }
+            else
+            {
+                _scrollHostCanvas.Clip = null;
+            }
+
+            return;
+        }
+
         var fixedW = GetFixedColumnsWidth();
         var fw = Math.Min(fixedW, _viewportBodyWidth);
         var sw = Math.Max(0, _viewportBodyWidth - fixedW);

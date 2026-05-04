@@ -39,6 +39,11 @@ public sealed partial class Griddo
     /// </summary>
     private double HarmonizeVerticalScrollOffset(double offsetPx)
     {
+        if (_isTransposed)
+        {
+            return Math.Clamp(offsetPx, 0, _verticalScrollBar.Maximum);
+        }
+
         if (_visibleRowCount <= 0 || Rows.Count == 0 || _viewportBodyHeight <= 0)
         {
             return Math.Clamp(offsetPx, 0, _verticalScrollBar.Maximum);
@@ -59,21 +64,55 @@ public sealed partial class Griddo
 
     private void UpdateScrollBars()
     {
-        var scrollViewport = GetScrollViewportWidth();
-        var scrollContent = GetScrollableContentWidth();
-        var scrollRowsViewport = GetScrollRowsViewportHeight();
-        var scrollRowsContent = GetScrollableRowsContentHeight();
-        var maxHorizontal = Math.Max(0, scrollContent - scrollViewport);
-        var rawMaxVertical = Math.Max(0, scrollRowsContent - scrollRowsViewport);
-        var maxVertical = GetAlignedMaxVerticalScrollForSlider(rawMaxVertical);
+        double maxHorizontal;
+        double maxVertical;
+        double horizontalLargeChange;
+        double verticalLargeChange;
+        double verticalSmallChange;
 
-        _horizontalScrollBar.LargeChange = Math.Max(1, _viewportBodyWidth);
+        if (IsBodyTransposed)
+        {
+            var fixedRowsW = GetTransposeFixedRowsWidth();
+            var scrollRowsViewport = Math.Max(0, _viewportBodyWidth - fixedRowsW);
+            var h = Rows.Count > 0 ? GetRowHeight(0) : MinRowHeight * ContentScale;
+            var fr = GetEffectiveFixedRowCount();
+            var scrollRowsContent = Math.Max(0, Rows.Count - fr) * h;
+            maxHorizontal = Math.Max(0, scrollRowsContent - scrollRowsViewport);
+
+            var fixedColsH = GetFixedColumnsWidth();
+            var scrollColsViewport = Math.Max(0, _viewportBodyHeight - fixedColsH);
+            var scrollColsContent = 0.0;
+            for (var c = _fixedColumnCount; c < Columns.Count; c++)
+            {
+                scrollColsContent += GetColumnWidth(c);
+            }
+
+            maxVertical = Math.Max(0, scrollColsContent - scrollColsViewport);
+            horizontalLargeChange = Math.Max(1, scrollRowsViewport);
+            verticalLargeChange = Math.Max(1, scrollColsViewport);
+            verticalSmallChange = 16;
+        }
+        else
+        {
+            var scrollViewport = GetScrollViewportWidth();
+            var scrollContent = GetScrollableContentWidth();
+            var scrollRowsViewport = GetScrollRowsViewportHeight();
+            var scrollRowsContent = GetScrollableRowsContentHeight();
+            maxHorizontal = Math.Max(0, scrollContent - scrollViewport);
+            var rawMaxVertical = Math.Max(0, scrollRowsContent - scrollRowsViewport);
+            maxVertical = GetAlignedMaxVerticalScrollForSlider(rawMaxVertical);
+            horizontalLargeChange = Math.Max(1, _viewportBodyWidth);
+            verticalLargeChange = Math.Max(1, scrollRowsViewport);
+            verticalSmallChange = Math.Max(1, GetRowHeight(0));
+        }
+
+        _horizontalScrollBar.LargeChange = horizontalLargeChange;
         _horizontalScrollBar.SmallChange = 16;
         _horizontalScrollBar.Maximum = maxHorizontal;
         _horizontalScrollBar.Visibility = ShowHorizontalScrollBar ? Visibility.Visible : Visibility.Collapsed;
 
-        _verticalScrollBar.LargeChange = Math.Max(1, scrollRowsViewport);
-        _verticalScrollBar.SmallChange = Math.Max(1, GetRowHeight(0));
+        _verticalScrollBar.LargeChange = verticalLargeChange;
+        _verticalScrollBar.SmallChange = verticalSmallChange;
         _verticalScrollBar.Maximum = maxVertical;
         _verticalScrollBar.Visibility = ShowVerticalScrollBar ? Visibility.Visible : Visibility.Collapsed;
 
@@ -85,6 +124,11 @@ public sealed partial class Griddo
     /// <summary>After viewport/row height changes, re-align scroll offset to whole rows so the scroll band starts on a row boundary.</summary>
     private void SnapVerticalScrollForVisibleRowFitMode()
     {
+        if (_isTransposed)
+        {
+            return;
+        }
+
         if (_visibleRowCount <= 0 || Rows.Count == 0 || _viewportBodyHeight <= 0)
         {
             return;

@@ -796,6 +796,7 @@ public partial class MainWindow : Window
             ShowSortingIndicators = grid.ShowSortingIndicators,
             ShowHorizontalScrollBar = grid.ShowHorizontalScrollBar,
             ShowVerticalScrollBar = grid.ShowVerticalScrollBar,
+            IsTransposed = grid.IsTransposed,
             ImmediatePlottoEdit = grid.HostedPlotDirectEditOnMouseDown
         };
 
@@ -882,6 +883,7 @@ public partial class MainWindow : Window
             ShowSortingIndicators = layout.ShowSortingIndicators,
             ShowHorizontalScrollBar = layout.ShowHorizontalScrollBar,
             ShowVerticalScrollBar = layout.ShowVerticalScrollBar,
+            IsTransposed = layout.IsTransposed,
             ImmediatePlottoEdit = layout.ImmediatePlottoEdit
         };
 
@@ -1085,6 +1087,7 @@ public partial class MainWindow : Window
             ShowSortingIndicators = layout.ShowSortingIndicators,
             ShowHorizontalScrollBar = layout.ShowHorizontalScrollBar,
             ShowVerticalScrollBar = layout.ShowVerticalScrollBar,
+            IsTransposed = layout.IsTransposed,
             ImmediatePlottoEdit = layout.ImmediatePlottoEdit
         };
         ColumnChooserGridApplier.Apply(
@@ -1120,6 +1123,7 @@ public partial class MainWindow : Window
             ShowSortingIndicators = options.ShowSortingIndicators,
             ShowHorizontalScrollBar = options.ShowHorizontalScrollBar,
             ShowVerticalScrollBar = options.ShowVerticalScrollBar,
+            IsTransposed = options.IsTransposed,
             ImmediatePlottoEdit = options.ImmediatePlottoEdit,
             Columns = rows.Select(r => new GridColumnLayoutDefinition
             {
@@ -1193,6 +1197,7 @@ public partial class MainWindow : Window
             ShowSortingIndicators = grid.ShowSortingIndicators,
             ShowHorizontalScrollBar = grid.ShowHorizontalScrollBar,
             ShowVerticalScrollBar = grid.ShowVerticalScrollBar,
+            IsTransposed = grid.IsTransposed,
             ImmediatePlottoEdit = grid.HostedPlotDirectEditOnMouseDown
         };
         if (IsConfiguratorInternalLayoutKey(gridKey))

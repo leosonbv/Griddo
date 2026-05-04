@@ -121,6 +121,12 @@ public partial class GridConfigurator : Window
                 boolValue: options.ShowVerticalScrollBar));
         GeneralPropertyGrid.Rows.Add(
             new GeneralSettingRow(
+                GeneralSettingKind.TransposeLayout,
+                GeneralSettingValueKind.Boolean,
+                "Transpose (rows horizontal, columns vertical)",
+                boolValue: options.IsTransposed));
+        GeneralPropertyGrid.Rows.Add(
+            new GeneralSettingRow(
                 GeneralSettingKind.ShowSelectionColor,
                 GeneralSettingValueKind.Boolean,
                 "Show selection color",
@@ -552,6 +558,7 @@ public partial class GridConfigurator : Window
             ShowSortingIndicators = GeneralRow(GeneralSettingKind.ShowSortingIndicators)?.BoolValue ?? true,
             ShowHorizontalScrollBar = GeneralRow(GeneralSettingKind.ShowHorizontalScrollBar)?.BoolValue ?? true,
             ShowVerticalScrollBar = GeneralRow(GeneralSettingKind.ShowVerticalScrollBar)?.BoolValue ?? true,
+            IsTransposed = GeneralRow(GeneralSettingKind.TransposeLayout)?.BoolValue ?? false,
             ImmediatePlottoEdit = GeneralRow(GeneralSettingKind.ImmediatePlottoEdit)?.BoolValue ?? false
         };
     }

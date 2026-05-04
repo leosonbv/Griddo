@@ -172,6 +172,7 @@ public static class ColumnChooserGridApplier
             grid.ShowSortingIndicators = generalOptions.ShowSortingIndicators;
             grid.ShowHorizontalScrollBar = generalOptions.ShowHorizontalScrollBar;
             grid.ShowVerticalScrollBar = generalOptions.ShowVerticalScrollBar;
+            grid.IsTransposed = generalOptions.IsTransposed;
             // "Immediate edit" is Plotto/hosted-columns only.
             grid.ImmediateCellEditOnSingleClick = false;
             grid.HostedPlotDirectEditOnMouseDown = generalOptions.ImmediatePlottoEdit;

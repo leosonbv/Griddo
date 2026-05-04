@@ -111,7 +111,15 @@ public sealed partial class Griddo
         Typeface typeface)
     {
         var colWidth = GetColumnWidth(col);
-        var rect = new Rect(x, y, colWidth, rowHeight);
+        var cellW = colWidth;
+        var cellH = rowHeight;
+        if (IsBodyTransposed)
+        {
+            cellW = GetRowHeight(row);
+            cellH = colWidth;
+        }
+
+        var rect = new Rect(x, y, cellW, cellH);
         var address = new GriddoCellAddress(row, col);
 
         var cellView = ResolveCellPropertyView(rowData, col);
@@ -132,11 +140,19 @@ public sealed partial class Griddo
         }
 
         dc.DrawRectangle(null, new Pen(GridLineBrush, GridPenThickness), rect);
-        if (_fixedColumnCount > 0 && col == _fixedColumnCount - 1)
+        if (!IsBodyTransposed && _fixedColumnCount > 0 && col == _fixedColumnCount - 1)
         {
             dc.DrawLine(
                 new Pen(FixedColumnRightBorderBrush, GridPenThickness),
                 new Point(rect.Right, rect.Top),
+                new Point(rect.Right, rect.Bottom));
+        }
+
+        if (IsBodyTransposed && _fixedColumnCount > 0 && col == _fixedColumnCount - 1)
+        {
+            dc.DrawLine(
+                new Pen(FixedColumnRightBorderBrush, GridPenThickness),
+                new Point(rect.Left, rect.Bottom),
                 new Point(rect.Right, rect.Bottom));
         }
 
@@ -410,6 +426,12 @@ public sealed partial class Griddo
 
     private void DrawHeaders(DrawingContext dc)
     {
+        if (IsBodyTransposed)
+        {
+            DrawHeadersTransposed(dc);
+            return;
+        }
+
         // Fixed top-left corner header cell (row-header column title area). Outer top/left strokes live in DrawOuterWorksheetFrame only.
         var cornerRect = new Rect(0, 0, _rowHeaderWidth, ScaledColumnHeaderHeight);
         dc.DrawRectangle(HeaderBackground, null, cornerRect);
@@ -452,6 +474,7 @@ public sealed partial class Griddo
         }
 
         DrawColumnMoveCue(dc);
+
         var rowHeaderClip = new Rect(0, ScaledColumnHeaderHeight, _rowHeaderWidth, _viewportBodyHeight);
         dc.PushClip(new RectangleGeometry(rowHeaderClip));
         {
@@ -485,6 +508,145 @@ public sealed partial class Griddo
             });
         }
         dc.Pop();
+
+        DrawHeaderFocusHighlight(dc);
+        DrawOuterWorksheetFrame(dc);
+    }
+
+    private void DrawHeadersTransposed(DrawingContext dc)
+    {
+        var cornerRect = new Rect(0, 0, _rowHeaderWidth, ScaledColumnHeaderHeight);
+        dc.DrawRectangle(HeaderBackground, null, cornerRect);
+        var typeface = new Typeface("Segoe UI");
+        var bodyRowHeaderLeft = _rowHeaderWidth;
+        var headerStripH = ScaledColumnHeaderHeight;
+        var fixedRowsW = GetTransposeFixedRowsWidth();
+        var fRows = GetEffectiveFixedRowCount();
+        var fixedRowsHeaderW = Math.Min(fixedRowsW, _viewportBodyWidth);
+        var scrollRowsHeaderW = Math.Max(0, _viewportBodyWidth - fixedRowsW);
+
+        void DrawRowHeaderStripCell(int row, Rect clipIntersect)
+        {
+            var rr = GetRowHeaderRect(row);
+            var rowHeaderBackground = (IsRowHeaderMarkedSelected(row) && ShowRowHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
+            dc.DrawRectangle(rowHeaderBackground, null, rr);
+            var pen = new Pen(GridLineBrush, GridPenThickness);
+            dc.DrawLine(pen, rr.TopLeft, rr.BottomLeft);
+            dc.DrawLine(pen, rr.TopRight, rr.BottomRight);
+            var visibleRect = Rect.Intersect(rr, clipIntersect);
+            if (!visibleRect.IsEmpty)
+            {
+                GriddoValuePainter.Paint(
+                    dc,
+                    row + 1,
+                    visibleRect,
+                    typeface,
+                    EffectiveFontSize,
+                    Brushes.Black,
+                    underline: false,
+                    treatAsHtml: false,
+                    autoDetectHtml: false,
+                    alignment: TextAlignment.Center,
+                    verticalAlignment: VerticalAlignment.Center);
+            }
+        }
+
+        var clipTopFull = new Rect(bodyRowHeaderLeft, 0, _viewportBodyWidth, headerStripH);
+
+        // Left: frozen row headers — horizontal scroll must not bleed into this strip from scroll rows.
+        if (fixedRowsHeaderW > 0 && fRows > 0)
+        {
+            var clipFixedTop = new Rect(bodyRowHeaderLeft, 0, fixedRowsHeaderW, headerStripH);
+            dc.PushClip(new RectangleGeometry(clipFixedTop));
+            for (var row = 0; row < fRows && row < Rows.Count; row++)
+            {
+                DrawRowHeaderStripCell(row, clipTopFull);
+            }
+
+            dc.Pop();
+        }
+
+        // Right: scroll row headers only
+        if (scrollRowsHeaderW > 0)
+        {
+            var clipScrollTop = new Rect(bodyRowHeaderLeft + fixedRowsW, 0, scrollRowsHeaderW, headerStripH);
+            dc.PushClip(new RectangleGeometry(clipScrollTop));
+            ForEachVisibleScrollRowForTranspose(row =>
+            {
+                if (row < fRows)
+                {
+                    return;
+                }
+
+                DrawRowHeaderStripCell(row, clipTopFull);
+            });
+            dc.Pop();
+        }
+
+        var bodyTop = ScaledColumnHeaderHeight;
+        var fixedColsH = GetFixedColumnsWidth();
+        var fCols = Math.Clamp(_fixedColumnCount, 0, Columns.Count);
+        var bodyH = _viewportBodyHeight;
+        var fixedColsClipH = Math.Min(fixedColsH, bodyH);
+        var scrollColHeadersH = Math.Max(0, bodyH - fixedColsH);
+
+        void DrawColumnHeaderCell(int col)
+        {
+            var rr = GetColumnHeaderRect(col);
+            var headerBackground = (IsColumnHeaderMarkedSelected(col) && ShowColumnHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
+            dc.DrawRectangle(headerBackground, null, rr);
+            var pen = new Pen(GridLineBrush, GridPenThickness);
+            dc.DrawLine(pen, rr.TopLeft, rr.TopRight);
+            dc.DrawLine(pen, rr.BottomLeft, rr.BottomRight);
+            var headerLabel = Columns[col] is IGriddoColumnTitleView titleView && !string.IsNullOrWhiteSpace(titleView.AbbreviatedHeader)
+                ? titleView.AbbreviatedHeader
+                : Columns[col].Header;
+            var headerText = new FormattedText(
+                headerLabel,
+                CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                typeface,
+                EffectiveFontSize,
+                Brushes.Black,
+                1.0);
+            headerText.SetFontWeight(FontWeights.Bold);
+            headerText.MaxTextWidth = Math.Max(1, rr.Width - 8);
+            headerText.MaxTextHeight = Math.Max(1, rr.Height - 8);
+            headerText.Trimming = TextTrimming.CharacterEllipsis;
+            var tx = rr.X + 4;
+            var ty = rr.Y + Math.Max(0, (rr.Height - headerText.Height) / 2);
+            dc.DrawText(headerText, new Point(tx, ty));
+            DrawSortHeaderIndicator(dc, col, rr, typeface);
+        }
+
+        // Clip frozen vs scroll column headers separately so vertical scroll does not bleed into frozen bands.
+        if (fixedColsClipH > 0 && fCols > 0)
+        {
+            var clipFixed = new Rect(0, bodyTop, _rowHeaderWidth, fixedColsClipH);
+            dc.PushClip(new RectangleGeometry(clipFixed));
+            for (var col = 0; col < fCols && col < Columns.Count; col++)
+            {
+                DrawColumnHeaderCell(col);
+            }
+
+            dc.Pop();
+        }
+
+        if (scrollColHeadersH > 0 && fCols < Columns.Count)
+        {
+            var clipScroll = new Rect(0, bodyTop + fixedColsH, _rowHeaderWidth, scrollColHeadersH);
+            dc.PushClip(new RectangleGeometry(clipScroll));
+            ForEachVisibleColumnForTranspose(col =>
+            {
+                if (col < fCols)
+                {
+                    return;
+                }
+
+                DrawColumnHeaderCell(col);
+            });
+            dc.Pop();
+        }
 
         DrawHeaderFocusHighlight(dc);
         DrawOuterWorksheetFrame(dc);
@@ -608,6 +770,12 @@ public sealed partial class Griddo
             return;
         }
 
+        if (IsBodyTransposed)
+        {
+            DrawBodyTransposed(dc);
+            return;
+        }
+
         var bodyViewport = new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
         var typeface = new Typeface("Segoe UI");
         var rowHeight = GetRowHeight(0);
@@ -661,8 +829,132 @@ public sealed partial class Griddo
         DrawFixedRowSeparator(dc);
     }
 
+    private void DrawBodyTransposed(DrawingContext dc)
+    {
+        var bodyViewport = new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
+        var typeface = new Typeface("Segoe UI");
+        var bodyLeft = _rowHeaderWidth;
+        var bodyTop = ScaledColumnHeaderHeight;
+        var bodyW = _viewportBodyWidth;
+        var bodyH = _viewportBodyHeight;
+        var fixedRowsW = GetTransposeFixedRowsWidth();
+        var fixedColsH = GetFixedColumnsWidth();
+        var fRows = GetEffectiveFixedRowCount();
+        var fCols = Math.Clamp(_fixedColumnCount, 0, Columns.Count);
+        var scrollLeft = bodyLeft + fixedRowsW;
+        var scrollTop = bodyTop + fixedColsH;
+        var scrollW = Math.Max(0, bodyW - fixedRowsW);
+        var scrollH = Math.Max(0, bodyH - fixedColsH);
+        var fixedRowsClipW = Math.Min(fixedRowsW, bodyW);
+        var fixedColsClipH = Math.Min(fixedColsH, bodyH);
+
+        void DrawCell(int row, int col)
+        {
+            var rect = GetCellRect(row, col);
+            if (rect.IsEmpty)
+            {
+                return;
+            }
+
+            DrawBodyCell(dc, row, col, rect.X, rect.Y, GetRowHeight(row), Rows[row], bodyViewport, typeface);
+        }
+
+        // Split body into four clips so vertically scrolled column bands cannot paint over frozen top columns.
+        // Order: scroll×scroll (back), then top-right & bottom-left, then frozen×frozen (front).
+
+        // Q_ss — scroll rows × scroll columns (below frozen columns, right of frozen rows)
+        if (scrollW > 0 && scrollH > 0)
+        {
+            dc.PushClip(new RectangleGeometry(new Rect(scrollLeft, scrollTop, scrollW, scrollH)));
+            ForEachVisibleColumnForTranspose(col =>
+            {
+                if (col < fCols)
+                {
+                    return;
+                }
+
+                ForEachVisibleScrollRowForTranspose(row => DrawCell(row, col));
+            });
+            dc.Pop();
+        }
+
+        // Q_sf — scroll rows × frozen columns (top strip on the right)
+        if (scrollW > 0 && fixedColsClipH > 0 && fCols > 0)
+        {
+            dc.PushClip(new RectangleGeometry(new Rect(scrollLeft, bodyTop, scrollW, fixedColsClipH)));
+            ForEachVisibleColumnForTranspose(col =>
+            {
+                if (col >= fCols)
+                {
+                    return;
+                }
+
+                ForEachVisibleScrollRowForTranspose(row => DrawCell(row, col));
+            });
+            dc.Pop();
+        }
+
+        // Q_fs — frozen rows × scroll columns (left strip below frozen columns)
+        if (fixedRowsClipW > 0 && scrollH > 0 && fRows > 0)
+        {
+            dc.PushClip(new RectangleGeometry(new Rect(bodyLeft, scrollTop, fixedRowsClipW, scrollH)));
+            ForEachVisibleColumnForTranspose(col =>
+            {
+                if (col < fCols)
+                {
+                    return;
+                }
+
+                for (var row = 0; row < fRows && row < Rows.Count; row++)
+                {
+                    DrawCell(row, col);
+                }
+            });
+            dc.Pop();
+        }
+
+        // Q_ff — frozen rows × frozen columns (top-left corner)
+        if (fixedRowsClipW > 0 && fixedColsClipH > 0 && fRows > 0 && fCols > 0)
+        {
+            dc.PushClip(new RectangleGeometry(new Rect(bodyLeft, bodyTop, fixedRowsClipW, fixedColsClipH)));
+            for (var col = 0; col < fCols && col < Columns.Count; col++)
+            {
+                for (var row = 0; row < fRows && row < Rows.Count; row++)
+                {
+                    DrawCell(row, col);
+                }
+            }
+
+            dc.Pop();
+        }
+
+        DrawFixedRowSeparator(dc);
+    }
+
     private void DrawFixedRowSeparator(DrawingContext dc)
     {
+        if (IsBodyTransposed)
+        {
+            var w = GetTransposeFixedRowsWidth();
+            if (w <= 1e-6)
+            {
+                return;
+            }
+
+            var xLine = _rowHeaderWidth + w;
+            if (xLine > _rowHeaderWidth + _viewportBodyWidth)
+            {
+                return;
+            }
+
+            var transposePen = new Pen(FixedColumnRightBorderBrush, GridPenThickness);
+            dc.DrawLine(
+                transposePen,
+                new Point(xLine, ScaledColumnHeaderHeight),
+                new Point(xLine, ScaledColumnHeaderHeight + _viewportBodyHeight));
+            return;
+        }
+
         if (GetScrollableRowsContentHeight() <= 1e-6)
         {
             return;
@@ -681,8 +973,8 @@ public sealed partial class Griddo
             return;
         }
 
-        var pen = new Pen(FixedRowBottomBorderBrush, GridPenThickness);
-        dc.DrawLine(pen, new Point(_rowHeaderWidth, yLine), new Point(_rowHeaderWidth + _viewportBodyWidth, yLine));
+        var normalPen = new Pen(FixedRowBottomBorderBrush, GridPenThickness);
+        dc.DrawLine(normalPen, new Point(_rowHeaderWidth, yLine), new Point(_rowHeaderWidth + _viewportBodyWidth, yLine));
     }
     private void DrawCurrentCellOverlay(DrawingContext dc)
     {
@@ -697,7 +989,15 @@ public sealed partial class Griddo
             return;
         }
 
-        dc.PushClip(new RectangleGeometry(GetColumnBodyBandClipRect(_currentCell.ColumnIndex)));
+        var bodyViewport = new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
+        if (IsBodyTransposed)
+        {
+            dc.PushClip(new RectangleGeometry(Rect.Intersect(rect, bodyViewport)));
+        }
+        else
+        {
+            dc.PushClip(new RectangleGeometry(GetColumnBodyBandClipRect(_currentCell.ColumnIndex)));
+        }
 
         const double currentCellInset = 0.5;
         var insetRect = new Rect(
@@ -735,7 +1035,15 @@ public sealed partial class Griddo
             return;
         }
 
-        dc.PushClip(new RectangleGeometry(GetColumnBodyBandClipRect(_currentCell.ColumnIndex)));
+        var bodyViewportForEdit = new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
+        if (IsBodyTransposed)
+        {
+            dc.PushClip(new RectangleGeometry(Rect.Intersect(rect, bodyViewportForEdit)));
+        }
+        else
+        {
+            dc.PushClip(new RectangleGeometry(GetColumnBodyBandClipRect(_currentCell.ColumnIndex)));
+        }
 
         // Keep editor visuals inside the cell border so the edit outline thickness stays consistent.
         const double editContentInset = 1.0;
@@ -1175,6 +1483,12 @@ public sealed partial class Griddo
             return Rect.Empty;
         }
 
+        if (IsBodyTransposed)
+        {
+            var y = ScaledColumnHeaderHeight + GetTransposedColumnBodyTopRel(columnIndex);
+            return new Rect(0, y, _rowHeaderWidth, GetColumnWidth(columnIndex));
+        }
+
         double left;
         if (columnIndex < _fixedColumnCount)
         {
@@ -1203,6 +1517,12 @@ public sealed partial class Griddo
         if (rowIndex < 0 || rowIndex >= Rows.Count)
         {
             return Rect.Empty;
+        }
+
+        if (IsBodyTransposed)
+        {
+            var x = _rowHeaderWidth + GetTransposedRowBodyLeftRel(rowIndex);
+            return new Rect(x, 0, GetRowHeight(rowIndex), ScaledColumnHeaderHeight);
         }
 
         var y = ScaledColumnHeaderHeight + GetRowBodyTopRel(rowIndex);

@@ -134,9 +134,25 @@ public sealed partial class Griddo
         }
 
         var clampedRowIndex = Math.Clamp(rowIndex, 0, Rows.Count - 1);
-        var oldMaxVerticalOffset = Math.Max(0, GetScrollableRowsContentHeight() - GetScrollRowsViewportHeight());
         var oldHeight = GetRowHeight(clampedRowIndex);
-        var oldOffset = _verticalOffset;
+        var transposeResize = _isTransposed && Rows.Count > 0 && Columns.Count > 0;
+        double oldScrollExtentMax;
+        double oldScrollOffset;
+        if (transposeResize)
+        {
+            var fixedRowsW0 = GetTransposeFixedRowsWidth();
+            var scrollVp0 = Math.Max(0, _viewportBodyWidth - fixedRowsW0);
+            var h0 = GetRowHeight(0);
+            var fr0 = GetEffectiveFixedRowCount();
+            var scrollContent0 = Math.Max(0, Rows.Count - fr0) * h0;
+            oldScrollExtentMax = Math.Max(0, scrollContent0 - scrollVp0);
+            oldScrollOffset = _horizontalOffset;
+        }
+        else
+        {
+            oldScrollExtentMax = Math.Max(0, GetScrollableRowsContentHeight() - GetScrollRowsViewportHeight());
+            oldScrollOffset = _verticalOffset;
+        }
 
         // Fill-rows mode (VisibleRowCount > 0) forces row height from viewport / count and ignores
         // UniformRowHeight. Manual divider drag must leave that mode so the dragged height applies.
@@ -147,8 +163,34 @@ public sealed partial class Griddo
 
         SetUniformRowHeightFromScreen(newScreenHeight);
 
+        if (transposeResize)
+        {
+            var fixedRowsW = GetTransposeFixedRowsWidth();
+            var scrollRowsViewport = Math.Max(0, _viewportBodyWidth - fixedRowsW);
+            var hAfter = GetRowHeight(0);
+            var frT = GetEffectiveFixedRowCount();
+            var scrollRowsContent = Math.Max(0, Rows.Count - frT) * hAfter;
+            var newMaxHorizontal = Math.Max(0, scrollRowsContent - scrollRowsViewport);
+            if (oldScrollExtentMax <= 1e-6 && newMaxHorizontal <= 1e-6)
+            {
+                return;
+            }
+
+            if (_isResizingRow)
+            {
+                return;
+            }
+
+            var updatedHeightT = GetRowHeight(clampedRowIndex);
+            var deltaHT = updatedHeightT - oldHeight;
+            var frRows = Math.Min(_fixedRowCount, Rows.Count);
+            var offsetDeltaT = frRows * deltaHT + Math.Max(0, clampedRowIndex - frRows) * deltaHT;
+            SetHorizontalOffset(oldScrollOffset + offsetDeltaT);
+            return;
+        }
+
         var newMaxVerticalOffset = Math.Max(0, GetScrollableRowsContentHeight() - GetScrollRowsViewportHeight());
-        if (oldMaxVerticalOffset <= 1e-6 && newMaxVerticalOffset <= 1e-6)
+        if (oldScrollExtentMax <= 1e-6 && newMaxVerticalOffset <= 1e-6)
         {
             // No vertical scroll range before/after resize: keep natural layout flow.
             // Applying top-preservation offset compensation in this mode causes
@@ -167,7 +209,7 @@ public sealed partial class Griddo
         var deltaH = updatedHeight - oldHeight;
         var fr = Math.Min(_fixedRowCount, Rows.Count);
         var offsetDelta = fr * deltaH + Math.Max(0, clampedRowIndex - fr) * deltaH;
-        SetVerticalOffset(oldOffset + offsetDelta);
+        SetVerticalOffset(oldScrollOffset + offsetDelta);
     }
 
     /// <summary>
@@ -192,11 +234,58 @@ public sealed partial class Griddo
         return Math.Max(MinRowHeight * ContentScale, hScreen);
     }
 
+    /// <summary>
+    /// Uniform row height h so the right edge of row <paramref name="dividerRowIndex"/> lies at
+    /// <paramref name="bodyPointerX"/> (X relative to the left edge of the body strip, after row headers).
+    /// Mirror of <see cref="GetUniformRowHeightScreenFromDividerBodyY"/> for transposed layout (rows scroll horizontally).
+    /// </summary>
+    private double GetUniformRowHeightScreenFromDividerBodyX(int dividerRowIndex, double bodyPointerX)
+    {
+        if (Rows.Count == 0 || _viewportBodyWidth <= 0)
+        {
+            return Math.Max(MinRowHeight * ContentScale, bodyPointerX);
+        }
+
+        var k = Math.Clamp(dividerRowIndex, 0, Rows.Count - 1);
+        var f = GetEffectiveFixedRowCount();
+        var hScreen = k < f
+            ? bodyPointerX / (k + 1)
+            : (bodyPointerX + _horizontalOffset) / (k + 1);
+        return Math.Max(MinRowHeight * ContentScale, hScreen);
+    }
+
     /// <summary>One-shot scroll adjustment after interactive row-height drag (see <see cref="SetRowHeightKeepingRowTop"/>).</summary>
-    private void ApplyInteractiveRowResizeScrollPreservation(int dividerRowIndex, double rowHeightAtDragStart, double verticalOffsetAtDragStart)
+    private void ApplyInteractiveRowResizeScrollPreservation(int dividerRowIndex, double rowHeightAtDragStart, double scrollOffsetAtDragStart)
     {
         if (Rows.Count == 0 || dividerRowIndex < 0)
         {
+            return;
+        }
+
+        if (IsBodyTransposed)
+        {
+            var fixedRowsW = GetTransposeFixedRowsWidth();
+            var scrollRowsViewport = Math.Max(0, _viewportBodyWidth - fixedRowsW);
+            var h = GetRowHeight(0);
+            var frT = GetEffectiveFixedRowCount();
+            var scrollRowsContent = Math.Max(0, Rows.Count - frT) * h;
+            var maxH = Math.Max(0, scrollRowsContent - scrollRowsViewport);
+            if (maxH <= 1e-6)
+            {
+                return;
+            }
+
+            var clampedT = Math.Clamp(dividerRowIndex, 0, Rows.Count - 1);
+            var newHt = GetRowHeight(clampedT);
+            var deltaHt = newHt - rowHeightAtDragStart;
+            if (Math.Abs(deltaHt) < 1e-9)
+            {
+                return;
+            }
+
+            var frRows = Math.Min(_fixedRowCount, Rows.Count);
+            var offsetDeltaT = frRows * deltaHt + Math.Max(0, clampedT - frRows) * deltaHt;
+            SetHorizontalOffset(scrollOffsetAtDragStart + offsetDeltaT);
             return;
         }
 
@@ -216,7 +305,7 @@ public sealed partial class Griddo
 
         var fr = Math.Min(_fixedRowCount, Rows.Count);
         var offsetDelta = fr * deltaH + Math.Max(0, clamped - fr) * deltaH;
-        SetVerticalOffset(verticalOffsetAtDragStart + offsetDelta);
+        SetVerticalOffset(scrollOffsetAtDragStart + offsetDelta);
     }
 
     private void AutoSizeRow(int rowIndex)
@@ -244,6 +333,13 @@ public sealed partial class Griddo
         if (row < 0 || row >= Rows.Count || col < 0 || col >= Columns.Count)
         {
             return Rect.Empty;
+        }
+
+        if (IsBodyTransposed)
+        {
+            var tx = _rowHeaderWidth + GetTransposedRowBodyLeftRel(row);
+            var ty = ScaledColumnHeaderHeight + GetTransposedColumnBodyTopRel(col);
+            return new Rect(tx, ty, GetRowHeight(row), GetColumnWidth(col));
         }
 
         double x;

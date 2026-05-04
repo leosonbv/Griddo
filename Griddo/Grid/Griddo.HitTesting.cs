@@ -13,6 +13,21 @@ public sealed partial class Griddo
             return -1;
         }
 
+        if (IsBodyTransposed)
+        {
+            if (Columns.Count == 0 || _viewportBodyWidth <= 0)
+            {
+                return -1;
+            }
+
+            var minX = _rowHeaderWidth;
+            var maxX = _rowHeaderWidth + _viewportBodyWidth - 1;
+            var clampedX = Math.Clamp(point.X, minX, maxX);
+            var bodyX = clampedX - _rowHeaderWidth;
+            var hitRow = HitTestTransposeRowFromBodyX(bodyX);
+            return hitRow >= 0 ? hitRow : -1;
+        }
+
         var minY = ScaledColumnHeaderHeight;
         var maxY = ScaledColumnHeaderHeight + _viewportBodyHeight - 1;
         var clampedY = Math.Clamp(point.Y, minY, maxY);
@@ -26,6 +41,14 @@ public sealed partial class Griddo
         if (Columns.Count == 0 || _viewportBodyWidth <= 0)
         {
             return -1;
+        }
+
+        if (IsBodyTransposed)
+        {
+            var minY = ScaledColumnHeaderHeight;
+            var maxY = ScaledColumnHeaderHeight + _viewportBodyHeight - 1;
+            var clampedY = Math.Clamp(point.Y, minY, maxY);
+            return HitTestColumnHeader(new Point(point.X, clampedY));
         }
 
         var minX = _rowHeaderWidth;
@@ -44,6 +67,18 @@ public sealed partial class Griddo
         if (point.X > _rowHeaderWidth + _viewportBodyWidth || point.Y > ScaledColumnHeaderHeight + _viewportBodyHeight)
         {
             return new GriddoCellAddress(-1, -1);
+        }
+
+        if (IsBodyTransposed)
+        {
+            var transposeRow = HitTestTransposeRowFromBodyX(point.X - _rowHeaderWidth);
+            var transposeCol = HitTestTransposeColumnFromBodyY(point.Y - ScaledColumnHeaderHeight);
+            if (transposeRow < 0 || transposeCol < 0)
+            {
+                return new GriddoCellAddress(-1, -1);
+            }
+
+            return new GriddoCellAddress(transposeRow, transposeCol);
         }
 
         var row = HitTestRowFromBodyY(point.Y - ScaledColumnHeaderHeight);
@@ -74,6 +109,11 @@ public sealed partial class Griddo
 
     private int HitTestColumnDivider(Point point)
     {
+        if (IsBodyTransposed)
+        {
+            return HitTestTransposeColumnDividerBetweenBands(point);
+        }
+
         if (point.Y < 0 || point.Y > ScaledColumnHeaderHeight || point.X < _rowHeaderWidth || point.X > _rowHeaderWidth + _viewportBodyWidth)
         {
             return -1;
@@ -107,6 +147,16 @@ public sealed partial class Griddo
 
     private int HitTestColumnHeader(Point point)
     {
+        if (IsBodyTransposed)
+        {
+            if (point.X < 0 || point.X > _rowHeaderWidth || point.Y < ScaledColumnHeaderHeight || point.Y > ScaledColumnHeaderHeight + _viewportBodyHeight)
+            {
+                return -1;
+            }
+
+            return HitTestTransposeColumnFromBodyY(point.Y - ScaledColumnHeaderHeight);
+        }
+
         if (point.Y < 0 || point.Y > ScaledColumnHeaderHeight || point.X < _rowHeaderWidth || point.X > _rowHeaderWidth + _viewportBodyWidth)
         {
             return -1;
@@ -134,6 +184,11 @@ public sealed partial class Griddo
 
     private int HitTestRowDivider(Point point)
     {
+        if (IsBodyTransposed)
+        {
+            return HitTestTransposeRowDividerBetweenBands(point);
+        }
+
         if (point.X < 0 || point.X > _rowHeaderWidth || point.Y < ScaledColumnHeaderHeight || point.Y > ScaledColumnHeaderHeight + _viewportBodyHeight)
         {
             return -1;
@@ -156,6 +211,16 @@ public sealed partial class Griddo
 
     private int HitTestRowHeader(Point point)
     {
+        if (IsBodyTransposed)
+        {
+            if (point.Y < 0 || point.Y > ScaledColumnHeaderHeight || point.X < _rowHeaderWidth || point.X > _rowHeaderWidth + _viewportBodyWidth)
+            {
+                return -1;
+            }
+
+            return HitTestTransposeRowFromBodyX(point.X - _rowHeaderWidth);
+        }
+
         if (point.X < 0 || point.X > _rowHeaderWidth || point.Y < ScaledColumnHeaderHeight || point.Y > ScaledColumnHeaderHeight + _viewportBodyHeight)
         {
             return -1;
@@ -188,6 +253,24 @@ public sealed partial class Griddo
 
     private void UpdateResizeCursor(Point point)
     {
+        if (IsBodyTransposed)
+        {
+            if (HitTestColumnDivider(point) >= 0)
+            {
+                Cursor = Cursors.SizeNS;
+                return;
+            }
+
+            if (HitTestRowDivider(point) >= 0)
+            {
+                Cursor = Cursors.SizeWE;
+                return;
+            }
+
+            Cursor = Cursors.Arrow;
+            return;
+        }
+
         if (HitTestColumnDivider(point) >= 0)
         {
             Cursor = Cursors.SizeWE;

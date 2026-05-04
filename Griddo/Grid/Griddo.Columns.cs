@@ -41,7 +41,8 @@ public sealed partial class Griddo
             }
         }
 
-        var remaining = Math.Max(0, _viewportBodyWidth - nonFillWidth);
+        var viewportAlongColumnAxis = IsBodyTransposed ? _viewportBodyHeight : _viewportBodyWidth;
+        var remaining = Math.Max(0, viewportAlongColumnAxis - nonFillWidth);
         var perFill = remaining / fillCount;
         return Math.Max(MinColumnWidth * ContentScale, perFill);
     }
@@ -238,6 +239,47 @@ public sealed partial class Griddo
         var typeface = ResolveColumnTypeface(columnIndex, fallbackTypeface, null);
         var fontSize = ResolveColumnFontSize(columnIndex, null);
         var pad = 12 * _contentScale;
+        if (IsBodyTransposed)
+        {
+            // Column bands stack vertically: size from header + cell content height (not line width).
+            var maxH = MeasureTextHeight(column.Header, typeface, fontSize) + pad;
+            foreach (var rowIndex in sampledRows)
+            {
+                if (rowIndex < 0 || rowIndex >= Rows.Count)
+                {
+                    continue;
+                }
+
+                var raw = column.GetValue(Rows[rowIndex]);
+                if (raw is ImageSource or Geometry)
+                {
+                    maxH = Math.Max(maxH, MeasureCellHeight(raw, typeface, fontSize) + pad);
+                    continue;
+                }
+
+                if (column.IsHtml)
+                {
+                    var renderedH = GriddoValuePainter.MeasureRenderedHeight(raw, typeface, fontSize, treatAsHtml: true);
+                    if (renderedH > 0)
+                    {
+                        maxH = Math.Max(maxH, renderedH + pad);
+                    }
+
+                    continue;
+                }
+
+                var text = column.FormatValue(raw);
+                if (string.IsNullOrEmpty(text))
+                {
+                    continue;
+                }
+
+                maxH = Math.Max(maxH, MeasureTextHeight(text, typeface, fontSize) + pad);
+            }
+
+            return maxH;
+        }
+
         var max = MeasureTextWidth(column.Header, typeface, fontSize) + pad;
         foreach (var rowIndex in sampledRows)
         {
