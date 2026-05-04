@@ -16,6 +16,7 @@ public static class GriddoValuePainter
         Typeface typeface,
         double fontSize,
         Brush foregroundBrush,
+        bool underline = false,
         bool treatAsHtml = false,
         bool autoDetectHtml = true,
         TextAlignment alignment = TextAlignment.Left,
@@ -64,6 +65,10 @@ public static class GriddoValuePainter
             fontSize,
             foregroundBrush,
             1.0);
+        if (underline)
+        {
+            formatted.SetTextDecorations(TextDecorations.Underline);
+        }
 
         formatted.TextAlignment = alignment;
         formatted.MaxTextWidth = Math.Max(1, bounds.Width - 8);
@@ -187,6 +192,7 @@ public static class GriddoValuePainter
                 typeface,
                 fontSize,
                 Brushes.Black,
+                underline: false,
                 treatAsHtml: true,
                 autoDetectHtml: true,
                 alignment,

@@ -3,9 +3,11 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using Griddo.Columns;
 using Griddo.Editing;
 using Griddo.Grid;
+using WpfColorFontDialog;
 
 namespace GriddoUi.ColumnEdit;
 
@@ -53,13 +55,15 @@ public partial class GridConfigurator : Window
         ShowColSelectionColorBox.IsChecked = options.ShowColSelectionColor;
         ShowEditCellRectBox.IsChecked = options.ShowEditCellRect;
         ShowSortingIndicatorsBox.IsChecked = options.ShowSortingIndicators;
+        ShowHorizontalScrollBarBox.IsChecked = options.ShowHorizontalScrollBar;
+        ShowVerticalScrollBarBox.IsChecked = options.ShowVerticalScrollBar;
         ImmediateCellEditBox.IsChecked = options.ImmediatePlottoEdit;
         ColumnGrid.ColumnHeaderRightClick += ColumnGrid_ColumnHeaderRightClick;
         Closed += (_, _) => ColumnGrid.ColumnHeaderRightClick -= ColumnGrid_ColumnHeaderRightClick;
     }
 
     /// <summary>Allows only ASCII digits (non-negative integers); paste inserts digits from clipboard.</summary>
-    private static void AttachUnsignedIntegerOnlyInput(TextBox textBox)
+    private static void AttachUnsignedIntegerOnlyInput(System.Windows.Controls.TextBox textBox)
     {
         textBox.PreviewTextInput += (_, e) =>
         {
@@ -81,17 +85,17 @@ public partial class GridConfigurator : Window
             textBox,
             (sender, e) =>
             {
-                if (e.Command != ApplicationCommands.Paste || sender is not TextBox box)
+                if (e.Command != ApplicationCommands.Paste || sender is not System.Windows.Controls.TextBox box)
                 {
                     return;
                 }
 
-                if (!Clipboard.ContainsText())
+                if (!System.Windows.Clipboard.ContainsText())
                 {
                     return;
                 }
 
-                var digits = string.Concat(Clipboard.GetText().Where(static c => c is >= '0' and <= '9'));
+                var digits = string.Concat(System.Windows.Clipboard.GetText().Where(static c => c is >= '0' and <= '9'));
                 e.Handled = true;
                 if (digits.Length == 0)
                 {
@@ -184,44 +188,46 @@ public partial class GridConfigurator : Window
             TextAlignment.Right));
         AddColumn(new GriddoColumnView(
             "Font",
-            120,
-            r => ((ColumnEditRow)r).FontFamilyName,
+            220,
+            r => FormatFontSummary((ColumnEditRow)r),
             (r, v) =>
             {
-                ((ColumnEditRow)r).FontFamilyName = v?.ToString() ?? string.Empty;
+                if (!string.Equals(v?.ToString(), "...", StringComparison.Ordinal))
+                {
+                    return false;
+                }
+
+                var baseRow = (ColumnEditRow)r;
+                var targets = ResolveTargetsForEdit(baseRow);
+                OpenFontEditor(targets);
                 return true;
-            }));
+            },
+            GriddoCellEditors.DialogLauncher));
         AddColumn(new GriddoColumnView(
-            "Size",
-            58,
-            r => ((ColumnEditRow)r).FontSize,
+            "Back color",
+            130,
+            r => FormatOneColor(((ColumnEditRow)r).BackgroundColor),
             (r, v) =>
             {
-                if (v is double d)
-                {
-                    ((ColumnEditRow)r).FontSize = Math.Max(0, d);
-                    return true;
-                }
-
-                if (double.TryParse(v?.ToString(), out var x))
-                {
-                    ((ColumnEditRow)r).FontSize = Math.Max(0, x);
-                    return true;
-                }
-
-                return false;
+                ((ColumnEditRow)r).BackgroundColor = NormalizeBackColor(v?.ToString());
+                return true;
             },
-            GriddoCellEditors.Number,
-            TextAlignment.Right));
+            GriddoCellEditors.KnownColorsDropdown));
         AddColumn(new GriddoColumnView(
             "Format",
-            110,
+            140,
             r => ((ColumnEditRow)r).FormatString,
             (r, v) =>
             {
-                ((ColumnEditRow)r).FormatString = v?.ToString() ?? string.Empty;
+                if (!TryFormatValue(v?.ToString(), out var normalized))
+                {
+                    return false;
+                }
+
+                ((ColumnEditRow)r).FormatString = normalized;
                 return true;
-            }));
+            },
+            GriddoCellEditors.FormatStringOptions));
         AddColumn(new GriddoColumnView(
             "Sort#",
             58,
@@ -278,7 +284,15 @@ public partial class GridConfigurator : Window
                 ((ColumnEditRow)r).AbbreviatedTitle = v?.ToString() ?? string.Empty;
                 return true;
             }));
-        AddColumn(new ReadonlyColumn("Description", 260, r => r.Description));
+        AddColumn(new GriddoColumnView(
+            "Description",
+            260,
+            r => ((ColumnEditRow)r).Description,
+            (r, v) =>
+            {
+                ((ColumnEditRow)r).Description = v?.ToString() ?? string.Empty;
+                return true;
+            }));
         AddColumn(new ReadonlyColumn("Value", 220, r => r.SampleDisplay));
     }
 
@@ -356,7 +370,7 @@ public partial class GridConfigurator : Window
         frozenColumns = 0;
         if (!int.TryParse(FrozenColumnsBox.Text.Trim(), out var fc) || fc < 0)
         {
-            MessageBox.Show(
+            System.Windows.MessageBox.Show(
                 this,
                 "Frozen columns must be a non-negative integer.",
                 Title,
@@ -374,7 +388,7 @@ public partial class GridConfigurator : Window
         frozenRows = 0;
         if (!int.TryParse(FrozenRowsBox.Text.Trim(), out var fr) || fr < 0)
         {
-            MessageBox.Show(
+            System.Windows.MessageBox.Show(
                 this,
                 "Frozen rows must be a non-negative integer.",
                 Title,
@@ -392,7 +406,7 @@ public partial class GridConfigurator : Window
         visibleRows = 0;
         if (!int.TryParse(VisibleRowsBox.Text.Trim(), out var vr) || vr < 0 || vr > 10)
         {
-            MessageBox.Show(
+            System.Windows.MessageBox.Show(
                 this,
                 "Visible rows must be an integer between 0 and 10.",
                 Title,
@@ -417,12 +431,225 @@ public partial class GridConfigurator : Window
             ShowColSelectionColor = ShowColSelectionColorBox.IsChecked == true,
             ShowEditCellRect = ShowEditCellRectBox.IsChecked == true,
             ShowSortingIndicators = ShowSortingIndicatorsBox.IsChecked == true,
+            ShowHorizontalScrollBar = ShowHorizontalScrollBarBox.IsChecked == true,
+            ShowVerticalScrollBar = ShowVerticalScrollBarBox.IsChecked == true,
             ImmediatePlottoEdit = ImmediateCellEditBox.IsChecked == true
         };
     }
 
     private List<ColumnEditRow> SnapshotRows() =>
         ColumnGrid.Rows.Cast<ColumnEditRow>().Select(static r => r.Clone()).ToList();
+
+    private List<ColumnEditRow> GetSelectedEditorRows()
+    {
+        var selectedIndices = ColumnGrid.SelectedCells
+            .Select(c => c.RowIndex)
+            .Where(i => i >= 0 && i < ColumnGrid.Rows.Count)
+            .Distinct()
+            .OrderBy(i => i)
+            .ToList();
+
+        if (selectedIndices.Count == 0 && ColumnGrid.CurrentCell.IsValid)
+        {
+            selectedIndices.Add(ColumnGrid.CurrentCell.RowIndex);
+        }
+
+        return selectedIndices
+            .Where(i => i >= 0 && i < ColumnGrid.Rows.Count)
+            .Select(i => ColumnGrid.Rows[i] as ColumnEditRow)
+            .Where(r => r is not null)
+            .Cast<ColumnEditRow>()
+            .ToList();
+    }
+
+    private List<ColumnEditRow> ResolveTargetsForEdit(ColumnEditRow row)
+    {
+        var selected = GetSelectedEditorRows();
+        if (selected.Any(r => ReferenceEquals(r, row)))
+        {
+            return selected;
+        }
+
+        return [row];
+    }
+
+    private void OpenFontEditor(IReadOnlyList<ColumnEditRow> targets)
+    {
+        if (targets.Count == 0)
+        {
+            return;
+        }
+
+        var seed = targets[0];
+        var dialog = new ColorFontDialog(
+            previewFontInFontList: true,
+            allowArbitraryFontSizes: true,
+            showColorPicker: true)
+        {
+            Font = BuildDialogFontInfo(seed, seed.ForegroundColor)
+        };
+
+        if (dialog.ShowDialog() != true || dialog.Font is null)
+        {
+            return;
+        }
+
+        var style = FormatFontStyle(dialog.Font.Style, dialog.Font.Weight, HasUnderlineStyle(seed.FontStyleName));
+        foreach (var row in targets)
+        {
+            row.FontFamilyName = dialog.Font.Family?.Source ?? row.FontFamilyName;
+            row.FontSize = Math.Max(6, dialog.Font.Size);
+            row.FontStyleName = style;
+            if (dialog.Font.BrushColor is SolidColorBrush solidBrush)
+            {
+                row.ForegroundColor = ToHexColor(solidBrush);
+            }
+        }
+
+        ColumnGrid.InvalidateVisual();
+    }
+
+    private static FontInfo BuildDialogFontInfo(ColumnEditRow row, string colorText)
+    {
+        var familyName = string.IsNullOrWhiteSpace(row.FontFamilyName) ? "Segoe UI" : row.FontFamilyName;
+        var family = new FontFamily(familyName);
+        var (style, weight, _) = ParseFontTraits(row.FontStyleName);
+        return new FontInfo
+        {
+            Family = family,
+            Size = Math.Max(6, row.FontSize <= 0 ? 12 : row.FontSize),
+            Style = style,
+            Stretch = FontStretches.Normal,
+            Weight = weight,
+            BrushColor = ParseSolidColorBrush(colorText)
+        };
+    }
+
+    private static SolidColorBrush ParseSolidColorBrush(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return Brushes.Black;
+        }
+
+        try
+        {
+            if (new BrushConverter().ConvertFromString(text) is SolidColorBrush solid)
+            {
+                return solid;
+            }
+
+            return Brushes.Black;
+        }
+        catch
+        {
+            return Brushes.Black;
+        }
+    }
+
+    private static string FormatFontSummary(ColumnEditRow row)
+    {
+        var family = string.IsNullOrWhiteSpace(row.FontFamilyName) ? "(default)" : row.FontFamilyName;
+        var size = row.FontSize > 0 ? row.FontSize.ToString("0.#") : "default";
+        var style = string.IsNullOrWhiteSpace(row.FontStyleName) ? "Regular" : row.FontStyleName;
+        var fg = string.IsNullOrWhiteSpace(row.ForegroundColor) ? "(default)" : row.ForegroundColor;
+        return $"{family}, {size}, {style}, Fg:{fg}";
+    }
+
+    private static string FormatOneColor(string color)
+    {
+        return string.IsNullOrWhiteSpace(color) ? "(default)" : color;
+    }
+
+    private static string NormalizeBackColor(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || string.Equals(value.Trim(), "(default)", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Empty;
+        }
+
+        return value.Trim();
+    }
+
+    private static bool TryFormatValue(string? value, out string normalized)
+    {
+        normalized = string.IsNullOrWhiteSpace(value) || string.Equals(value.Trim(), "(none)", StringComparison.OrdinalIgnoreCase)
+            ? string.Empty
+            : value.Trim();
+
+        if (normalized.Length == 0)
+        {
+            return true;
+        }
+
+        var numberValid = true;
+        try
+        {
+            _ = 12345.6789.ToString(normalized, System.Globalization.CultureInfo.CurrentCulture);
+        }
+        catch (FormatException)
+        {
+            numberValid = false;
+        }
+
+        var dateValid = true;
+        try
+        {
+            _ = DateTime.Now.ToString(normalized, System.Globalization.CultureInfo.CurrentCulture);
+        }
+        catch (FormatException)
+        {
+            dateValid = false;
+        }
+
+        return numberValid || dateValid;
+    }
+
+    private static bool HasUnderlineStyle(string style)
+    {
+        var normalized = (style ?? string.Empty).ToLowerInvariant();
+        return normalized.Contains("underline", StringComparison.Ordinal);
+    }
+
+    private static (FontStyle style, FontWeight weight, bool underline) ParseFontTraits(string styleText)
+    {
+        var normalized = (styleText ?? string.Empty).ToLowerInvariant();
+        var style = normalized.Contains("italic", StringComparison.Ordinal)
+            ? FontStyles.Italic
+            : FontStyles.Normal;
+        var weight = normalized.Contains("bold", StringComparison.Ordinal)
+            ? FontWeights.Bold
+            : FontWeights.Normal;
+        var underline = normalized.Contains("underline", StringComparison.Ordinal);
+        return (style, weight, underline);
+    }
+
+    private static string FormatFontStyle(FontStyle style, FontWeight weight, bool underline)
+    {
+        var parts = new List<string>();
+        if (style == FontStyles.Italic)
+        {
+            parts.Add("Italic");
+        }
+
+        if (weight == FontWeights.Bold)
+        {
+            parts.Add("Bold");
+        }
+
+        if (underline)
+        {
+            parts.Add("Underline");
+        }
+
+        return parts.Count == 0 ? string.Empty : string.Join(", ", parts);
+    }
+
+    private static string ToHexColor(SolidColorBrush brush)
+    {
+        var c = brush.Color;
+        return $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+    }
 
     private sealed class ReadonlyColumn : IGriddoColumnView
     {

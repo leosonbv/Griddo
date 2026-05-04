@@ -313,8 +313,8 @@ public class CalibrationCurveControl : SkiaChartBaseControl
             canvas.DrawLine(plotRect.Left, plotRect.Bottom, plotRect.Right, plotRect.Bottom, AxisStrokePaint);
         }
 
-        var x0InView = Viewport.XMin <= z && z <= Viewport.XMax;
-        var y0InView = Viewport.YMin <= z && z <= Viewport.YMax;
+        var x0InView = Viewport is { XMin: <= z, XMax: >= z };
+        var y0InView = Viewport is { YMin: <= z, YMax: >= z };
 
         var zs = PlotUiScale;
         var axOff = ChartPlotLayout.AxisLabelInsetFromPlotLeft(zs);
@@ -324,32 +324,32 @@ public class CalibrationCurveControl : SkiaChartBaseControl
         // Plot edges are always XMin/XMax and YMin/YMax — not 0 when the origin sits outside the viewport.
         if (ChartAxisLabels.ShouldDrawTickLabel(Viewport.XMin))
         {
-            canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.XMin), plotRect.Left, plotRect.Bottom + below, SKTextAlign.Left, AxisFont, AxisLabelPaint);
+            canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.XMin, AxisLabelPrecisionX, AxisUnitX), plotRect.Left, plotRect.Bottom + below, SKTextAlign.Left, AxisFont, AxisLabelPaint);
         }
 
         if (ChartAxisLabels.ShouldDrawTickLabel(Viewport.XMax))
         {
-            canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.XMax), plotRect.Right, plotRect.Bottom + below, SKTextAlign.Right, AxisFont, AxisLabelPaint);
+            canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.XMax, AxisLabelPrecisionX, AxisUnitX), plotRect.Right, plotRect.Bottom + below, SKTextAlign.Right, AxisFont, AxisLabelPaint);
         }
 
         if (ChartAxisLabels.ShouldDrawTickLabel(Viewport.YMax))
         {
-            canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.YMax), plotRect.Left - axOff, plotRect.Top + topLab, SKTextAlign.Right, AxisFont, AxisLabelPaint);
+            canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.YMax, AxisLabelPrecisionY, AxisUnitY), plotRect.Left - axOff, plotRect.Top + topLab, SKTextAlign.Right, AxisFont, AxisLabelPaint);
         }
 
         if (ChartAxisLabels.ShouldDrawTickLabel(Viewport.YMin))
         {
-            canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.YMin), plotRect.Left - axOff, plotRect.Bottom, SKTextAlign.Right, AxisFont, AxisLabelPaint);
+            canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.YMin, AxisLabelPrecisionY, AxisUnitY), plotRect.Left - axOff, plotRect.Bottom, SKTextAlign.Right, AxisFont, AxisLabelPaint);
         }
 
         if (x0InView && Viewport.XMin + eps < z && z < Viewport.XMax - eps)
         {
-            canvas.DrawText(ChartAxisLabels.FormatTick(z), ToPixelX(z, plotRect), plotRect.Bottom + below, SKTextAlign.Center, AxisFont, AxisLabelPaint);
+            canvas.DrawText(ChartAxisLabels.FormatTick(z, AxisLabelPrecisionX, AxisUnitX), ToPixelX(z, plotRect), plotRect.Bottom + below, SKTextAlign.Center, AxisFont, AxisLabelPaint);
         }
 
         if (y0InView && Viewport.YMin + eps < z && z < Viewport.YMax - eps)
         {
-            canvas.DrawText(ChartAxisLabels.FormatTick(z), plotRect.Left - axOff, ToPixelY(z, plotRect), SKTextAlign.Right, AxisFont, AxisLabelPaint);
+            canvas.DrawText(ChartAxisLabels.FormatTick(z, AxisLabelPrecisionY, AxisUnitY), plotRect.Left - axOff, ToPixelY(z, plotRect), SKTextAlign.Right, AxisFont, AxisLabelPaint);
         }
     }
 
@@ -378,7 +378,7 @@ public class CalibrationCurveControl : SkiaChartBaseControl
         }
 
         const double o = 0d;
-        if (Viewport.XMin <= o && o <= Viewport.XMax)
+        if (Viewport is { XMin: <= o, XMax: >= o })
         {
             var px = ToPixelX(o, plotRect);
             var pyBottom = ToPixelY(Viewport.YMin, plotRect);
@@ -386,7 +386,7 @@ public class CalibrationCurveControl : SkiaChartBaseControl
             canvas.DrawLine(px, pyBottom, px, pyTop, _originGuidePaint);
         }
 
-        if (Viewport.YMin <= o && o <= Viewport.YMax)
+        if (Viewport is { YMin: <= o, YMax: >= o })
         {
             var pxLeft = ToPixelX(Viewport.XMin, plotRect);
             var pxRight = ToPixelX(Viewport.XMax, plotRect);

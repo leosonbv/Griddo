@@ -14,6 +14,7 @@
     <ProjectReference Include="..\Plotto\Plotto.csproj" />
     <ProjectReference Include="..\Griddo\Griddo.csproj" />
     <ProjectReference Include="..\GriddoUi\GriddoUi.csproj" />
+    <ProjectReference Include="..\GriddoModelView\GriddoModelView.csproj" />
   </ItemGroup>
 
 </Project>

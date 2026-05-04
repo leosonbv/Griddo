@@ -26,8 +26,46 @@ public sealed partial class Griddo
         var isCtrlPressed = (modifiers & ModifierKeys.Control) != 0;
         var isShiftPressed = (modifiers & ModifierKeys.Shift) != 0;
         var oldCurrentCell = _currentCell;
+        var clickedForEdit = HitTestCell(pointer);
 
-        if (e.ChangedButton == MouseButton.Right && HitTestColumnHeader(pointer) is var rightCol && rightCol >= 0)
+        if (_isEditing)
+        {
+            if (e.ChangedButton == MouseButton.Left
+                && clickedForEdit.IsValid
+                && clickedForEdit == _currentCell)
+            {
+                if (TryGetCurrentInlineDialogButtonRect(out var dialogButtonRect) && dialogButtonRect.Contains(pointer))
+                {
+                    _ = TriggerInlineDialogButton();
+                    InvalidateVisual();
+                    CompleteMouseDown(e, handled: true);
+                    return;
+                }
+
+                var caretIndex = GetCaretIndexFromEditPoint(pointer);
+                if (e.ClickCount >= 2)
+                {
+                    _editSession.SelectWordAt(caretIndex);
+                }
+                else
+                {
+                    _editSession.SetCaretIndex(caretIndex, extendSelection: isShiftPressed);
+                    _isDraggingEditSelection = true;
+                    CaptureMouse();
+                }
+
+                InvalidateVisual();
+                CompleteMouseDown(e, handled: true);
+                return;
+            }
+
+            if (e.ChangedButton is MouseButton.Left or MouseButton.Right)
+            {
+                CommitEdit();
+            }
+        }
+
+        if (e.ChangedButton == MouseButton.Right && HitTestColumnHeader(pointer) is var rightCol and >= 0)
         {
             _headerFocusKind = HeaderFocusKind.Column;
             _headerFocusColumnIndex = rightCol;
@@ -178,7 +216,7 @@ public sealed partial class Griddo
         var clickedColumnHeader = HitTestColumnHeader(pointer);
         if (clickedColumnHeader >= 0)
         {
-            if (e.ChangedButton == MouseButton.Left && e.ClickCount == 2)
+            if (e is { ChangedButton: MouseButton.Left, ClickCount: 2 })
             {
                 ToggleHeaderSort(clickedColumnHeader, additive: isCtrlPressed);
                 CompleteMouseDown(e, handled: true);
@@ -735,6 +773,17 @@ public sealed partial class Griddo
     protected override void OnMouseMove(MouseEventArgs e)
     {
         var pointer = e.GetPosition(this);
+        UpdateColumnHeaderTooltip(pointer);
+        if (_isDraggingEditSelection && e.LeftButton == MouseButtonState.Pressed)
+        {
+            var caretIndex = GetCaretIndexFromEditPoint(pointer);
+            _editSession.SetCaretIndex(caretIndex, extendSelection: true);
+            InvalidateVisual();
+            e.Handled = true;
+            base.OnMouseMove(e);
+            return;
+        }
+
         if (_isResizingColumn)
         {
             var delta = pointer.X - _resizeStartPoint.X;
@@ -896,6 +945,24 @@ public sealed partial class Griddo
         base.OnMouseMove(e);
     }
 
+    private void UpdateColumnHeaderTooltip(Point pointer)
+    {
+        var headerCol = HitTestColumnHeader(pointer);
+        if (headerCol >= 0
+            && headerCol < Columns.Count
+            && Columns[headerCol] is IGriddoColumnDescriptionView descriptionView
+            && !string.IsNullOrWhiteSpace(descriptionView.Description))
+        {
+            ToolTip = descriptionView.Description;
+            return;
+        }
+
+        if (ToolTip is string)
+        {
+            ToolTip = null;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Auto-scroll while dragging near viewport edges
     // -------------------------------------------------------------------------
@@ -1048,6 +1115,22 @@ public sealed partial class Griddo
 
     protected override void OnMouseUp(MouseButtonEventArgs e)
     {
+        if (_isDraggingEditSelection && e.ChangedButton == MouseButton.Left)
+        {
+            _isDraggingEditSelection = false;
+            if (!_isDraggingSelection
+                && !_isDraggingColumnHeaderSelection
+                && !_isDraggingRowHeaderSelection
+                && !_isResizingColumn
+                && !_isResizingRow
+                && !_isTrackingColumnMove
+                && !_isTrackingRowMove
+                && IsMouseCaptured)
+            {
+                ReleaseMouseCapture();
+            }
+        }
+
         if (_isTrackingColumnMove && e.ChangedButton == MouseButton.Left)
         {
             if (_isMovingColumn &&
@@ -1199,8 +1282,7 @@ public sealed partial class Griddo
 
         if (e.ChangedButton == MouseButton.Right
             && ReferenceEquals(e.OriginalSource, this)
-            && _currentCell.IsValid
-            && _currentCell.RowIndex >= 0
+            && _currentCell is { IsValid: true, RowIndex: >= 0 }
             && _currentCell.RowIndex < Rows.Count
             && _currentCell.ColumnIndex >= 0
             && _currentCell.ColumnIndex < Columns.Count

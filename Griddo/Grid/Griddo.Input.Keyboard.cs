@@ -73,6 +73,26 @@ public sealed partial class Griddo
         base.OnKeyDown(e);
     }
 
+    protected override void OnLostKeyboardFocus(KeyboardFocusChangedEventArgs e)
+    {
+        if (_activeEditOptionsMenu is { IsOpen: true })
+        {
+            base.OnLostKeyboardFocus(e);
+            return;
+        }
+
+        if (_isEditing)
+        {
+            CommitEdit();
+        }
+        else if (IsCurrentHostedCellInEditMode())
+        {
+            SetCurrentHostedCellEditMode(false);
+        }
+
+        base.OnLostKeyboardFocus(e);
+    }
+
     // -------------------------------------------------------------------------
     // Find
     // -------------------------------------------------------------------------

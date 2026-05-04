@@ -268,6 +268,58 @@ public abstract partial class SkiaChartBaseControl : SKElement
             typeof(SkiaChartBaseControl),
             new FrameworkPropertyMetadata(string.Empty, FrameworkPropertyMetadataOptions.AffectsRender));
 
+    public string AxisUnitX
+    {
+        get => (string)GetValue(AxisUnitXProperty);
+        set => SetValue(AxisUnitXProperty, value);
+    }
+
+    public static readonly DependencyProperty AxisUnitXProperty =
+        DependencyProperty.Register(
+            nameof(AxisUnitX),
+            typeof(string),
+            typeof(SkiaChartBaseControl),
+            new FrameworkPropertyMetadata(string.Empty, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public string AxisUnitY
+    {
+        get => (string)GetValue(AxisUnitYProperty);
+        set => SetValue(AxisUnitYProperty, value);
+    }
+
+    public static readonly DependencyProperty AxisUnitYProperty =
+        DependencyProperty.Register(
+            nameof(AxisUnitY),
+            typeof(string),
+            typeof(SkiaChartBaseControl),
+            new FrameworkPropertyMetadata(string.Empty, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public int AxisLabelPrecisionX
+    {
+        get => (int)GetValue(AxisLabelPrecisionXProperty);
+        set => SetValue(AxisLabelPrecisionXProperty, Math.Clamp(value, 0, 10));
+    }
+
+    public static readonly DependencyProperty AxisLabelPrecisionXProperty =
+        DependencyProperty.Register(
+            nameof(AxisLabelPrecisionX),
+            typeof(int),
+            typeof(SkiaChartBaseControl),
+            new FrameworkPropertyMetadata(2, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public int AxisLabelPrecisionY
+    {
+        get => (int)GetValue(AxisLabelPrecisionYProperty);
+        set => SetValue(AxisLabelPrecisionYProperty, Math.Clamp(value, 0, 10));
+    }
+
+    public static readonly DependencyProperty AxisLabelPrecisionYProperty =
+        DependencyProperty.Register(
+            nameof(AxisLabelPrecisionY),
+            typeof(int),
+            typeof(SkiaChartBaseControl),
+            new FrameworkPropertyMetadata(2, FrameworkPropertyMetadataOptions.AffectsRender));
+
     /// <summary>Multiplier from host grid zoom (Ctrl+wheel); scales strokes and axis typography.</summary>
     public double UiScale
     {

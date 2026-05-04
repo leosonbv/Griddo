@@ -4,6 +4,9 @@ namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
+    private double EffectiveHorizontalScrollBarThickness => ShowHorizontalScrollBar ? ScrollBarSize : 0;
+    private double EffectiveVerticalScrollBarThickness => ShowVerticalScrollBar ? ScrollBarSize : 0;
+
     private double GetFixedColumnsWidth()
     {
         var n = Math.Clamp(_fixedColumnCount, 0, Columns.Count);
@@ -117,8 +120,8 @@ public sealed partial class Griddo
         const double outerBorderInset = 1;
         _horizontalScrollBar.Measure(availableSize);
         _verticalScrollBar.Measure(availableSize);
-        var bodyW = Math.Max(0, availableSize.Width - _rowHeaderWidth - ScrollBarSize - outerBorderInset);
-        var bodyH = Math.Max(0, availableSize.Height - ScaledColumnHeaderHeight - ScrollBarSize - outerBorderInset);
+        var bodyW = Math.Max(0, availableSize.Width - _rowHeaderWidth - EffectiveVerticalScrollBarThickness - outerBorderInset);
+        var bodyH = Math.Max(0, availableSize.Height - ScaledColumnHeaderHeight - EffectiveHorizontalScrollBarThickness - outerBorderInset);
         var bodySize = new Size(bodyW, bodyH);
         _scrollHostCanvas.Measure(bodySize);
         _fixedHostCanvas.Measure(bodySize);
@@ -129,20 +132,21 @@ public sealed partial class Griddo
     protected override Size ArrangeOverride(Size finalSize)
     {
         const double outerBorderInset = 1;
-        var arrangedScrollBarThickness = Math.Max(0, ScrollBarSize - outerBorderInset);
-        _viewportBodyWidth = Math.Max(0, finalSize.Width - _rowHeaderWidth - ScrollBarSize - outerBorderInset);
-        _viewportBodyHeight = Math.Max(0, finalSize.Height - ScaledColumnHeaderHeight - ScrollBarSize - outerBorderInset);
+        var arrangedHorizontalThickness = Math.Max(0, EffectiveHorizontalScrollBarThickness - outerBorderInset);
+        var arrangedVerticalThickness = Math.Max(0, EffectiveVerticalScrollBarThickness - outerBorderInset);
+        _viewportBodyWidth = Math.Max(0, finalSize.Width - _rowHeaderWidth - EffectiveVerticalScrollBarThickness - outerBorderInset);
+        _viewportBodyHeight = Math.Max(0, finalSize.Height - ScaledColumnHeaderHeight - EffectiveHorizontalScrollBarThickness - outerBorderInset);
 
         _horizontalScrollBar.Arrange(new Rect(
             _rowHeaderWidth,
-            Math.Max(0, finalSize.Height - ScrollBarSize - outerBorderInset),
+            Math.Max(0, finalSize.Height - EffectiveHorizontalScrollBarThickness - outerBorderInset),
             _viewportBodyWidth,
-            arrangedScrollBarThickness));
+            arrangedHorizontalThickness));
 
         _verticalScrollBar.Arrange(new Rect(
-            Math.Max(0, finalSize.Width - ScrollBarSize - outerBorderInset),
+            Math.Max(0, finalSize.Width - EffectiveVerticalScrollBarThickness - outerBorderInset),
             ScaledColumnHeaderHeight,
-            arrangedScrollBarThickness,
+            arrangedVerticalThickness,
             _viewportBodyHeight));
 
         UpdateScrollBars();

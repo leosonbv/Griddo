@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.IO;
 using Griddo;
 using Griddo.Columns;
 using Griddo.Editing;
@@ -8,6 +9,7 @@ using Griddo.Grid;
 using Plotto.Charting.Controls;
 using Plotto.Charting.Core;
 using GriddoUi.ColumnEdit;
+using GriddoModelView;
 
 namespace GriddoTest;
 
@@ -15,9 +17,20 @@ public partial class MainWindow : Window
 {
     private const string PlottoColumnHeader = "Plotto Cell";
     private const string CalibrationColumnHeader = "Calibration";
+    private const string DemoGridLayoutKey = "GriddoTest.MainWindow.DemoGrid";
     private const string PrimarySource = "Primary";
     private const string AnalyticsSource = "Analytics";
     private readonly List<IGriddoColumnView> _allColumns = [];
+    private readonly SourcePropertyViewStore _viewStore = new(
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Griddo",
+            "source-property-views.json"));
+    private readonly GridLayoutStore _gridLayoutStore = new(
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Griddo",
+            "grid-layouts.json"));
 
     private readonly ChromatogramControl _plotConfigFallback = new()
     {
@@ -29,8 +42,11 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        _viewStore.Load();
+        _gridLayoutStore.Load();
         ConfigureGrid();
         DemoGrid.ColumnHeaderRightClick += (_, e) => OnColumnHeaderRightClick(DemoGrid, _allColumns, DemoGrid, e);
+        DemoGrid.SortDescriptorsChanged += (_, _) => PersistGridLayoutFromCurrentGrid(DemoGrid, DemoGridLayoutKey, _allColumns);
         DemoGrid.UniformRowHeight = 132;
         DemoGrid.FixedColumnCount = 1;
         DemoGrid.ImmediateCellEditOnSingleClick = false;
@@ -64,6 +80,7 @@ public partial class MainWindow : Window
             PlacementTarget = targetGrid,
             Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint
         };
+        void PersistLiveLayout() => PersistGridLayoutFromCurrentGrid(targetGrid, DemoGridLayoutKey, columnRegistry);
 
         var gridConfiguratorItem = new MenuItem { Header = "_Grid configurator…" };
         gridConfiguratorItem.Click += (_, _) => OpenGridConfigurator(sourceGridForChooser);
@@ -92,6 +109,7 @@ public partial class MainWindow : Window
 
             targetGrid.InvalidateMeasure();
             targetGrid.InvalidateVisual();
+            PersistLiveLayout();
         };
         menu.Items.Add(fillItem);
         menu.Items.Add(new Separator());
@@ -114,20 +132,33 @@ public partial class MainWindow : Window
 
             targetGrid.InvalidateMeasure();
             targetGrid.InvalidateVisual();
+            PersistLiveLayout();
         };
         visibilitySubmenu.Items.Add(hideSelectedColumnsItem);
         visibilitySubmenu.Items.Add(new Separator());
 
         var hideEmptyColsItem = new MenuItem { Header = "Hide _empty columns" };
-        hideEmptyColsItem.Click += (_, _) => HideEmptyColumns(targetGrid, columnRegistry);
+        hideEmptyColsItem.Click += (_, _) =>
+        {
+            HideEmptyColumns(targetGrid, columnRegistry);
+            PersistLiveLayout();
+        };
         visibilitySubmenu.Items.Add(hideEmptyColsItem);
 
         var showAllColsItem = new MenuItem { Header = "_Show all columns" };
-        showAllColsItem.Click += (_, _) => ShowAllColumns(targetGrid, columnRegistry);
+        showAllColsItem.Click += (_, _) =>
+        {
+            ShowAllColumns(targetGrid, columnRegistry);
+            PersistLiveLayout();
+        };
         visibilitySubmenu.Items.Add(showAllColsItem);
 
         var showAllExceptEmptyItem = new MenuItem { Header = "Show all _except empty columns" };
-        showAllExceptEmptyItem.Click += (_, _) => ShowAllColumnsExceptEmpty(targetGrid, columnRegistry);
+        showAllExceptEmptyItem.Click += (_, _) =>
+        {
+            ShowAllColumnsExceptEmpty(targetGrid, columnRegistry);
+            PersistLiveLayout();
+        };
         visibilitySubmenu.Items.Add(showAllExceptEmptyItem);
         visibilitySubmenu.Items.Add(new Separator());
 
@@ -142,7 +173,11 @@ public partial class MainWindow : Window
                 IsChecked = targetGrid.Columns.Contains(localColumn),
                 StaysOpenOnClick = true
             };
-            listItem.Click += (_, _) => ToggleColumnVisibility(targetGrid, columnRegistry, localColumn, listItem.IsChecked);
+            listItem.Click += (_, _) =>
+            {
+                ToggleColumnVisibility(targetGrid, columnRegistry, localColumn, listItem.IsChecked);
+                PersistLiveLayout();
+            };
             visibilityListItem.Items.Add(listItem);
         }
 
@@ -156,7 +191,11 @@ public partial class MainWindow : Window
             IsChecked = targetGrid.HostedPlotDirectEditOnMouseDown,
             StaysOpenOnClick = true
         };
-        immediateEditItem.Click += (_, _) => targetGrid.HostedPlotDirectEditOnMouseDown = immediateEditItem.IsChecked;
+        immediateEditItem.Click += (_, _) =>
+        {
+            targetGrid.HostedPlotDirectEditOnMouseDown = immediateEditItem.IsChecked;
+            PersistLiveLayout();
+        };
         appearanceSubmenu.Items.Add(immediateEditItem);
 
         var showSelectionColoringItem = new MenuItem
@@ -170,6 +209,7 @@ public partial class MainWindow : Window
         {
             targetGrid.ShowCellSelectionColoring = showSelectionColoringItem.IsChecked;
             targetGrid.InvalidateVisual();
+            PersistLiveLayout();
         };
         appearanceSubmenu.Items.Add(showSelectionColoringItem);
 
@@ -184,6 +224,7 @@ public partial class MainWindow : Window
         {
             targetGrid.ShowHeaderSelectionColoring = showHeaderSelectionColoringItem.IsChecked;
             targetGrid.InvalidateVisual();
+            PersistLiveLayout();
         };
         appearanceSubmenu.Items.Add(showHeaderSelectionColoringItem);
 
@@ -198,6 +239,7 @@ public partial class MainWindow : Window
         {
             targetGrid.ShowCurrentCellColor = showCurrentCellColorItem.IsChecked;
             targetGrid.InvalidateVisual();
+            PersistLiveLayout();
         };
         appearanceSubmenu.Items.Add(showCurrentCellColorItem);
 
@@ -212,6 +254,7 @@ public partial class MainWindow : Window
         {
             targetGrid.ShowEditCellColor = showEditCellColorItem.IsChecked;
             targetGrid.InvalidateVisual();
+            PersistLiveLayout();
         };
         appearanceSubmenu.Items.Add(showEditCellColorItem);
 
@@ -226,6 +269,7 @@ public partial class MainWindow : Window
         {
             targetGrid.ShowSortingIndicators = showSortIndicatorsItem.IsChecked;
             targetGrid.InvalidateVisual();
+            PersistLiveLayout();
         };
         appearanceSubmenu.Items.Add(showSortIndicatorsItem);
 
@@ -245,6 +289,7 @@ public partial class MainWindow : Window
                 targetGrid.VisibleRowCount = localMode;
                 targetGrid.InvalidateMeasure();
                 targetGrid.InvalidateVisual();
+                PersistLiveLayout();
             };
             visibleRowsSubmenu.Items.Add(modeItem);
         }
@@ -458,6 +503,10 @@ public partial class MainWindow : Window
                 [AnalyticsSource] = analytics
             });
         }
+
+        ApplyPersistedPropertyViews();
+        ApplyPersistedGridLayout(DemoGrid, DemoGridLayoutKey);
+        DemoGrid.InvalidateVisual();
     }
 
     private void RegisterColumn(IGriddoColumnView column)
@@ -703,6 +752,7 @@ public partial class MainWindow : Window
     private void OpenGridConfigurator(global::Griddo.Grid.Griddo grid)
     {
         var rows = ColumnMetadataBuilder.BuildRowsFromGrid(grid, _allColumns);
+        ApplyPersistedRowMetadata(rows);
         var initialOptions = new ColumnChooserGeneralOptions
         {
             VisibleRowCount = grid.VisibleRowCount,
@@ -712,14 +762,335 @@ public partial class MainWindow : Window
             ShowColSelectionColor = grid.ShowColumnHeaderSelectionColoring,
             ShowEditCellRect = grid.ShowEditCellColor,
             ShowSortingIndicators = grid.ShowSortingIndicators,
+            ShowHorizontalScrollBar = grid.ShowHorizontalScrollBar,
+            ShowVerticalScrollBar = grid.ShowVerticalScrollBar,
             ImmediatePlottoEdit = grid.HostedPlotDirectEditOnMouseDown
         };
         var dlg = new GridConfigurator(rows, grid.FixedColumnCount, grid.FixedRowCount, initialOptions) { Owner = this };
         dlg.TargetSourceGrid = grid;
-        dlg.ApplyToSourceGrid = (r, fc, fr, go) => ColumnChooserGridApplier.Apply(grid, r, fc, fr, go, _allColumns);
+        dlg.ApplyToSourceGrid = (r, fc, fr, go) =>
+        {
+            ColumnChooserGridApplier.Apply(grid, r, fc, fr, go, _allColumns);
+            PersistPropertyViews(r);
+            PersistGridLayout(grid, DemoGridLayoutKey, r, fc, fr, go);
+        };
         dlg.ColumnHeaderMenuHandler = (g, ev) => OnColumnHeaderRightClick(g, dlg.ColumnHeaderRegistry, grid, ev);
         grid.ClearCellSelection();
         dlg.ShowDialog();
+    }
+
+    private void ApplyPersistedPropertyViews()
+    {
+        foreach (var column in _allColumns)
+        {
+            if (column is not IGriddoColumnSourceMember sourceMember
+                || string.IsNullOrWhiteSpace(sourceMember.SourceMemberName))
+            {
+                continue;
+            }
+
+            var sourceClassName = ResolveSourceClassName(column);
+            if (string.IsNullOrWhiteSpace(sourceClassName))
+            {
+                continue;
+            }
+
+            if (!_viewStore.TryGet(sourceClassName, sourceMember.SourceMemberName, out var definition))
+            {
+                continue;
+            }
+
+            if (column is IGriddoColumnFormatView formatView)
+            {
+                formatView.FormatString = definition.StringFormat ?? string.Empty;
+            }
+
+            if (!string.IsNullOrWhiteSpace(definition.Header))
+            {
+                column.Header = definition.Header;
+            }
+
+            if (column is IGriddoColumnTitleView titleView)
+            {
+                titleView.AbbreviatedHeader = definition.AbbreviatedHeader ?? string.Empty;
+            }
+
+            if (column is IGriddoColumnDescriptionView descriptionView)
+            {
+                descriptionView.Description = definition.Description ?? string.Empty;
+            }
+
+            if (column is IGriddoColumnFontView fontView)
+            {
+                fontView.FontSize = Math.Max(0, definition.FontSize);
+                fontView.FontStyleName = definition.FontStyle ?? string.Empty;
+            }
+
+            if (column is IGriddoColumnColorView colorView)
+            {
+                colorView.ForegroundColor = definition.ForegroundColor ?? string.Empty;
+                colorView.BackgroundColor = definition.BackgroundColor ?? string.Empty;
+            }
+        }
+    }
+
+    private void PersistPropertyViews(IReadOnlyList<ColumnEditRow> rows)
+    {
+        foreach (var row in rows)
+        {
+            var sourceClassName = ResolveSourceClassName(row.SourceObjectName);
+            var propertyName = ResolveSourcePropertyName(row);
+            if (string.IsNullOrWhiteSpace(sourceClassName) || string.IsNullOrWhiteSpace(propertyName))
+            {
+                continue;
+            }
+
+            var definition = new SourcePropertyViewDefinition
+            {
+                SourceClassName = sourceClassName,
+                PropertyName = propertyName,
+                Header = row.Title ?? string.Empty,
+                AbbreviatedHeader = row.AbbreviatedTitle ?? string.Empty,
+                Description = row.Description ?? string.Empty,
+                StringFormat = row.FormatString ?? string.Empty,
+                FontSize = Math.Max(0, row.FontSize),
+                FontStyle = row.FontStyleName ?? string.Empty,
+                ForegroundColor = row.ForegroundColor ?? string.Empty,
+                BackgroundColor = row.BackgroundColor ?? string.Empty
+            };
+            _viewStore.Set(definition);
+        }
+
+        _viewStore.Save();
+    }
+
+    private void ApplyPersistedRowMetadata(IReadOnlyList<ColumnEditRow> rows)
+    {
+        foreach (var row in rows)
+        {
+            var sourceClassName = ResolveSourceClassName(row.SourceObjectName);
+            var propertyName = ResolveSourcePropertyName(row);
+            if (string.IsNullOrWhiteSpace(sourceClassName) || string.IsNullOrWhiteSpace(propertyName))
+            {
+                continue;
+            }
+
+            if (!_viewStore.TryGet(sourceClassName, propertyName, out var definition))
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(definition.Header))
+            {
+                row.Title = definition.Header;
+            }
+
+            if (!string.IsNullOrWhiteSpace(definition.AbbreviatedHeader))
+            {
+                row.AbbreviatedTitle = definition.AbbreviatedHeader;
+            }
+
+            if (!string.IsNullOrWhiteSpace(definition.Description))
+            {
+                row.Description = definition.Description;
+            }
+
+            row.FormatString = definition.StringFormat ?? string.Empty;
+            row.FontSize = Math.Max(0, definition.FontSize);
+            row.FontStyleName = definition.FontStyle ?? string.Empty;
+            row.ForegroundColor = definition.ForegroundColor ?? string.Empty;
+            row.BackgroundColor = definition.BackgroundColor ?? string.Empty;
+        }
+    }
+
+    private void ApplyPersistedGridLayout(global::Griddo.Grid.Griddo grid, string gridKey)
+    {
+        if (!_gridLayoutStore.TryGet(gridKey, out var layout))
+        {
+            return;
+        }
+
+        foreach (var plot in layout.PlotColumns)
+        {
+            if (plot.SourceColumnIndex < 0 || plot.SourceColumnIndex >= _allColumns.Count)
+            {
+                continue;
+            }
+
+            if (_allColumns[plot.SourceColumnIndex] is not IPlotColumnLayoutTarget target)
+            {
+                continue;
+            }
+
+            target.TitleSelection = plot.TitleSelection ?? string.Empty;
+            target.XAxis = plot.XAxis ?? string.Empty;
+            target.YAxis = plot.YAxis ?? string.Empty;
+            target.XAxisTitle = plot.XAxisTitle ?? string.Empty;
+            target.YAxisTitle = plot.YAxisTitle ?? string.Empty;
+            target.Label = plot.Label ?? string.Empty;
+            target.XAxisUnit = plot.XAxisUnit ?? string.Empty;
+            target.YAxisUnit = plot.YAxisUnit ?? string.Empty;
+            target.XAxisLabelPrecision = Math.Clamp(plot.XAxisLabelPrecision, 0, 10);
+            target.YAxisLabelPrecision = Math.Clamp(plot.YAxisLabelPrecision, 0, 10);
+        }
+
+        var rows = ColumnMetadataBuilder.BuildRowsFromGrid(grid, _allColumns);
+        ApplyPersistedRowMetadata(rows);
+        var byIndex = layout.Columns.ToDictionary(c => c.SourceColumnIndex);
+        foreach (var row in rows)
+        {
+            if (!byIndex.TryGetValue(row.SourceColumnIndex, out var state))
+            {
+                continue;
+            }
+
+            row.Fill = state.Fill;
+            row.Visible = state.Visible;
+            row.Width = Math.Max(28, state.Width);
+            row.SortPriority = Math.Max(0, state.SortPriority);
+            row.SortAscending = state.SortAscending;
+        }
+
+        var options = new ColumnChooserGeneralOptions
+        {
+            VisibleRowCount = layout.VisibleRowCount,
+            ShowSelectionColor = layout.ShowSelectionColor,
+            ShowCurrentCellRect = layout.ShowCurrentCellRect,
+            ShowRowSelectionColor = layout.ShowRowSelectionColor,
+            ShowColSelectionColor = layout.ShowColSelectionColor,
+            ShowEditCellRect = layout.ShowEditCellRect,
+            ShowSortingIndicators = layout.ShowSortingIndicators,
+            ShowHorizontalScrollBar = layout.ShowHorizontalScrollBar,
+            ShowVerticalScrollBar = layout.ShowVerticalScrollBar,
+            ImmediatePlottoEdit = layout.ImmediatePlottoEdit
+        };
+        ColumnChooserGridApplier.Apply(
+            grid,
+            rows,
+            layout.FrozenColumns,
+            layout.FrozenRows,
+            options,
+            _allColumns);
+    }
+
+    private void PersistGridLayout(
+        global::Griddo.Grid.Griddo grid,
+        string gridKey,
+        IReadOnlyList<ColumnEditRow> rows,
+        int frozenColumns,
+        int frozenRows,
+        ColumnChooserGeneralOptions options)
+    {
+        var definition = new GridLayoutDefinition
+        {
+            GridKey = gridKey,
+            VisibleRowCount = options.VisibleRowCount,
+            FrozenColumns = frozenColumns,
+            FrozenRows = frozenRows,
+            ShowSelectionColor = options.ShowSelectionColor,
+            ShowCurrentCellRect = options.ShowCurrentCellRect,
+            ShowRowSelectionColor = options.ShowRowSelectionColor,
+            ShowColSelectionColor = options.ShowColSelectionColor,
+            ShowEditCellRect = options.ShowEditCellRect,
+            ShowSortingIndicators = options.ShowSortingIndicators,
+            ShowHorizontalScrollBar = options.ShowHorizontalScrollBar,
+            ShowVerticalScrollBar = options.ShowVerticalScrollBar,
+            ImmediatePlottoEdit = options.ImmediatePlottoEdit,
+            Columns = rows.Select(r => new GridColumnLayoutDefinition
+            {
+                SourceColumnIndex = r.SourceColumnIndex,
+                Fill = r.Fill,
+                Visible = r.Visible,
+                Width = r.Width,
+                SortPriority = r.SortPriority,
+                SortAscending = r.SortAscending
+            }).ToList(),
+            PlotColumns = _allColumns
+                .Select((column, index) => (column, index))
+                .Where(static x => x.column is IPlotColumnLayoutTarget)
+                .Select(x =>
+                {
+                    var p = (IPlotColumnLayoutTarget)x.column;
+                    return new GridPlotColumnLayoutDefinition
+                    {
+                        SourceColumnIndex = x.index,
+                        TitleSelection = p.TitleSelection ?? string.Empty,
+                        XAxis = p.XAxis ?? string.Empty,
+                        YAxis = p.YAxis ?? string.Empty,
+                        XAxisTitle = p.XAxisTitle ?? string.Empty,
+                        YAxisTitle = p.YAxisTitle ?? string.Empty,
+                        Label = p.Label ?? string.Empty,
+                        XAxisUnit = p.XAxisUnit ?? string.Empty,
+                        YAxisUnit = p.YAxisUnit ?? string.Empty,
+                        XAxisLabelPrecision = Math.Clamp(p.XAxisLabelPrecision, 0, 10),
+                        YAxisLabelPrecision = Math.Clamp(p.YAxisLabelPrecision, 0, 10)
+                    };
+                })
+                .ToList()
+        };
+
+        _gridLayoutStore.Set(definition);
+        _gridLayoutStore.Save();
+    }
+
+    private void PersistGridLayoutFromCurrentGrid(
+        global::Griddo.Grid.Griddo grid,
+        string gridKey,
+        IReadOnlyList<IGriddoColumnView> registry)
+    {
+        var rows = ColumnMetadataBuilder.BuildRowsFromGrid(grid, registry);
+        var options = new ColumnChooserGeneralOptions
+        {
+            VisibleRowCount = grid.VisibleRowCount,
+            ShowSelectionColor = grid.ShowCellSelectionColoring,
+            ShowCurrentCellRect = grid.ShowCurrentCellColor,
+            ShowRowSelectionColor = grid.ShowRowHeaderSelectionColoring,
+            ShowColSelectionColor = grid.ShowColumnHeaderSelectionColoring,
+            ShowEditCellRect = grid.ShowEditCellColor,
+            ShowSortingIndicators = grid.ShowSortingIndicators,
+            ShowHorizontalScrollBar = grid.ShowHorizontalScrollBar,
+            ShowVerticalScrollBar = grid.ShowVerticalScrollBar,
+            ImmediatePlottoEdit = grid.HostedPlotDirectEditOnMouseDown
+        };
+        PersistGridLayout(grid, gridKey, rows, grid.FixedColumnCount, grid.FixedRowCount, options);
+    }
+
+    private string ResolveSourcePropertyName(ColumnEditRow row)
+    {
+        if (row.SourceColumnIndex >= 0
+            && row.SourceColumnIndex < _allColumns.Count
+            && _allColumns[row.SourceColumnIndex] is IGriddoColumnSourceMember sourceMember
+            && !string.IsNullOrWhiteSpace(sourceMember.SourceMemberName))
+        {
+            return sourceMember.SourceMemberName;
+        }
+
+        return row.PropertyName;
+    }
+
+    private static string ResolveSourceClassName(IGriddoColumnView column)
+    {
+        if (column is not IGriddoColumnSourceObject sourceObject)
+        {
+            return string.Empty;
+        }
+
+        return ResolveSourceClassName(sourceObject.SourceObjectName);
+    }
+
+    private static string ResolveSourceClassName(string sourceObjectName)
+    {
+        if (string.Equals(sourceObjectName, PrimarySource, StringComparison.OrdinalIgnoreCase))
+        {
+            return nameof(PrimaryDemoSource);
+        }
+
+        if (string.Equals(sourceObjectName, AnalyticsSource, StringComparison.OrdinalIgnoreCase))
+        {
+            return nameof(AnalyticsDemoSource);
+        }
+
+        return string.Empty;
     }
 
     /// <summary>WPF path markup samples—triangle, circle, diamond, rect, hexagon, heart-ish, wave, etc.</summary>

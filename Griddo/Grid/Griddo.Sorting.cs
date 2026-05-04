@@ -25,6 +25,7 @@ public sealed partial class Griddo
         }
 
         ApplySorting();
+        SortDescriptorsChanged?.Invoke(this, EventArgs.Empty);
         InvalidateVisual();
     }
 
@@ -64,6 +65,7 @@ public sealed partial class Griddo
 
         NormalizeSortPriorities();
         ApplySorting();
+        SortDescriptorsChanged?.Invoke(this, EventArgs.Empty);
         InvalidateVisual();
     }
 

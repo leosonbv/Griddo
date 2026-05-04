@@ -36,6 +36,66 @@ internal sealed class GriddoTextEditSession
 
     public void MoveCaretEnd(bool shiftPressed) => MoveCaret(Buffer.Length, shiftPressed);
 
+    public void SetCaretIndex(int targetIndex, bool extendSelection)
+        => MoveCaret(targetIndex, extendSelection);
+
+    public void SelectWordAt(int index)
+    {
+        if (Buffer.Length == 0)
+        {
+            CaretIndex = 0;
+            SelectionAnchor = -1;
+            return;
+        }
+
+        var clamped = Math.Clamp(index, 0, Buffer.Length);
+        if (clamped == Buffer.Length)
+        {
+            clamped = Math.Max(0, Buffer.Length - 1);
+        }
+
+        var start = clamped;
+        var end = clamped;
+
+        static bool IsWordChar(char c) => char.IsLetterOrDigit(c) || c == '_';
+        var inWord = clamped < Buffer.Length && IsWordChar(Buffer[clamped]);
+
+        if (inWord)
+        {
+            while (start > 0 && IsWordChar(Buffer[start - 1]))
+            {
+                start--;
+            }
+
+            while (end < Buffer.Length && IsWordChar(Buffer[end]))
+            {
+                end++;
+            }
+        }
+        else
+        {
+            while (start > 0 && !IsWordChar(Buffer[start - 1]) && !char.IsWhiteSpace(Buffer[start - 1]))
+            {
+                start--;
+            }
+
+            while (end < Buffer.Length && !IsWordChar(Buffer[end]) && !char.IsWhiteSpace(Buffer[end]))
+            {
+                end++;
+            }
+
+            if (start == end)
+            {
+                CaretIndex = clamped;
+                SelectionAnchor = -1;
+                return;
+            }
+        }
+
+        SelectionAnchor = start;
+        CaretIndex = end;
+    }
+
     public void SelectAll()
     {
         if (Buffer.Length == 0)
@@ -47,6 +107,13 @@ internal sealed class GriddoTextEditSession
 
         SelectionAnchor = 0;
         CaretIndex = Buffer.Length;
+    }
+
+    public void ReplaceBuffer(string buffer)
+    {
+        Buffer = buffer ?? string.Empty;
+        CaretIndex = Buffer.Length;
+        SelectionAnchor = -1;
     }
 
     public void InsertText(string text)

@@ -10,47 +10,13 @@
     ShowInTaskbar="False">
     <DockPanel>
         <Border
-            DockPanel.Dock="Bottom"
+            DockPanel.Dock="Top"
             Padding="10,8"
-            Background="#FFF0F0F0"
+            Background="#FFF7F7F7"
             BorderBrush="#FFD0D0D0"
-            BorderThickness="0,1,0,0">
+            BorderThickness="0,0,0,1">
             <StackPanel>
-                <DockPanel LastChildFill="False">
-                    <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button
-                            x:Name="MoveUpButton"
-                            Width="72"
-                            Margin="0,0,8,0"
-                            Click="MoveUpButton_Click"
-                            Content="Up" />
-                        <Button
-                            x:Name="MoveDownButton"
-                            Width="72"
-                            Margin="0,0,16,0"
-                            Click="MoveDownButton_Click"
-                            Content="Down" />
-                    </StackPanel>
-                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                        <Button
-                            Width="88"
-                            Margin="0,0,8,0"
-                            Click="ApplyButton_Click"
-                            Content="Apply" />
-                        <Button
-                            Width="88"
-                            Margin="0,0,8,0"
-                            Click="OkButton_Click"
-                            Content="OK"
-                            IsDefault="True" />
-                        <Button
-                            Width="88"
-                            Click="CancelButton_Click"
-                            Content="Cancel"
-                            IsCancel="True" />
-                    </StackPanel>
-                </DockPanel>
-                <WrapPanel Margin="0,6,0,0" VerticalAlignment="Center">
+                <WrapPanel VerticalAlignment="Center">
                     <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="Fill rows:" />
                     <TextBox
                         x:Name="VisibleRowsBox"
@@ -85,6 +51,17 @@
                         Margin="0,0,14,0"
                         VerticalAlignment="Center"
                         Content="Sorting" />
+                    <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="Show scrollbars:" />
+                    <CheckBox
+                        x:Name="ShowHorizontalScrollBarBox"
+                        Margin="0,0,10,0"
+                        VerticalAlignment="Center"
+                        Content="Horizontal" />
+                    <CheckBox
+                        x:Name="ShowVerticalScrollBarBox"
+                        Margin="0,0,14,0"
+                        VerticalAlignment="Center"
+                        Content="Vertical" />
                     <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="Show colors:" />
                     <CheckBox
                         x:Name="ShowSelectionColorBox"
@@ -114,6 +91,47 @@
                         Content="Edit cell" />
                 </WrapPanel>
             </StackPanel>
+        </Border>
+        <Border
+            DockPanel.Dock="Bottom"
+            Padding="10,8"
+            Background="#FFF0F0F0"
+            BorderBrush="#FFD0D0D0"
+            BorderThickness="0,1,0,0">
+            <DockPanel LastChildFill="False">
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button
+                        x:Name="MoveUpButton"
+                        Width="72"
+                        Margin="0,0,8,0"
+                        Click="MoveUpButton_Click"
+                        Content="Up" />
+                    <Button
+                        x:Name="MoveDownButton"
+                        Width="72"
+                        Margin="0,0,16,0"
+                        Click="MoveDownButton_Click"
+                        Content="Down" />
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button
+                        Width="88"
+                        Margin="0,0,8,0"
+                        Click="ApplyButton_Click"
+                        Content="Apply" />
+                    <Button
+                        Width="88"
+                        Margin="0,0,8,0"
+                        Click="OkButton_Click"
+                        Content="OK"
+                        IsDefault="True" />
+                    <Button
+                        Width="88"
+                        Click="CancelButton_Click"
+                        Content="Cancel"
+                        IsCancel="True" />
+                </StackPanel>
+            </DockPanel>
         </Border>
         <grid:Griddo
             x:Name="ColumnGrid"

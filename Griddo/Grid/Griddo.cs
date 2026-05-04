@@ -56,6 +56,7 @@ public sealed partial class Griddo : FrameworkElement
     private readonly HashSet<GriddoCellAddress> _selectionDragSnapshot = [];
     private readonly Dictionary<int, double> _columnWidthOverrides = [];
     private readonly GriddoTextEditSession _editSession = new();
+    private ContextMenu? _activeEditOptionsMenu;
     private readonly VisualCollection _children;
     private readonly Canvas _scrollHostCanvas = new()
     {
@@ -90,6 +91,7 @@ public sealed partial class Griddo : FrameworkElement
     private double _uniformRowHeight = DefaultRowHeight;
     private GriddoCellAddress _currentCell = new(0, 0);
     private bool _isEditing;
+    private bool _isCommittingEdit;
     private bool _hasKeyboardSelectionAnchor;
     private GriddoCellAddress _keyboardSelectionAnchor;
     private bool _isDraggingSelection;
@@ -98,6 +100,7 @@ public sealed partial class Griddo : FrameworkElement
     private GriddoCellAddress _dragCurrentCell;
     private bool _pendingHostedEditActivation;
     private GriddoCellAddress _pendingHostedEditCell;
+    private bool _isDraggingEditSelection;
     private bool _isResizingColumn;
     private bool _isResizingRow;
     private int _resizingColumnIndex = -1;
@@ -254,6 +257,7 @@ public sealed partial class Griddo : FrameworkElement
     public GriddoCellAddress CurrentCell => _currentCell;
 
     public event EventHandler<GriddoColumnHeaderMouseEventArgs>? ColumnHeaderRightClick;
+    public event EventHandler? SortDescriptorsChanged;
 
     /// <summary>Fires on row header right-click; see <see cref="GriddoRowHeaderMouseEventArgs.SelectedRowIndices"/> for the full scope.</summary>
     public event EventHandler<GriddoRowHeaderMouseEventArgs>? RowHeaderRightClick;
@@ -304,6 +308,8 @@ public sealed partial class Griddo : FrameworkElement
     public Brush FindMatchBackground { get; set; } = new SolidColorBrush(Color.FromArgb(170, 255, 235, 120));
     private bool _showColumnHeaderSelectionColoring = true;
     private bool _showRowHeaderSelectionColoring = true;
+    private bool _showHorizontalScrollBar = true;
+    private bool _showVerticalScrollBar = true;
     private bool _immediateCellEditOnSingleClick;
     public bool ShowCellSelectionColoring { get; set; } = true;
     public bool ShowSortingIndicators { get; set; } = true;
@@ -346,6 +352,40 @@ public sealed partial class Griddo : FrameworkElement
     }
     public bool ShowCurrentCellColor { get; set; } = true;
     public bool ShowEditCellColor { get; set; } = true;
+    public bool ShowHorizontalScrollBar
+    {
+        get => _showHorizontalScrollBar;
+        set
+        {
+            if (_showHorizontalScrollBar == value)
+            {
+                return;
+            }
+
+            _showHorizontalScrollBar = value;
+            _horizontalScrollBar.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+            InvalidateMeasure();
+            UpdateScrollBars();
+            InvalidateVisual();
+        }
+    }
+    public bool ShowVerticalScrollBar
+    {
+        get => _showVerticalScrollBar;
+        set
+        {
+            if (_showVerticalScrollBar == value)
+            {
+                return;
+            }
+
+            _showVerticalScrollBar = value;
+            _verticalScrollBar.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+            InvalidateMeasure();
+            UpdateScrollBars();
+            InvalidateVisual();
+        }
+    }
     public bool ImmediateCellEditOnSingleClick
     {
         get => _immediateCellEditOnSingleClick;

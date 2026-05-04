@@ -11,7 +11,7 @@ using Griddo.Editing;
 
 namespace GriddoTest;
 
-public sealed class HostedPlottoColumnView : IGriddoHostedColumnView, IGriddoColumnSourceMember, IGriddoColumnSourceObject
+public sealed class HostedPlottoColumnView : IGriddoHostedColumnView, IGriddoColumnSourceMember, IGriddoColumnSourceObject, IPlotColumnLayoutTarget
 {
     private static bool _sharedEditorHooked;
     private readonly Func<object, int> _plottoSeedGetter;
@@ -33,6 +33,16 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView, IGriddoCol
     }
 
     public string Header { get; set; }
+    public string TitleSelection { get; set; } = "Chromatogram";
+    public string XAxis { get; set; } = string.Empty;
+    public string YAxis { get; set; } = string.Empty;
+    public string XAxisTitle { get; set; } = "Time";
+    public string YAxisTitle { get; set; } = "Intensity";
+    public string Label { get; set; } = string.Empty;
+    public string XAxisUnit { get; set; } = string.Empty;
+    public string YAxisUnit { get; set; } = string.Empty;
+    public int XAxisLabelPrecision { get; set; } = 2;
+    public int YAxisLabelPrecision { get; set; } = 2;
 
     public string SourceObjectName { get; }
     public string SourceMemberName { get; }
@@ -56,13 +66,11 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView, IGriddoCol
             RenderMode = ChartRenderMode.Renderer,
             EnableInlineEditing = false,
             EnableMouseInteractions = true,
-            ChartTitle = "Chromatogram",
-            AxisLabelX = "Time",
-            AxisLabelY = "Intensity",
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
             IsHitTestVisible = true
         };
+        ApplyChartSettings(chart);
 
         return new Border
         {
@@ -107,6 +115,7 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView, IGriddoCol
             var seedChanged = prevSeed != seed;
 
             sharedEditor.Points = points;
+            ApplyChartSettings(sharedEditor);
 
             if (editorMoved || seedChanged)
             {
@@ -129,6 +138,7 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView, IGriddoCol
             {
                 chart.Points = points;
                 chart.IsHitTestVisible = true;
+                ApplyChartSettings(chart);
             }
 
             border.IsHitTestVisible = true;
@@ -145,7 +155,7 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView, IGriddoCol
         return border.Tag is int seed ? seed : 0;
     }
 
-    private static ChromatogramControl CreateRendererForSeed(Border border, int seed)
+    private ChromatogramControl CreateRendererForSeed(Border border, int seed)
     {
         border.Tag = seed;
         var chart = new ChromatogramControl
@@ -154,15 +164,25 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView, IGriddoCol
             RenderMode = ChartRenderMode.Renderer,
             EnableInlineEditing = false,
             EnableMouseInteractions = true,
-            ChartTitle = "Chromatogram",
-            AxisLabelX = "Time",
-            AxisLabelY = "Intensity",
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
             IsHitTestVisible = true,
             Points = MainWindow.CreateChromatogramPoints(seed)
         };
+        ApplyChartSettings(chart);
         return chart;
+    }
+
+    private void ApplyChartSettings(SkiaChartBaseControl chart)
+    {
+        chart.ChartTitle = TitleSelection;
+        chart.AxisLabelX = XAxisTitle;
+        chart.AxisLabelY = YAxisTitle;
+        chart.ChartLabel = Label;
+        chart.AxisUnitX = XAxisUnit;
+        chart.AxisUnitY = YAxisUnit;
+        chart.AxisLabelPrecisionX = Math.Clamp(XAxisLabelPrecision, 0, 10);
+        chart.AxisLabelPrecisionY = Math.Clamp(YAxisLabelPrecision, 0, 10);
     }
 
     private static void EnsureSharedEditorHook(ChromatogramControl editor)
@@ -262,7 +282,7 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView, IGriddoCol
             return;
         }
 
-        if (eFromGrid.ChangedButton == MouseButton.Right && eFromGrid.ClickCount == 2)
+        if (eFromGrid is { ChangedButton: MouseButton.Right, ClickCount: 2 })
         {
             chart.Focus();
             chart.ZoomOutCompletely();
@@ -318,7 +338,7 @@ public sealed class HostedPlottoColumnView : IGriddoHostedColumnView, IGriddoCol
         }
 
         SkiaChartBaseControl chart;
-        if (host is Border border && border.Child is SkiaChartBaseControl live)
+        if (host is Border { Child: SkiaChartBaseControl live })
         {
             chart = live;
         }

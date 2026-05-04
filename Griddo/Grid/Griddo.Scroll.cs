@@ -70,10 +70,12 @@ public sealed partial class Griddo
         _horizontalScrollBar.LargeChange = Math.Max(1, _viewportBodyWidth);
         _horizontalScrollBar.SmallChange = 16;
         _horizontalScrollBar.Maximum = maxHorizontal;
+        _horizontalScrollBar.Visibility = ShowHorizontalScrollBar ? Visibility.Visible : Visibility.Collapsed;
 
         _verticalScrollBar.LargeChange = Math.Max(1, scrollRowsViewport);
         _verticalScrollBar.SmallChange = Math.Max(1, GetRowHeight(0));
         _verticalScrollBar.Maximum = maxVertical;
+        _verticalScrollBar.Visibility = ShowVerticalScrollBar ? Visibility.Visible : Visibility.Collapsed;
 
         SetHorizontalOffset(_horizontalOffset);
         SetVerticalOffset(_verticalOffset);

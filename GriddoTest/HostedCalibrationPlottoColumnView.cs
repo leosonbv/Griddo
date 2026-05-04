@@ -11,7 +11,7 @@ using Griddo.Editing;
 
 namespace GriddoTest;
 
-public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView, IGriddoColumnSourceMember, IGriddoColumnSourceObject
+public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView, IGriddoColumnSourceMember, IGriddoColumnSourceObject, IPlotColumnLayoutTarget
 {
     private static bool _sharedEditorHooked;
     private readonly Func<object, int> _seedGetter;
@@ -33,6 +33,16 @@ public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView,
     }
 
     public string Header { get; set; }
+    public string TitleSelection { get; set; } = "Calibration curve";
+    public string XAxis { get; set; } = string.Empty;
+    public string YAxis { get; set; } = string.Empty;
+    public string XAxisTitle { get; set; } = "Concentration";
+    public string YAxisTitle { get; set; } = "Response";
+    public string Label { get; set; } = string.Empty;
+    public string XAxisUnit { get; set; } = string.Empty;
+    public string YAxisUnit { get; set; } = string.Empty;
+    public int XAxisLabelPrecision { get; set; } = 2;
+    public int YAxisLabelPrecision { get; set; } = 2;
 
     public string SourceObjectName { get; }
     public string SourceMemberName { get; }
@@ -56,15 +66,13 @@ public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView,
             RenderMode = ChartRenderMode.Renderer,
             EnableInlineEditing = false,
             EnableMouseInteractions = true,
-            ChartTitle = "Calibration curve",
-            AxisLabelX = "Concentration",
-            AxisLabelY = "Response",
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
             IsHitTestVisible = true,
             FitMode = CalibrationFitMode.Linear,
             CalibrationPoints = MainWindow.CreateCalibrationPoints(0)
         };
+        ApplyChartSettings(chart);
 
         return new Border
         {
@@ -108,6 +116,7 @@ public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView,
 
             sharedEditor.CalibrationPoints = calibrationPoints;
             sharedEditor.FitMode = fitMode;
+            ApplyChartSettings(sharedEditor);
 
             sharedEditor.Tag = seed;
             sharedEditor.IsHitTestVisible = true;
@@ -126,6 +135,7 @@ public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView,
                 chart.CalibrationPoints = calibrationPoints;
                 chart.FitMode = fitMode;
                 chart.IsHitTestVisible = true;
+                ApplyChartSettings(chart);
             }
 
             border.IsHitTestVisible = true;
@@ -141,24 +151,35 @@ public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView,
         return border.Tag is int seed ? seed : 0;
     }
 
-    private static CalibrationCurveControl CreateRendererForSeed(Border border, int seed)
+    private CalibrationCurveControl CreateRendererForSeed(Border border, int seed)
     {
         border.Tag = seed;
-        return new CalibrationCurveControl
+        var chart = new CalibrationCurveControl
         {
             RequireActivationClick = false,
             RenderMode = ChartRenderMode.Renderer,
             EnableInlineEditing = false,
             EnableMouseInteractions = true,
-            ChartTitle = "Calibration curve",
-            AxisLabelX = "Concentration",
-            AxisLabelY = "Response",
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
             IsHitTestVisible = true,
             FitMode = (CalibrationFitMode)(Math.Abs(seed) % 4),
             CalibrationPoints = MainWindow.CreateCalibrationPoints(seed)
         };
+        ApplyChartSettings(chart);
+        return chart;
+    }
+
+    private void ApplyChartSettings(SkiaChartBaseControl chart)
+    {
+        chart.ChartTitle = TitleSelection;
+        chart.AxisLabelX = XAxisTitle;
+        chart.AxisLabelY = YAxisTitle;
+        chart.ChartLabel = Label;
+        chart.AxisUnitX = XAxisUnit;
+        chart.AxisUnitY = YAxisUnit;
+        chart.AxisLabelPrecisionX = Math.Clamp(XAxisLabelPrecision, 0, 10);
+        chart.AxisLabelPrecisionY = Math.Clamp(YAxisLabelPrecision, 0, 10);
     }
 
     private static void EnsureSharedEditorHook(CalibrationCurveControl editor)
@@ -258,7 +279,7 @@ public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView,
             return;
         }
 
-        if (eFromGrid.ChangedButton == MouseButton.Right && eFromGrid.ClickCount == 2)
+        if (eFromGrid is { ChangedButton: MouseButton.Right, ClickCount: 2 })
         {
             chart.Focus();
             chart.ZoomOutCompletely();
@@ -314,7 +335,7 @@ public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView,
         }
 
         SkiaChartBaseControl chart;
-        if (host is Border border && border.Child is SkiaChartBaseControl live)
+        if (host is Border { Child: SkiaChartBaseControl live })
         {
             chart = live;
         }

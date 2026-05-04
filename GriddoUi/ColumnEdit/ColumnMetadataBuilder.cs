@@ -78,12 +78,13 @@ public static class ColumnMetadataBuilder
         var propertyName = n == 1 ? baseKey : $"{baseKey} ({n})";
 
         var sampleDisplay = string.Empty;
+        object? sampleRaw = null;
         if (sample is not null)
         {
             try
             {
-                var raw = col.GetValue(sample);
-                sampleDisplay = col.FormatValue(raw);
+                sampleRaw = col.GetValue(sample);
+                sampleDisplay = col.FormatValue(sampleRaw);
             }
             catch
             {
@@ -101,7 +102,12 @@ public static class ColumnMetadataBuilder
             FormatString = col is IGriddoColumnFormatView formatView ? formatView.FormatString : string.Empty,
             FontFamilyName = col is IGriddoColumnFontView fontView ? fontView.FontFamilyName : string.Empty,
             FontSize = col is IGriddoColumnFontView fontView2 ? fontView2.FontSize : 0,
-            Description = string.Empty,
+            FontStyleName = col is IGriddoColumnFontView fontView3 ? fontView3.FontStyleName : string.Empty,
+            ForegroundColor = col is IGriddoColumnColorView colorView ? colorView.ForegroundColor : string.Empty,
+            BackgroundColor = col is IGriddoColumnColorView colorView2 ? colorView2.BackgroundColor : string.Empty,
+            IsNumericProperty = IsNumericValueType(sampleRaw),
+            IsDateTimeProperty = IsDateTimeValueType(sampleRaw),
+            Description = col is IGriddoColumnDescriptionView descView ? descView.Description : string.Empty,
             Visible = visible,
             Fill = col.Fill,
             Width = col.Width,
@@ -302,6 +308,8 @@ public static class ColumnMetadataBuilder
                 PropertyName = p.Name,
                 Title = title,
                 Description = description,
+                IsNumericProperty = IsNumericType(p.PropertyType),
+                IsDateTimeProperty = IsDateTimeType(p.PropertyType),
                 Visible = true,
                 Fill = false,
                 Width = 140,
@@ -337,4 +345,29 @@ public static class ColumnMetadataBuilder
             IFormattable f => f.ToString(null, CultureInfo.CurrentCulture),
             _ => value.ToString() ?? string.Empty
         };
+
+    private static bool IsNumericValueType(object? value) => value is not null && IsNumericType(value.GetType());
+
+    private static bool IsDateTimeValueType(object? value) => value is not null && IsDateTimeType(value.GetType());
+
+    private static bool IsNumericType(Type type)
+    {
+        var t = Nullable.GetUnderlyingType(type) ?? type;
+        return t == typeof(byte) || t == typeof(sbyte)
+            || t == typeof(short) || t == typeof(ushort)
+            || t == typeof(int) || t == typeof(uint)
+            || t == typeof(long) || t == typeof(ulong)
+            || t == typeof(float) || t == typeof(double)
+            || t == typeof(decimal);
+    }
+
+    private static bool IsDateTimeType(Type type)
+    {
+        var t = Nullable.GetUnderlyingType(type) ?? type;
+        return t == typeof(DateTime)
+            || t == typeof(DateTimeOffset)
+            || t == typeof(DateOnly)
+            || t == typeof(TimeOnly)
+            || t == typeof(TimeSpan);
+    }
 }

@@ -93,22 +93,22 @@ public abstract partial class SkiaChartBaseControl
         canvas.DrawLine(plotRect.Left, plotRect.Top, plotRect.Left, plotRect.Bottom, AxisStrokePaint);
         if (ChartAxisLabels.ShouldDrawTickLabel(Viewport.XMin))
         {
-            canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.XMin), plotRect.Left, plotRect.Bottom + below, SKTextAlign.Left, AxisFont, AxisLabelPaint);
+            canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.XMin, AxisLabelPrecisionX, AxisUnitX), plotRect.Left, plotRect.Bottom + below, SKTextAlign.Left, AxisFont, AxisLabelPaint);
         }
 
         if (ChartAxisLabels.ShouldDrawTickLabel(Viewport.XMax))
         {
-            canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.XMax), plotRect.Right, plotRect.Bottom + below, SKTextAlign.Right, AxisFont, AxisLabelPaint);
+            canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.XMax, AxisLabelPrecisionX, AxisUnitX), plotRect.Right, plotRect.Bottom + below, SKTextAlign.Right, AxisFont, AxisLabelPaint);
         }
 
         if (ChartAxisLabels.ShouldDrawTickLabel(Viewport.YMax))
         {
-            canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.YMax), plotRect.Left - axOff, plotRect.Top + topLab, SKTextAlign.Right, AxisFont, AxisLabelPaint);
+            canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.YMax, AxisLabelPrecisionY, AxisUnitY), plotRect.Left - axOff, plotRect.Top + topLab, SKTextAlign.Right, AxisFont, AxisLabelPaint);
         }
 
         if (ChartAxisLabels.ShouldDrawTickLabel(Viewport.YMin))
         {
-            canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.YMin), plotRect.Left - axOff, plotRect.Bottom, SKTextAlign.Right, AxisFont, AxisLabelPaint);
+            canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.YMin, AxisLabelPrecisionY, AxisUnitY), plotRect.Left - axOff, plotRect.Bottom, SKTextAlign.Right, AxisFont, AxisLabelPaint);
         }
     }
 

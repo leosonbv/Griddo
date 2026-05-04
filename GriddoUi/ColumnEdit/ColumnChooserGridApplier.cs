@@ -72,6 +72,11 @@ public static class ColumnChooserGridApplier
                     titleView.AbbreviatedHeader = r.AbbreviatedTitle?.Trim() ?? string.Empty;
                 }
 
+                if (c is IGriddoColumnDescriptionView descriptionView)
+                {
+                    descriptionView.Description = r.Description?.Trim() ?? string.Empty;
+                }
+
                 if (c is IGriddoColumnFormatView formatView)
                 {
                     formatView.FormatString = r.FormatString?.Trim() ?? string.Empty;
@@ -81,6 +86,13 @@ public static class ColumnChooserGridApplier
                 {
                     fontView.FontFamilyName = r.FontFamilyName?.Trim() ?? string.Empty;
                     fontView.FontSize = Math.Max(0, r.FontSize);
+                    fontView.FontStyleName = r.FontStyleName?.Trim() ?? string.Empty;
+                }
+
+                if (c is IGriddoColumnColorView colorView)
+                {
+                    colorView.ForegroundColor = r.ForegroundColor?.Trim() ?? string.Empty;
+                    colorView.BackgroundColor = r.BackgroundColor?.Trim() ?? string.Empty;
                 }
 
                 grid.Columns.Add(c);
@@ -148,6 +160,8 @@ public static class ColumnChooserGridApplier
             grid.ShowColumnHeaderSelectionColoring = generalOptions.ShowColSelectionColor;
             grid.ShowEditCellColor = generalOptions.ShowEditCellRect;
             grid.ShowSortingIndicators = generalOptions.ShowSortingIndicators;
+            grid.ShowHorizontalScrollBar = generalOptions.ShowHorizontalScrollBar;
+            grid.ShowVerticalScrollBar = generalOptions.ShowVerticalScrollBar;
             // "Immediate edit" is Plotto/hosted-columns only.
             grid.ImmediateCellEditOnSingleClick = false;
             grid.HostedPlotDirectEditOnMouseDown = generalOptions.ImmediatePlottoEdit;

@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Media;
+using System.Linq;
 using Griddo.Columns;
 using Griddo.Primitives;
 
@@ -113,6 +114,11 @@ public sealed partial class Griddo
         var address = new GriddoCellAddress(row, col);
 
         var isHostedCellEditing = IsHostedCellInEditMode(address);
+        if (TryGetColumnBackgroundBrush(col, out var columnBackgroundBrush))
+        {
+            dc.DrawRectangle(columnBackgroundBrush, null, rect);
+        }
+
         if (_findMatchedCells.Contains(address))
         {
             dc.DrawRectangle(FindMatchBackground, null, rect);
@@ -139,6 +145,8 @@ public sealed partial class Griddo
 
         var columnTypeface = ResolveColumnTypeface(col, typeface);
         var columnFontSize = ResolveColumnFontSize(col);
+        var foregroundBrush = ResolveColumnForegroundBrush(col);
+        var underline = HasUnderlineStyle(col);
 
         if (Columns[col] is GriddoBoolColumnView)
         {
@@ -153,19 +161,23 @@ public sealed partial class Griddo
             return;
         }
 
-        var value = Columns[col].GetValue(rowData);
-        var isGraphic = value is ImageSource or Geometry;
+        var rawValue = Columns[col].GetValue(rowData);
+        var isGraphic = rawValue is ImageSource or Geometry;
+        var paintValue = (!isGraphic && !Columns[col].IsHtml)
+            ? Columns[col].FormatValue(rawValue)
+            : rawValue;
         // Intersect with viewport so HTML (and plain text) centers in the visible strip when the row is clipped vertically.
         var paintBounds = isGraphic ? rect : Rect.Intersect(rect, bodyViewport);
         if (!paintBounds.IsEmpty)
         {
             GriddoValuePainter.Paint(
                 dc,
-                value,
+                paintValue,
                 paintBounds,
                 columnTypeface,
                 columnFontSize,
-                Brushes.Black,
+                foregroundBrush,
+                underline,
                 Columns[col].IsHtml,
                 true,
                 Columns[col].ContentAlignment,
@@ -180,19 +192,28 @@ public sealed partial class Griddo
             return fallback;
         }
 
-        if (Columns[col] is IGriddoColumnFontView { FontFamilyName: { Length: > 0 } fontFamilyName })
+        var source = Columns[col];
+        var hasFamily = source is IGriddoColumnFontView { FontFamilyName: { Length: > 0 } };
+        var hasStyle = source is IGriddoColumnFontView { FontStyleName: { Length: > 0 } };
+        if (!hasFamily && !hasStyle)
         {
-            try
-            {
-                return new Typeface(fontFamilyName);
-            }
-            catch
-            {
-                return fallback;
-            }
+            return fallback;
         }
 
-        return fallback;
+        var family = hasFamily
+            ? ((IGriddoColumnFontView)source).FontFamilyName
+            : fallback.FontFamily.Source;
+        var styleName = source is IGriddoColumnFontView styleView ? styleView.FontStyleName : string.Empty;
+        var style = ParseFontStyle(styleName);
+        var weight = ParseFontWeight(styleName);
+        try
+        {
+            return new Typeface(new FontFamily(family), style, weight, fallback.Stretch);
+        }
+        catch
+        {
+            return fallback;
+        }
     }
 
     private double ResolveColumnFontSize(int col)
@@ -208,6 +229,116 @@ public sealed partial class Griddo
         }
 
         return EffectiveFontSize;
+    }
+
+    private Brush ResolveColumnForegroundBrush(int col)
+    {
+        if (col < 0 || col >= Columns.Count)
+        {
+            return Brushes.Black;
+        }
+
+        if (Columns[col] is IGriddoColumnColorView colorView
+            && TryParseBrush(colorView.ForegroundColor, out var brush))
+        {
+            return brush;
+        }
+
+        return Brushes.Black;
+    }
+
+    private bool TryGetColumnBackgroundBrush(int col, out Brush brush)
+    {
+        brush = Brushes.Transparent;
+        if (col < 0 || col >= Columns.Count)
+        {
+            return false;
+        }
+
+        if (Columns[col] is IGriddoColumnColorView colorView
+            && TryParseBrush(colorView.BackgroundColor, out var parsed))
+        {
+            brush = parsed;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryParseBrush(string text, out Brush brush)
+    {
+        brush = Brushes.Transparent;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        try
+        {
+            var converted = new BrushConverter().ConvertFromString(text);
+            if (converted is Brush parsed)
+            {
+                brush = parsed;
+                return true;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+
+        return false;
+    }
+
+    private static FontStyle ParseFontStyle(string style)
+    {
+        var normalized = NormalizeStyleText(style);
+        if (normalized.Contains("italic", StringComparison.Ordinal))
+        {
+            return FontStyles.Italic;
+        }
+
+        if (normalized.Contains("oblique", StringComparison.Ordinal))
+        {
+            return FontStyles.Oblique;
+        }
+
+        return FontStyles.Normal;
+    }
+
+    private static FontWeight ParseFontWeight(string style)
+    {
+        var normalized = NormalizeStyleText(style);
+        if (normalized.Contains("bold", StringComparison.Ordinal))
+        {
+            return FontWeights.Bold;
+        }
+
+        return FontWeights.Normal;
+    }
+
+    private bool HasUnderlineStyle(int col)
+    {
+        if (col < 0 || col >= Columns.Count || Columns[col] is not IGriddoColumnFontView fontView)
+        {
+            return false;
+        }
+
+        return NormalizeStyleText(fontView.FontStyleName).Contains("underline", StringComparison.Ordinal);
+    }
+
+    private static string NormalizeStyleText(string style)
+    {
+        if (string.IsNullOrWhiteSpace(style))
+        {
+            return string.Empty;
+        }
+
+        return style
+            .Trim()
+            .Replace("-", " ", StringComparison.Ordinal)
+            .Replace("_", " ", StringComparison.Ordinal)
+            .ToLowerInvariant();
     }
 
     private void DrawHeaders(DrawingContext dc)
@@ -271,7 +402,18 @@ public sealed partial class Griddo
                 var visibleRect = Rect.Intersect(rect, rowHeaderClip);
                 if (!visibleRect.IsEmpty)
                 {
-                    GriddoValuePainter.Paint(dc, row + 1, visibleRect, typeface, EffectiveFontSize, Brushes.Black, false, false, TextAlignment.Right, VerticalAlignment.Center);
+                    GriddoValuePainter.Paint(
+                        dc,
+                        row + 1,
+                        visibleRect,
+                        typeface,
+                        EffectiveFontSize,
+                        Brushes.Black,
+                        underline: false,
+                        treatAsHtml: false,
+                        autoDetectHtml: false,
+                        alignment: TextAlignment.Right,
+                        verticalAlignment: VerticalAlignment.Center);
                 }
             });
         }
@@ -291,9 +433,18 @@ public sealed partial class Griddo
         var pen = new Pen(Brushes.Red, 2);
         pen.Freeze();
         var inset = pen.Thickness / 2;
+        var columnHeaderClip = new Rect(_rowHeaderWidth, 0, _viewportBodyWidth, ScaledColumnHeaderHeight);
+        var rowHeaderClip = new Rect(0, ScaledColumnHeaderHeight, _rowHeaderWidth, _viewportBodyHeight);
+        var cornerHeaderClip = new Rect(0, 0, _rowHeaderWidth, ScaledColumnHeaderHeight);
 
-        void DrawOutlinedRect(Rect rect)
+        void DrawOutlinedRect(Rect rect, Rect clipRect)
         {
+            if (rect.IsEmpty)
+            {
+                return;
+            }
+
+            rect = Rect.Intersect(rect, clipRect);
             if (rect.IsEmpty)
             {
                 return;
@@ -316,7 +467,7 @@ public sealed partial class Griddo
         {
             foreach (var col in _columnHeaderRightClickOutline.OrderBy(c => c))
             {
-                DrawOutlinedRect(GetColumnHeaderRect(col));
+                DrawOutlinedRect(GetColumnHeaderRect(col), columnHeaderClip);
             }
 
             return;
@@ -326,7 +477,7 @@ public sealed partial class Griddo
         {
             foreach (var row in _rowHeaderRightClickOutline.OrderBy(r => r))
             {
-                DrawOutlinedRect(GetRowHeaderRect(row));
+                DrawOutlinedRect(GetRowHeaderRect(row), rowHeaderClip);
             }
 
             return;
@@ -350,7 +501,14 @@ public sealed partial class Griddo
             r = GetRowHeaderRect(_headerFocusRowIndex);
         }
 
-        DrawOutlinedRect(r);
+        var clip = _headerFocusKind switch
+        {
+            HeaderFocusKind.Column => columnHeaderClip,
+            HeaderFocusKind.Row => rowHeaderClip,
+            HeaderFocusKind.Corner => cornerHeaderClip,
+            _ => Rect.Empty
+        };
+        DrawOutlinedRect(r, clip);
     }
 
     /// <summary>
@@ -364,9 +522,9 @@ public sealed partial class Griddo
         }
 
         var pen = new Pen(GridLineBrush, GridPenThickness);
-        var topRight = Math.Max(0, ActualWidth - ScrollBarSize);
+        var topRight = Math.Max(0, ActualWidth - EffectiveVerticalScrollBarThickness);
         var stripBottom = ScaledColumnHeaderHeight + Math.Max(0, _viewportBodyHeight);
-        var layoutBottom = Math.Max(0, ActualHeight - ScrollBarSize);
+        var layoutBottom = Math.Max(0, ActualHeight - EffectiveHorizontalScrollBarThickness);
         var leftBottom = Math.Min(stripBottom, layoutBottom);
         var rightX = Math.Max(0, ActualWidth - 1);
         var bottomY = Math.Max(0, ActualHeight - 1);
@@ -514,11 +672,12 @@ public sealed partial class Griddo
 
         // Keep editor visuals inside the cell border so the edit outline thickness stays consistent.
         const double editContentInset = 1.0;
-        var editContentRect = new Rect(
+        var fullEditRect = new Rect(
             rect.X + editContentInset,
             rect.Y + editContentInset,
             Math.Max(0, rect.Width - (editContentInset * 2)),
             Math.Max(0, rect.Height - (editContentInset * 2)));
+        var editContentRect = GetInlineEditTextRect(fullEditRect);
 
         if (column.IsHtml)
         {
@@ -532,12 +691,28 @@ public sealed partial class Griddo
             return;
         }
 
-        dc.DrawRectangle(Brushes.White, null, editContentRect);
         var typeface = new Typeface("Segoe UI");
         var fontSize = EffectiveFontSize;
+        dc.DrawRectangle(Brushes.White, null, fullEditRect);
+        if (TryGetInlineDialogButtonRect(fullEditRect, out var dialogButtonRect))
+        {
+            dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(240, 240, 240)), new Pen(Brushes.Gray, 1), dialogButtonRect);
+            var buttonText = new FormattedText(
+                "...",
+                System.Globalization.CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                typeface,
+                Math.Max(9, fontSize * 0.9),
+                Brushes.Black,
+                1.0);
+            var buttonTextX = dialogButtonRect.X + Math.Max(0, (dialogButtonRect.Width - buttonText.Width) / 2);
+            var buttonTextY = dialogButtonRect.Y + Math.Max(0, (dialogButtonRect.Height - buttonText.Height) / 2);
+            dc.DrawText(buttonText, new Point(buttonTextX, buttonTextY));
+        }
         var verticalAlignment = VerticalAlignment.Center;
+        var underline = _currentCell.IsValid && HasUnderlineStyle(_currentCell.ColumnIndex);
         // Edit mode should show the literal source text (including HTML markup), not rendered HTML.
-        GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, false, false, column.ContentAlignment, verticalAlignment);
+        GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, underline, false, false, column.ContentAlignment, verticalAlignment);
 
         var displayText = _editSession.Buffer;
         var editText = new FormattedText(
@@ -585,7 +760,7 @@ public sealed partial class Griddo
                 {
                     dc.PushClip(new RectangleGeometry(editContentRect));
                     dc.DrawGeometry(new SolidColorBrush(Color.FromArgb(120, 102, 178, 255)), null, selectionGeometry);
-                    GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, false, false, column.ContentAlignment, verticalAlignment);
+                    GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, underline, false, false, column.ContentAlignment, verticalAlignment);
                     dc.Pop();
                 }
             }
@@ -615,7 +790,7 @@ public sealed partial class Griddo
                 {
                     var selectionRect = new Rect(selectionX, caretOriginY, selectionRight - selectionX, Math.Max(1, editText.Height));
                     dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(120, 102, 178, 255)), null, selectionRect);
-                    GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, false, false, column.ContentAlignment, verticalAlignment);
+                    GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, underline, false, false, column.ContentAlignment, verticalAlignment);
                 }
             }
         }
@@ -968,51 +1143,79 @@ public sealed partial class Griddo
     }
     private void DrawScrollBarCorner(DrawingContext dc)
     {
+        if (!ShowHorizontalScrollBar && !ShowVerticalScrollBar)
+        {
+            return;
+        }
+
         const double outerBorderInset = 1;
-        var cornerThickness = Math.Max(0, ScrollBarSize - outerBorderInset);
+        var horizontalThickness = ShowHorizontalScrollBar ? ScrollBarSize : 0;
+        var verticalThickness = ShowVerticalScrollBar ? ScrollBarSize : 0;
+        var cornerThicknessX = Math.Max(0, verticalThickness - outerBorderInset);
+        var cornerThicknessY = Math.Max(0, horizontalThickness - outerBorderInset);
         var topRightRect = new Rect(
-            Math.Max(0, ActualWidth - ScrollBarSize - outerBorderInset),
+            Math.Max(0, ActualWidth - verticalThickness - outerBorderInset),
             0,
-            cornerThickness,
+            cornerThicknessX,
             Math.Max(0, ScaledColumnHeaderHeight));
         var bottomLeftRect = new Rect(
             0,
-            Math.Max(0, ActualHeight - ScrollBarSize - outerBorderInset),
+            Math.Max(0, ActualHeight - horizontalThickness - outerBorderInset),
             Math.Max(0, _rowHeaderWidth),
-            cornerThickness);
+            cornerThicknessY);
         var bottomRightRect = new Rect(
-            Math.Max(0, ActualWidth - ScrollBarSize - outerBorderInset),
-            Math.Max(0, ActualHeight - ScrollBarSize - outerBorderInset),
-            cornerThickness,
-            cornerThickness);
+            Math.Max(0, ActualWidth - verticalThickness - outerBorderInset),
+            Math.Max(0, ActualHeight - horizontalThickness - outerBorderInset),
+            cornerThicknessX,
+            cornerThicknessY);
 
-        dc.DrawRectangle(HeaderBackground, null, topRightRect);
-        dc.DrawRectangle(HeaderBackground, null, bottomLeftRect);
-        dc.DrawRectangle(HeaderBackground, null, bottomRightRect);
+        if (ShowVerticalScrollBar)
+        {
+            dc.DrawRectangle(HeaderBackground, null, topRightRect);
+        }
+
+        if (ShowHorizontalScrollBar)
+        {
+            dc.DrawRectangle(HeaderBackground, null, bottomLeftRect);
+        }
+
+        if (ShowVerticalScrollBar && ShowHorizontalScrollBar)
+        {
+            dc.DrawRectangle(HeaderBackground, null, bottomRightRect);
+        }
 
         var pen = new Pen(GridLineBrush, GridPenThickness);
 
-        // Top-right: only top border.
-        dc.DrawLine(
-            pen,
-            new Point(topRightRect.Left, topRightRect.Top),
-            new Point(topRightRect.Right, topRightRect.Top));
+        if (ShowVerticalScrollBar)
+        {
+            // Top-right: only top border.
+            dc.DrawLine(
+                pen,
+                new Point(topRightRect.Left, topRightRect.Top),
+                new Point(topRightRect.Right, topRightRect.Top));
+        }
 
-        // Bottom-left: only left border.
-        dc.DrawLine(
-            pen,
-            new Point(bottomLeftRect.Left, bottomLeftRect.Top),
-            new Point(bottomLeftRect.Left, bottomLeftRect.Bottom));
+        if (ShowHorizontalScrollBar)
+        {
+            // Bottom-left: only left border.
+            dc.DrawLine(
+                pen,
+                new Point(bottomLeftRect.Left, bottomLeftRect.Top),
+                new Point(bottomLeftRect.Left, bottomLeftRect.Bottom));
+        }
 
-        // Bottom-right: keep subtle separator to both scrollbars.
-        dc.DrawLine(
-            pen,
-            new Point(bottomRightRect.Left, bottomRightRect.Top),
-            new Point(bottomRightRect.Right, bottomRightRect.Top));
-        dc.DrawLine(
-            pen,
-            new Point(bottomRightRect.Left, bottomRightRect.Top),
-            new Point(bottomRightRect.Left, bottomRightRect.Bottom));
+        if (ShowVerticalScrollBar && ShowHorizontalScrollBar)
+        {
+            // Bottom-right: keep subtle separator to both scrollbars.
+            dc.DrawLine(
+                pen,
+                new Point(bottomRightRect.Left, bottomRightRect.Top),
+                new Point(bottomRightRect.Right, bottomRightRect.Top));
+            dc.DrawLine(
+                pen,
+                new Point(bottomRightRect.Left, bottomRightRect.Top),
+                new Point(bottomRightRect.Left, bottomRightRect.Bottom));
+        }
     }
 
 }

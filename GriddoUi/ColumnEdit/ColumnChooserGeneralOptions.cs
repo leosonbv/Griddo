@@ -9,6 +9,8 @@ public sealed class ColumnChooserGeneralOptions
     public bool ShowColSelectionColor { get; set; } = true;
     public bool ShowEditCellRect { get; set; } = true;
     public bool ShowSortingIndicators { get; set; } = true;
+    public bool ShowHorizontalScrollBar { get; set; } = true;
+    public bool ShowVerticalScrollBar { get; set; } = true;
     public bool ImmediatePlottoEdit { get; set; }
 
     public ColumnChooserGeneralOptions Clone() => new()
@@ -20,6 +22,8 @@ public sealed class ColumnChooserGeneralOptions
         ShowColSelectionColor = ShowColSelectionColor,
         ShowEditCellRect = ShowEditCellRect,
         ShowSortingIndicators = ShowSortingIndicators,
+        ShowHorizontalScrollBar = ShowHorizontalScrollBar,
+        ShowVerticalScrollBar = ShowVerticalScrollBar,
         ImmediatePlottoEdit = ImmediatePlottoEdit
     };
 }

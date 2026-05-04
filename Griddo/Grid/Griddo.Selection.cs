@@ -447,8 +447,7 @@ public sealed partial class Griddo
             return;
         }
 
-        if (_currentCell.IsValid
-            && _currentCell.ColumnIndex >= 0
+        if (_currentCell is { IsValid: true, ColumnIndex: >= 0 }
             && _currentCell.ColumnIndex < oldToNew.Length)
         {
             _currentCell = new GriddoCellAddress(_currentCell.RowIndex, oldToNew[_currentCell.ColumnIndex]);
@@ -517,8 +516,7 @@ public sealed partial class Griddo
             return;
         }
 
-        if (_currentCell.IsValid
-            && _currentCell.RowIndex >= 0
+        if (_currentCell is { IsValid: true, RowIndex: >= 0 }
             && _currentCell.RowIndex < oldToNew.Length)
         {
             _currentCell = new GriddoCellAddress(oldToNew[_currentCell.RowIndex], _currentCell.ColumnIndex);

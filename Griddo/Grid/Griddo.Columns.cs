@@ -83,45 +83,8 @@ public sealed partial class Griddo
         {
             return;
         }
-
-        var typeface = new Typeface("Segoe UI");
-        var pad = 12 * _contentScale;
-        var max = MeasureTextWidth(Columns[columnIndex].Header, typeface, EffectiveFontSize) + pad;
-        for (var row = 0; row < Rows.Count; row++)
-        {
-            var column = Columns[columnIndex];
-            if (column is IGriddoHostedColumnView)
-            {
-                continue;
-            }
-
-            var value = column.GetValue(Rows[row]);
-            if (value is ImageSource or Geometry)
-            {
-                continue;
-            }
-
-            if (column.IsHtml)
-            {
-                // Measure HTML using rendered run widths without editor/body wrapping constraints.
-                var renderedWidth = GriddoValuePainter.MeasureRenderedWidth(value, typeface, EffectiveFontSize, treatAsHtml: true);
-                if (renderedWidth > 0)
-                {
-                    max = Math.Max(max, renderedWidth + pad);
-                }
-
-                continue;
-            }
-
-            var text = column.FormatValue(value);
-            if (string.IsNullOrEmpty(text))
-            {
-                continue;
-            }
-
-            max = Math.Max(max, MeasureTextWidth(text, typeface, EffectiveFontSize) + pad);
-        }
-
+        var sampledRows = GetAutoSizeSampleRows();
+        var max = MeasureAutoWidthForColumn(columnIndex, sampledRows);
         SetColumnWidth(columnIndex, max);
         _hasAutoSizedColumns = true;
         InvalidateVisual();
@@ -134,9 +97,11 @@ public sealed partial class Griddo
             return;
         }
 
+        var sampledRows = GetAutoSizeSampleRows();
         for (var columnIndex = 0; columnIndex < Columns.Count; columnIndex++)
         {
-            AutoSizeColumn(columnIndex);
+            var max = MeasureAutoWidthForColumn(columnIndex, sampledRows);
+            SetColumnWidth(columnIndex, max);
         }
 
         _hasAutoSizedColumns = true;
@@ -151,6 +116,7 @@ public sealed partial class Griddo
         }
 
         var any = false;
+        var sampledRows = GetAutoSizeSampleRows();
         foreach (var idx in columnIndices.Distinct())
         {
             if (idx < 0 || idx >= Columns.Count)
@@ -158,7 +124,8 @@ public sealed partial class Griddo
                 continue;
             }
 
-            AutoSizeColumn(idx);
+            var max = MeasureAutoWidthForColumn(idx, sampledRows);
+            SetColumnWidth(idx, max);
             any = true;
         }
 
@@ -178,57 +145,10 @@ public sealed partial class Griddo
             return;
         }
 
-        var sampledRows = new HashSet<int> { 0, Rows.Count - 1 };
-        var randomTargetCount = Math.Min(10, Math.Max(0, Rows.Count - sampledRows.Count));
-        while (sampledRows.Count < randomTargetCount + 2 && sampledRows.Count < Rows.Count)
-        {
-            sampledRows.Add(Random.Shared.Next(0, Rows.Count));
-        }
-
-        var typeface = new Typeface("Segoe UI");
-        var pad = 12 * _contentScale;
+        var sampledRows = GetAutoSizeSampleRows();
         for (var columnIndex = 0; columnIndex < Columns.Count; columnIndex++)
         {
-            var column = Columns[columnIndex];
-            if (column is IGriddoHostedColumnView)
-            {
-                continue;
-            }
-
-            var max = MeasureTextWidth(column.Header, typeface, EffectiveFontSize) + pad;
-            foreach (var rowIndex in sampledRows)
-            {
-                if (rowIndex < 0 || rowIndex >= Rows.Count)
-                {
-                    continue;
-                }
-
-                var value = column.GetValue(Rows[rowIndex]);
-                if (value is ImageSource or Geometry)
-                {
-                    continue;
-                }
-
-                if (column.IsHtml)
-                {
-                    var renderedWidth = GriddoValuePainter.MeasureRenderedWidth(value, typeface, EffectiveFontSize, treatAsHtml: true);
-                    if (renderedWidth > 0)
-                    {
-                        max = Math.Max(max, renderedWidth + pad);
-                    }
-
-                    continue;
-                }
-
-                var text = column.FormatValue(value);
-                if (string.IsNullOrEmpty(text))
-                {
-                    continue;
-                }
-
-                max = Math.Max(max, MeasureTextWidth(text, typeface, EffectiveFontSize) + pad);
-            }
-
+            var max = MeasureAutoWidthForColumn(columnIndex, sampledRows);
             SetColumnWidth(columnIndex, max);
         }
 
@@ -254,5 +174,71 @@ public sealed partial class Griddo
 
             AutoSizeColumnsFromSampleRows();
         }));
+    }
+
+    private List<int> GetAutoSizeSampleRows()
+    {
+        if (Rows.Count == 0)
+        {
+            return [];
+        }
+
+        var sampledRows = new HashSet<int> { 0, Rows.Count - 1 };
+        var randomTargetCount = Math.Min(10, Math.Max(0, Rows.Count - sampledRows.Count));
+        while (sampledRows.Count < randomTargetCount + 2 && sampledRows.Count < Rows.Count)
+        {
+            sampledRows.Add(Random.Shared.Next(0, Rows.Count));
+        }
+
+        return sampledRows.OrderBy(x => x).ToList();
+    }
+
+    private double MeasureAutoWidthForColumn(int columnIndex, IReadOnlyCollection<int> sampledRows)
+    {
+        var column = Columns[columnIndex];
+        if (column is IGriddoHostedColumnView)
+        {
+            return Math.Max(MinColumnWidth * ContentScale, GetColumnWidth(columnIndex));
+        }
+
+        var fallbackTypeface = new Typeface("Segoe UI");
+        var typeface = ResolveColumnTypeface(columnIndex, fallbackTypeface);
+        var fontSize = ResolveColumnFontSize(columnIndex);
+        var pad = 12 * _contentScale;
+        var max = MeasureTextWidth(column.Header, typeface, fontSize) + pad;
+        foreach (var rowIndex in sampledRows)
+        {
+            if (rowIndex < 0 || rowIndex >= Rows.Count)
+            {
+                continue;
+            }
+
+            var raw = column.GetValue(Rows[rowIndex]);
+            if (raw is ImageSource or Geometry)
+            {
+                continue;
+            }
+
+            if (column.IsHtml)
+            {
+                var renderedWidth = GriddoValuePainter.MeasureRenderedWidth(raw, typeface, fontSize, treatAsHtml: true);
+                if (renderedWidth > 0)
+                {
+                    max = Math.Max(max, renderedWidth + pad);
+                }
+
+                continue;
+            }
+
+            var text = column.FormatValue(raw);
+            if (string.IsNullOrEmpty(text))
+            {
+                continue;
+            }
+
+            max = Math.Max(max, MeasureTextWidth(text, typeface, fontSize) + pad);
+        }
+
+        return max;
     }
 }

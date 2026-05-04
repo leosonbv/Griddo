@@ -4,7 +4,7 @@ using Griddo.Editing;
 
 namespace Griddo.Columns;
 
-public sealed class GriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMember, IGriddoColumnSourceObject, IGriddoColumnTitleView, IGriddoColumnFormatView, IGriddoColumnFontView
+public sealed class GriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMember, IGriddoColumnSourceObject, IGriddoColumnTitleView, IGriddoColumnDescriptionView, IGriddoColumnFormatView, IGriddoColumnFontView, IGriddoColumnColorView
 {
     private readonly Func<object, object?> _valueGetter;
     private readonly Func<object, object?, bool> _valueSetter;
@@ -33,9 +33,13 @@ public sealed class GriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMem
 
     public string Header { get; set; }
     public string AbbreviatedHeader { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
     public string FormatString { get; set; } = string.Empty;
     public string FontFamilyName { get; set; } = string.Empty;
     public double FontSize { get; set; }
+    public string FontStyleName { get; set; } = string.Empty;
+    public string ForegroundColor { get; set; } = string.Empty;
+    public string BackgroundColor { get; set; } = string.Empty;
 
     /// <inheritdoc cref="IGriddoColumnSourceMember.SourceMemberName"/>
     /// <remarks>Empty when not specified at construction; column chooser may infer from row type.</remarks>
@@ -55,7 +59,14 @@ public sealed class GriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMem
     {
         if (!string.IsNullOrWhiteSpace(FormatString) && value is IFormattable formatValue)
         {
-            return formatValue.ToString(FormatString, CultureInfo.CurrentCulture);
+            try
+            {
+                return formatValue.ToString(FormatString, CultureInfo.CurrentCulture);
+            }
+            catch (FormatException)
+            {
+                // Invalid format string for this value type: fall back to default formatting.
+            }
         }
 
         return value switch
@@ -68,7 +79,7 @@ public sealed class GriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMem
     }
 }
 
-public sealed class HtmlGriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMember, IGriddoColumnSourceObject, IGriddoColumnTitleView, IGriddoColumnFormatView, IGriddoColumnFontView
+public sealed class HtmlGriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMember, IGriddoColumnSourceObject, IGriddoColumnTitleView, IGriddoColumnDescriptionView, IGriddoColumnFormatView, IGriddoColumnFontView, IGriddoColumnColorView
 {
     private readonly Func<object, string> _valueGetter;
     private readonly Func<object, string, bool> _valueSetter;
@@ -97,9 +108,13 @@ public sealed class HtmlGriddoColumnView : IGriddoColumnView, IGriddoColumnSourc
 
     public string Header { get; set; }
     public string AbbreviatedHeader { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
     public string FormatString { get; set; } = string.Empty;
     public string FontFamilyName { get; set; } = string.Empty;
     public double FontSize { get; set; }
+    public string FontStyleName { get; set; } = string.Empty;
+    public string ForegroundColor { get; set; } = string.Empty;
+    public string BackgroundColor { get; set; } = string.Empty;
 
     public string SourceMemberName { get; }
     public string SourceObjectName { get; }
@@ -118,7 +133,14 @@ public sealed class HtmlGriddoColumnView : IGriddoColumnView, IGriddoColumnSourc
     {
         if (!string.IsNullOrWhiteSpace(FormatString) && value is IFormattable formattable)
         {
-            return formattable.ToString(FormatString, CultureInfo.CurrentCulture);
+            try
+            {
+                return formattable.ToString(FormatString, CultureInfo.CurrentCulture);
+            }
+            catch (FormatException)
+            {
+                // Invalid format string for this value type: fall back to default formatting.
+            }
         }
 
         return value?.ToString() ?? string.Empty;
@@ -129,7 +151,7 @@ public sealed class HtmlGriddoColumnView : IGriddoColumnView, IGriddoColumnSourc
 /// Boolean column: centered checkbox rendering, <see cref="GriddoCellEditors.Bool"/> for typed/F2 edits,
 /// Space / second click / double-click toggle in the grid.
 /// </summary>
-public sealed class GriddoBoolColumnView : IGriddoColumnView, IGriddoColumnSourceMember, IGriddoColumnSourceObject, IGriddoColumnTitleView, IGriddoColumnFormatView, IGriddoColumnFontView
+public sealed class GriddoBoolColumnView : IGriddoColumnView, IGriddoColumnSourceMember, IGriddoColumnSourceObject, IGriddoColumnTitleView, IGriddoColumnDescriptionView, IGriddoColumnFormatView, IGriddoColumnFontView, IGriddoColumnColorView
 {
     private readonly Func<object, object?> _valueGetter;
     private readonly Func<object, object?, bool> _valueSetter;
@@ -156,9 +178,13 @@ public sealed class GriddoBoolColumnView : IGriddoColumnView, IGriddoColumnSourc
 
     public string Header { get; set; }
     public string AbbreviatedHeader { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
     public string FormatString { get; set; } = string.Empty;
     public string FontFamilyName { get; set; } = string.Empty;
     public double FontSize { get; set; }
+    public string FontStyleName { get; set; } = string.Empty;
+    public string ForegroundColor { get; set; } = string.Empty;
+    public string BackgroundColor { get; set; } = string.Empty;
 
     public string SourceMemberName { get; }
     public string SourceObjectName { get; }
@@ -176,7 +202,14 @@ public sealed class GriddoBoolColumnView : IGriddoColumnView, IGriddoColumnSourc
     {
         if (!string.IsNullOrWhiteSpace(FormatString) && value is IFormattable formattable)
         {
-            return formattable.ToString(FormatString, CultureInfo.CurrentCulture);
+            try
+            {
+                return formattable.ToString(FormatString, CultureInfo.CurrentCulture);
+            }
+            catch (FormatException)
+            {
+                // Invalid format string for this value type: fall back to default formatting.
+            }
         }
 
         return value switch

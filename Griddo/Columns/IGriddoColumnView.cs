@@ -22,6 +22,11 @@ public interface IGriddoColumnTitleView
     string AbbreviatedHeader { get; set; }
 }
 
+public interface IGriddoColumnDescriptionView
+{
+    string Description { get; set; }
+}
+
 public interface IGriddoColumnFormatView
 {
     string FormatString { get; set; }
@@ -31,6 +36,13 @@ public interface IGriddoColumnFontView
 {
     string FontFamilyName { get; set; }
     double FontSize { get; set; }
+    string FontStyleName { get; set; }
+}
+
+public interface IGriddoColumnColorView
+{
+    string ForegroundColor { get; set; }
+    string BackgroundColor { get; set; }
 }
 
 public interface IGriddoSizedImageValue

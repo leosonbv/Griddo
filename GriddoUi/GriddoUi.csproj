@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Griddo\Griddo.csproj" />
+    <PackageReference Include="WpfColorFontDialog" Version="1.0.9" />
   </ItemGroup>
 
 </Project>

@@ -13,7 +13,7 @@ public sealed class ColumnEditRow
     /// <summary>User-facing column header text applied to <see cref="IGriddoColumnView.Header"/>.</summary>
     public string Title { get; set; } = string.Empty;
 
-    public string Description { get; init; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
 
     public bool Visible { get; set; } = true;
 
@@ -24,6 +24,11 @@ public sealed class ColumnEditRow
     public string FormatString { get; set; } = string.Empty;
     public string FontFamilyName { get; set; } = string.Empty;
     public double FontSize { get; set; }
+    public string FontStyleName { get; set; } = string.Empty;
+    public string ForegroundColor { get; set; } = string.Empty;
+    public string BackgroundColor { get; set; } = string.Empty;
+    public bool IsNumericProperty { get; init; }
+    public bool IsDateTimeProperty { get; init; }
     public int SortPriority { get; set; }
     public bool SortAscending { get; set; } = true;
 
@@ -44,6 +49,11 @@ public sealed class ColumnEditRow
         FormatString = FormatString,
         FontFamilyName = FontFamilyName,
         FontSize = FontSize,
+        FontStyleName = FontStyleName,
+        ForegroundColor = ForegroundColor,
+        BackgroundColor = BackgroundColor,
+        IsNumericProperty = IsNumericProperty,
+        IsDateTimeProperty = IsDateTimeProperty,
         SortPriority = SortPriority,
         SortAscending = SortAscending,
         SampleDisplay = SampleDisplay
