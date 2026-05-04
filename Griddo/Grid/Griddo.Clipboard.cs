@@ -10,6 +10,49 @@ namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
+    public void CopyToClipboard()
+    {
+        if (_isEditing)
+        {
+            CopyEditBufferToClipboard();
+            return;
+        }
+
+        CopySelectedCellsToClipboard();
+    }
+
+    public void PasteFromClipboard()
+    {
+        if (_isEditing)
+        {
+            PasteClipboardIntoEditBuffer();
+            return;
+        }
+
+        PasteClipboardIntoGrid();
+    }
+
+    public void CutToClipboard()
+    {
+        if (_isEditing)
+        {
+            CutEditBufferToClipboard();
+            return;
+        }
+
+        CutSelectedCellsToClipboard();
+    }
+
+    public void ClearCells()
+    {
+        if (_isEditing)
+        {
+            return;
+        }
+
+        ClearSelectedCells();
+    }
+
     private void CutSelectedCellsToClipboard()
     {
         CopySelectedCellsToClipboard();

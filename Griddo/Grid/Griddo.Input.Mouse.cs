@@ -197,7 +197,6 @@ public sealed partial class Griddo
                 && Rows.Count > 0
                 && Columns.Count > 0)
             {
-                SelectColumn(clickedColumnHeader, isCtrlPressed);
                 _currentCell = target;
                 _isEditing = false;
                 InvalidateVisual();
@@ -262,7 +261,6 @@ public sealed partial class Griddo
                 && Rows.Count > 0
                 && Columns.Count > 0)
             {
-                SelectRow(clickedRowHeader, isCtrlPressed);
                 _currentCell = target;
                 _isEditing = false;
                 InvalidateVisual();
@@ -334,8 +332,8 @@ public sealed partial class Griddo
             {
                 _selectedCells.Clear();
                 _selectedCells.Add(clicked);
-                _currentCell = clicked;
             }
+            _currentCell = clicked;
             _isDraggingSelection = false;
             _pendingHostedEditActivation = false;
             SyncHostedCells();
@@ -360,8 +358,8 @@ public sealed partial class Griddo
             {
                 _selectedCells.Clear();
                 _selectedCells.Add(clicked);
-                _currentCell = clicked;
             }
+            _currentCell = clicked;
 
             _isEditing = false;
             InvalidateVisual();

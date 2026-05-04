@@ -1,9 +1,9 @@
 <Window
-    x:Class="GriddoUi.ColumnEdit.ColumnEditDialog"
+    x:Class="GriddoUi.ColumnEdit.GridConfigurator"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:grid="clr-namespace:Griddo.Grid;assembly=Griddo"
-    Title="Choose columns"
+    Title="Grid configurator"
     Width="960"
     Height="620"
     WindowStartupLocation="CenterOwner"
@@ -78,7 +78,7 @@
                         x:Name="ImmediateCellEditBox"
                         Margin="0,0,14,0"
                         VerticalAlignment="Center"
-                        Content="Immediate edit (Plotto only)" />
+                        Content="Immediate edit (Plot only)" />
                     <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="Show indicators:" />
                     <CheckBox
                         x:Name="ShowSortingIndicatorsBox"

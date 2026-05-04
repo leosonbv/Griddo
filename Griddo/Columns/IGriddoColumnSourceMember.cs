@@ -5,3 +5,9 @@ public interface IGriddoColumnSourceMember
 {
     string SourceMemberName { get; }
 }
+
+/// <summary>Optional: named source object key in a composite row (e.g. dictionary key) used for tooling labels.</summary>
+public interface IGriddoColumnSourceObject
+{
+    string SourceObjectName { get; }
+}

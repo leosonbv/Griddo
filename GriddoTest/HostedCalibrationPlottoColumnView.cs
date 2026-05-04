@@ -11,23 +11,31 @@ using Griddo.Editing;
 
 namespace GriddoTest;
 
-public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView, IGriddoColumnSourceMember
+public sealed class HostedCalibrationPlottoColumnView : IGriddoHostedColumnView, IGriddoColumnSourceMember, IGriddoColumnSourceObject
 {
     private static bool _sharedEditorHooked;
     private readonly Func<object, int> _seedGetter;
 
-    public HostedCalibrationPlottoColumnView(string header, double width, Func<object, int> seedGetter)
+    public HostedCalibrationPlottoColumnView(
+        string header,
+        double width,
+        Func<object, int> seedGetter,
+        string sourceObjectName = "",
+        string sourceMemberName = "")
     {
         Header = header;
         Width = width;
         _seedGetter = seedGetter;
+        SourceObjectName = sourceObjectName;
+        SourceMemberName = sourceMemberName;
         Editor = GriddoCellEditors.Text;
         ContentAlignment = TextAlignment.Left;
     }
 
     public string Header { get; set; }
 
-    public string SourceMemberName => nameof(DemoRow.PlottoSeed);
+    public string SourceObjectName { get; }
+    public string SourceMemberName { get; }
     public double Width { get; }
     public bool Fill { get; set; }
     public bool IsHtml => false;

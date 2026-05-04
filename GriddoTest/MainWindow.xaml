@@ -12,7 +12,7 @@
     <DockPanel Margin="12">
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="_View">
-                <MenuItem Click="ChooseColumns_Click" Header="_Choose columns…" />
+                <MenuItem Click="OpenGridConfigurator_Click" Header="_Grid configurator…" />
             </MenuItem>
         </Menu>
         <grid:Griddo x:Name="DemoGrid" />

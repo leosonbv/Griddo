@@ -15,6 +15,8 @@ public partial class MainWindow : Window
 {
     private const string PlottoColumnHeader = "Plotto Cell";
     private const string CalibrationColumnHeader = "Calibration";
+    private const string PrimarySource = "Primary";
+    private const string AnalyticsSource = "Analytics";
     private readonly List<IGriddoColumnView> _allColumns = [];
 
     private readonly ChromatogramControl _plotConfigFallback = new()
@@ -63,9 +65,12 @@ public partial class MainWindow : Window
             Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint
         };
 
-        var chooseColumnsItem = new MenuItem { Header = "Choose _columns…" };
-        chooseColumnsItem.Click += (_, _) => OpenChooseColumnsDialog(sourceGridForChooser);
-        menu.Items.Add(chooseColumnsItem);
+        var gridConfiguratorItem = new MenuItem { Header = "_Grid configurator…" };
+        gridConfiguratorItem.Click += (_, _) => OpenGridConfigurator(sourceGridForChooser);
+        menu.Items.Add(gridConfiguratorItem);
+        var appearanceSubmenu = new MenuItem { Header = "Grid features", StaysOpenOnClick = true };
+        menu.Items.Add(appearanceSubmenu);
+        menu.Items.Add(new Separator());
         var autoWidthAllColumnsItem = new MenuItem { Header = "Auto width all columns" };
         autoWidthAllColumnsItem.Click += (_, _) => targetGrid.AutoSizeAllColumns();
         menu.Items.Add(autoWidthAllColumnsItem);
@@ -74,7 +79,7 @@ public partial class MainWindow : Window
         menu.Items.Add(autoWidthSelectedColumnsItem);
         var fillItem = new MenuItem
         {
-            Header = "Fill selected column(s)",
+            Header = "Fill width for selected column(s)",
             IsCheckable = true,
             IsChecked = targetColumns.All(c => c.Fill)
         };
@@ -124,14 +129,32 @@ public partial class MainWindow : Window
         var showAllExceptEmptyItem = new MenuItem { Header = "Show all _except empty columns" };
         showAllExceptEmptyItem.Click += (_, _) => ShowAllColumnsExceptEmpty(targetGrid, columnRegistry);
         visibilitySubmenu.Items.Add(showAllExceptEmptyItem);
+        visibilitySubmenu.Items.Add(new Separator());
+
+        var visibilityListItem = new MenuItem { Header = "Columns" };
+        foreach (var registeredColumn in columnRegistry)
+        {
+            var localColumn = registeredColumn;
+            var listItem = new MenuItem
+            {
+                Header = GetColumnVisibilityLabel(localColumn),
+                IsCheckable = true,
+                IsChecked = targetGrid.Columns.Contains(localColumn),
+                StaysOpenOnClick = true
+            };
+            listItem.Click += (_, _) => ToggleColumnVisibility(targetGrid, columnRegistry, localColumn, listItem.IsChecked);
+            visibilityListItem.Items.Add(listItem);
+        }
+
+        visibilitySubmenu.Items.Add(visibilityListItem);
         menu.Items.Add(visibilitySubmenu);
 
-        var appearanceSubmenu = new MenuItem { Header = "Column visibility" };
         var immediateEditItem = new MenuItem
         {
             Header = "Immediate edit (Plotto only)",
             IsCheckable = true,
-            IsChecked = targetGrid.HostedPlotDirectEditOnMouseDown
+            IsChecked = targetGrid.HostedPlotDirectEditOnMouseDown,
+            StaysOpenOnClick = true
         };
         immediateEditItem.Click += (_, _) => targetGrid.HostedPlotDirectEditOnMouseDown = immediateEditItem.IsChecked;
         appearanceSubmenu.Items.Add(immediateEditItem);
@@ -140,7 +163,8 @@ public partial class MainWindow : Window
         {
             Header = "Show cell selection color",
             IsCheckable = true,
-            IsChecked = targetGrid.ShowCellSelectionColoring
+            IsChecked = targetGrid.ShowCellSelectionColoring,
+            StaysOpenOnClick = true
         };
         showSelectionColoringItem.Click += (_, _) =>
         {
@@ -153,7 +177,8 @@ public partial class MainWindow : Window
         {
             Header = "Show header selection color",
             IsCheckable = true,
-            IsChecked = targetGrid.ShowHeaderSelectionColoring
+            IsChecked = targetGrid.ShowHeaderSelectionColoring,
+            StaysOpenOnClick = true
         };
         showHeaderSelectionColoringItem.Click += (_, _) =>
         {
@@ -166,7 +191,8 @@ public partial class MainWindow : Window
         {
             Header = "Show current cell color",
             IsCheckable = true,
-            IsChecked = targetGrid.ShowCurrentCellColor
+            IsChecked = targetGrid.ShowCurrentCellColor,
+            StaysOpenOnClick = true
         };
         showCurrentCellColorItem.Click += (_, _) =>
         {
@@ -179,7 +205,8 @@ public partial class MainWindow : Window
         {
             Header = "Show edit cell color",
             IsCheckable = true,
-            IsChecked = targetGrid.ShowEditCellColor
+            IsChecked = targetGrid.ShowEditCellColor,
+            StaysOpenOnClick = true
         };
         showEditCellColorItem.Click += (_, _) =>
         {
@@ -192,7 +219,8 @@ public partial class MainWindow : Window
         {
             Header = "Show sort indicators",
             IsCheckable = true,
-            IsChecked = targetGrid.ShowSortingIndicators
+            IsChecked = targetGrid.ShowSortingIndicators,
+            StaysOpenOnClick = true
         };
         showSortIndicatorsItem.Click += (_, _) =>
         {
@@ -200,8 +228,6 @@ public partial class MainWindow : Window
             targetGrid.InvalidateVisual();
         };
         appearanceSubmenu.Items.Add(showSortIndicatorsItem);
-        menu.Items.Add(appearanceSubmenu);
-        menu.Items.Add(new Separator());
 
         var visibleRowsSubmenu = new MenuItem { Header = "Fill rows" };
         for (var mode = 0; mode <= 10; mode++)
@@ -259,57 +285,30 @@ public partial class MainWindow : Window
 
     private void ConfigureGrid()
     {
-        RegisterColumn(new GriddoColumnView(
+        RegisterColumn(GriddoNamedSourceColumns.Create(
+            sourceObjectName: PrimarySource,
+            sourceMemberName: nameof(PrimaryDemoSource.Id),
             header: "ID",
             width: 70,
-            valueGetter: row => ((DemoRow)row).Id,
-            valueSetter: (row, value) =>
-            {
-                var text = value?.ToString();
-                if (!int.TryParse(text, out var id))
-                {
-                    return false;
-                }
+            editor: GriddoCellEditors.Number));
 
-                ((DemoRow)row).Id = id;
-                return true;
-            },
-            editor: GriddoCellEditors.Number,
-            sourceMemberName: nameof(DemoRow.Id)));
-
-        RegisterColumn(new GriddoColumnView(
+        RegisterColumn(GriddoNamedSourceColumns.Create(
+            sourceObjectName: PrimarySource,
+            sourceMemberName: nameof(PrimaryDemoSource.Name),
             header: "Name",
-            width: 180,
-            valueGetter: row => ((DemoRow)row).Name,
-            valueSetter: (row, value) =>
-            {
-                ((DemoRow)row).Name = value?.ToString() ?? string.Empty;
-                return true;
-            },
-            sourceMemberName: nameof(DemoRow.Name)));
+            width: 180));
 
-        RegisterColumn(new GriddoColumnView(
+        RegisterColumn(GriddoNamedSourceColumns.Create(
+            sourceObjectName: AnalyticsSource,
+            sourceMemberName: nameof(AnalyticsDemoSource.Score),
             header: "Score",
             width: 100,
-            valueGetter: row => ((DemoRow)row).Score,
-            valueSetter: (row, value) =>
-            {
-                var text = value?.ToString();
-                if (!double.TryParse(text, out var score))
-                {
-                    return false;
-                }
-
-                ((DemoRow)row).Score = score;
-                return true;
-            },
-            editor: GriddoCellEditors.Number,
-            sourceMemberName: nameof(DemoRow.Score)));
+            editor: GriddoCellEditors.Number));
 
         RegisterColumn(new GriddoBoolColumnView(
             header: "Active",
             width: 72,
-            valueGetter: row => ((DemoRow)row).Active,
+            valueGetter: row => GetPrimarySource(row).Active,
             valueSetter: (row, value) =>
             {
                 if (value is not bool b)
@@ -317,39 +316,88 @@ public partial class MainWindow : Window
                     return false;
                 }
 
-                ((DemoRow)row).Active = b;
+                GetPrimarySource(row).Active = b;
                 return true;
             },
-            sourceMemberName: nameof(DemoRow.Active)));
+            sourceMemberName: nameof(PrimaryDemoSource.Active),
+            sourceObjectName: PrimarySource));
 
         RegisterColumn(new HtmlGriddoColumnView(
             header: "Html",
             width: 260,
-            valueGetter: row => ((DemoRow)row).HtmlSnippet,
+            valueGetter: row => GetPrimarySource(row).HtmlSnippet,
             valueSetter: (row, value) =>
             {
-                ((DemoRow)row).HtmlSnippet = value;
+                GetPrimarySource(row).HtmlSnippet = value;
                 return true;
             },
-            sourceMemberName: nameof(DemoRow.HtmlSnippet)));
+            sourceMemberName: nameof(PrimaryDemoSource.HtmlSnippet),
+            sourceObjectName: PrimarySource));
 
         RegisterColumn(new GriddoColumnView(
             header: "Graphic",
             width: 120,
-            valueGetter: row => ((DemoRow)row).Graphic,
+            valueGetter: row => GetPrimarySource(row).Graphic,
             valueSetter: (_, _) => false,
             editor: GriddoCellEditors.Text,
-            sourceMemberName: nameof(DemoRow.Graphic)));
+            sourceMemberName: nameof(PrimaryDemoSource.Graphic),
+            sourceObjectName: PrimarySource));
 
         RegisterColumn(new HostedPlottoColumnView(
             header: PlottoColumnHeader,
             width: 220,
-            plottoSeedGetter: row => ((DemoRow)row).PlottoSeed));
+            plottoSeedGetter: row => GetAnalyticsSource(row).PlottoSeed,
+            sourceObjectName: AnalyticsSource,
+            sourceMemberName: nameof(AnalyticsDemoSource.PlottoSeed)));
 
         RegisterColumn(new HostedCalibrationPlottoColumnView(
             header: CalibrationColumnHeader,
             width: 240,
-            seedGetter: row => ((DemoRow)row).PlottoSeed));
+            seedGetter: row => GetAnalyticsSource(row).PlottoSeed,
+            sourceObjectName: AnalyticsSource,
+            sourceMemberName: nameof(AnalyticsDemoSource.PlottoSeed)));
+
+        var cellEditItem = new MenuItem
+        {
+            Header = "Cell edit",
+            InputGestureText = "F2"
+        };
+        cellEditItem.Click += (_, _) => DemoGrid.EditCurrentCell();
+
+        var cancelCellEditItem = new MenuItem
+        {
+            Header = "Cancel cell edit",
+            InputGestureText = "Esc"
+        };
+        cancelCellEditItem.Click += (_, _) => DemoGrid.CancelCurrentCellEdit();
+
+        var copyItem = new MenuItem
+        {
+            Header = "Copy",
+            InputGestureText = "Ctrl+C"
+        };
+        copyItem.Click += (_, _) => DemoGrid.CopyToClipboard();
+
+        var cutItem = new MenuItem
+        {
+            Header = "Cut",
+            InputGestureText = "Ctrl+X"
+        };
+        cutItem.Click += (_, _) => DemoGrid.CutToClipboard();
+
+        var pasteItem = new MenuItem
+        {
+            Header = "Paste",
+            InputGestureText = "Ctrl+V"
+        };
+        pasteItem.Click += (_, _) => DemoGrid.PasteFromClipboard();
+
+        var clearItem = new MenuItem
+        {
+            Header = "Delete (clear)",
+            InputGestureText = "Delete"
+        };
+        clearItem.Click += (_, _) => DemoGrid.ClearCells();
 
         var fillDownItem = new MenuItem
         {
@@ -371,7 +419,13 @@ public partial class MainWindow : Window
         {
             Items =
             {
-                new MenuItem { Header = "Demo: cell context menu" },
+                cellEditItem,
+                cancelCellEditItem,
+                new Separator(),
+                copyItem,
+                cutItem,
+                pasteItem,
+                clearItem,
                 new Separator(),
                 fillDownItem,
                 incrementalDownItem,
@@ -382,17 +436,26 @@ public partial class MainWindow : Window
 
         for (var i = 1; i <= 50_000; i++)
         {
-            DemoGrid.Rows.Add(new DemoRow
+            var primary = new PrimaryDemoSource
             {
                 Id = i,
                 Name = $"Item {i:000}",
-                Score = Math.Round(40 + Random.Shared.NextDouble() * 60, 2),
                 Active = i % 5 == 0,
                 HtmlSnippet = i % 3 == 0
                     ? $"<table><tr><th>R{i}</th><th>Q{i % 4}</th></tr><tr><td>{i * 2}</td><td><b>{Math.Round(i / 3.0, 2)}</b></td></tr></table>"
                     : $"<b>Row {i}</b> has <i>formatted</i> text",
-                Graphic = CreatePathMarkupDemo(i),
+                Graphic = CreatePathMarkupDemo(i)
+            };
+            var analytics = new AnalyticsDemoSource
+            {
+                Score = Math.Round(40 + Random.Shared.NextDouble() * 60, 2),
                 PlottoSeed = i
+            };
+
+            DemoGrid.Rows.Add(new Dictionary<string, object>
+            {
+                [PrimarySource] = primary,
+                [AnalyticsSource] = analytics
             });
         }
     }
@@ -533,6 +596,41 @@ public partial class MainWindow : Window
         return selectedColumns;
     }
 
+    private static string GetColumnVisibilityLabel(IGriddoColumnView column)
+    {
+        var sourceObjectName = column is IGriddoColumnSourceObject sourceObj ? sourceObj.SourceObjectName : string.Empty;
+        if (string.IsNullOrWhiteSpace(sourceObjectName))
+        {
+            return column.Header;
+        }
+
+        return $"{sourceObjectName}.{column.Header}";
+    }
+
+    private static PrimaryDemoSource GetPrimarySource(object row)
+    {
+        if (row is IReadOnlyDictionary<string, object> map
+            && map.TryGetValue(PrimarySource, out var source)
+            && source is PrimaryDemoSource primary)
+        {
+            return primary;
+        }
+
+        throw new InvalidOperationException($"Row does not contain source '{PrimarySource}'.");
+    }
+
+    private static AnalyticsDemoSource GetAnalyticsSource(object row)
+    {
+        if (row is IReadOnlyDictionary<string, object> map
+            && map.TryGetValue(AnalyticsSource, out var source)
+            && source is AnalyticsDemoSource analytics)
+        {
+            return analytics;
+        }
+
+        throw new InvalidOperationException($"Row does not contain source '{AnalyticsSource}'.");
+    }
+
     /// <summary>Five calibration standards; Y values vary slightly by row seed. Fit mode cycles Linear / LinearThroughOrigin / Quadratic / QuadraticThroughOrigin by seed.</summary>
     internal static List<CalibrationPoint> CreateCalibrationPoints(int seed)
     {
@@ -595,14 +693,14 @@ public partial class MainWindow : Window
         return g;
     }
 
-    private void ChooseColumns_Click(object sender, RoutedEventArgs e)
+    private void OpenGridConfigurator_Click(object sender, RoutedEventArgs e)
     {
         _ = sender;
         _ = e;
-        OpenChooseColumnsDialog(DemoGrid);
+        OpenGridConfigurator(DemoGrid);
     }
 
-    private void OpenChooseColumnsDialog(global::Griddo.Grid.Griddo grid)
+    private void OpenGridConfigurator(global::Griddo.Grid.Griddo grid)
     {
         var rows = ColumnMetadataBuilder.BuildRowsFromGrid(grid, _allColumns);
         var initialOptions = new ColumnChooserGeneralOptions
@@ -616,7 +714,7 @@ public partial class MainWindow : Window
             ShowSortingIndicators = grid.ShowSortingIndicators,
             ImmediatePlottoEdit = grid.HostedPlotDirectEditOnMouseDown
         };
-        var dlg = new ColumnEditDialog(rows, grid.FixedColumnCount, grid.FixedRowCount, initialOptions) { Owner = this };
+        var dlg = new GridConfigurator(rows, grid.FixedColumnCount, grid.FixedRowCount, initialOptions) { Owner = this };
         dlg.TargetSourceGrid = grid;
         dlg.ApplyToSourceGrid = (r, fc, fr, go) => ColumnChooserGridApplier.Apply(grid, r, fc, fr, go, _allColumns);
         dlg.ColumnHeaderMenuHandler = (g, ev) => OnColumnHeaderRightClick(g, dlg.ColumnHeaderRegistry, grid, ev);
@@ -654,13 +752,17 @@ public partial class MainWindow : Window
     ];
 }
 
-public sealed class DemoRow
+public sealed class PrimaryDemoSource
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
-    public double Score { get; set; }
     public bool Active { get; set; }
     public string HtmlSnippet { get; set; } = string.Empty;
     public Geometry Graphic { get; set; } = Geometry.Empty;
+}
+
+public sealed class AnalyticsDemoSource
+{
+    public double Score { get; set; }
     public int PlottoSeed { get; set; }
 }

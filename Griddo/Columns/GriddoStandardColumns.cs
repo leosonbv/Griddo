@@ -4,7 +4,7 @@ using Griddo.Editing;
 
 namespace Griddo.Columns;
 
-public sealed class GriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMember, IGriddoColumnTitleView, IGriddoColumnFormatView, IGriddoColumnFontView
+public sealed class GriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMember, IGriddoColumnSourceObject, IGriddoColumnTitleView, IGriddoColumnFormatView, IGriddoColumnFontView
 {
     private readonly Func<object, object?> _valueGetter;
     private readonly Func<object, object?, bool> _valueSetter;
@@ -17,12 +17,14 @@ public sealed class GriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMem
         IGriddoCellEditor? editor = null,
         TextAlignment? contentAlignment = null,
         bool fill = false,
-        string? sourceMemberName = null)
+        string? sourceMemberName = null,
+        string? sourceObjectName = null)
     {
         Header = header;
         Width = width;
         Fill = fill;
         SourceMemberName = sourceMemberName ?? string.Empty;
+        SourceObjectName = sourceObjectName ?? string.Empty;
         _valueGetter = valueGetter;
         _valueSetter = valueSetter;
         Editor = editor ?? GriddoCellEditors.Text;
@@ -38,6 +40,7 @@ public sealed class GriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMem
     /// <inheritdoc cref="IGriddoColumnSourceMember.SourceMemberName"/>
     /// <remarks>Empty when not specified at construction; column chooser may infer from row type.</remarks>
     public string SourceMemberName { get; }
+    public string SourceObjectName { get; }
     public double Width { get; }
     public bool Fill { get; set; }
     public bool IsHtml => false;
@@ -65,7 +68,7 @@ public sealed class GriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMem
     }
 }
 
-public sealed class HtmlGriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMember, IGriddoColumnTitleView, IGriddoColumnFormatView, IGriddoColumnFontView
+public sealed class HtmlGriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMember, IGriddoColumnSourceObject, IGriddoColumnTitleView, IGriddoColumnFormatView, IGriddoColumnFontView
 {
     private readonly Func<object, string> _valueGetter;
     private readonly Func<object, string, bool> _valueSetter;
@@ -78,12 +81,14 @@ public sealed class HtmlGriddoColumnView : IGriddoColumnView, IGriddoColumnSourc
         IGriddoCellEditor? editor = null,
         TextAlignment contentAlignment = TextAlignment.Left,
         bool fill = false,
-        string? sourceMemberName = null)
+        string? sourceMemberName = null,
+        string? sourceObjectName = null)
     {
         Header = header;
         Width = width;
         Fill = fill;
         SourceMemberName = sourceMemberName ?? string.Empty;
+        SourceObjectName = sourceObjectName ?? string.Empty;
         _valueGetter = valueGetter;
         _valueSetter = valueSetter;
         Editor = editor ?? GriddoCellEditors.Text;
@@ -97,6 +102,7 @@ public sealed class HtmlGriddoColumnView : IGriddoColumnView, IGriddoColumnSourc
     public double FontSize { get; set; }
 
     public string SourceMemberName { get; }
+    public string SourceObjectName { get; }
     public double Width { get; }
     public bool Fill { get; set; }
     public bool IsHtml => true;
@@ -123,7 +129,7 @@ public sealed class HtmlGriddoColumnView : IGriddoColumnView, IGriddoColumnSourc
 /// Boolean column: centered checkbox rendering, <see cref="GriddoCellEditors.Bool"/> for typed/F2 edits,
 /// Space / second click / double-click toggle in the grid.
 /// </summary>
-public sealed class GriddoBoolColumnView : IGriddoColumnView, IGriddoColumnSourceMember, IGriddoColumnTitleView, IGriddoColumnFormatView, IGriddoColumnFontView
+public sealed class GriddoBoolColumnView : IGriddoColumnView, IGriddoColumnSourceMember, IGriddoColumnSourceObject, IGriddoColumnTitleView, IGriddoColumnFormatView, IGriddoColumnFontView
 {
     private readonly Func<object, object?> _valueGetter;
     private readonly Func<object, object?, bool> _valueSetter;
@@ -134,12 +140,14 @@ public sealed class GriddoBoolColumnView : IGriddoColumnView, IGriddoColumnSourc
         Func<object, object?> valueGetter,
         Func<object, object?, bool> valueSetter,
         bool fill = false,
-        string? sourceMemberName = null)
+        string? sourceMemberName = null,
+        string? sourceObjectName = null)
     {
         Header = header;
         Width = width;
         Fill = fill;
         SourceMemberName = sourceMemberName ?? string.Empty;
+        SourceObjectName = sourceObjectName ?? string.Empty;
         _valueGetter = valueGetter;
         _valueSetter = valueSetter;
         Editor = GriddoCellEditors.Bool;
@@ -153,6 +161,7 @@ public sealed class GriddoBoolColumnView : IGriddoColumnView, IGriddoColumnSourc
     public double FontSize { get; set; }
 
     public string SourceMemberName { get; }
+    public string SourceObjectName { get; }
     public double Width { get; }
     public bool Fill { get; set; }
     public bool IsHtml => false;

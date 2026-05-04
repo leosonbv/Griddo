@@ -6,6 +6,26 @@ namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
+    /// <summary>Starts edit mode for the current cell (same behavior as F2).</summary>
+    public void EditCurrentCell() => BeginCurrentCellEdit();
+
+    /// <summary>Cancels current cell edit mode (same behavior as Esc while editing).</summary>
+    public void CancelCurrentCellEdit()
+    {
+        if (_isEditing)
+        {
+            _isEditing = false;
+            _editSession.Clear();
+            InvalidateVisual();
+            return;
+        }
+
+        if (IsCurrentHostedCellInEditMode())
+        {
+            SetCurrentHostedCellEditMode(false);
+        }
+    }
+
     private bool IsCurrentHostedCellInEditMode()
     {
         if (_currentCell.RowIndex < 0 || _currentCell.RowIndex >= Rows.Count || _currentCell.ColumnIndex < 0 || _currentCell.ColumnIndex >= Columns.Count)

@@ -95,6 +95,7 @@ public static class ColumnMetadataBuilder
         {
             SourceColumnIndex = sourceColumnIndex,
             PropertyName = propertyName,
+            SourceObjectName = col is IGriddoColumnSourceObject sourceObject ? sourceObject.SourceObjectName : string.Empty,
             Title = col.Header,
             AbbreviatedTitle = col is IGriddoColumnTitleView titleView ? titleView.AbbreviatedHeader : string.Empty,
             FormatString = col is IGriddoColumnFormatView formatView ? formatView.FormatString : string.Empty,

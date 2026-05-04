@@ -9,14 +9,14 @@ using Griddo.Grid;
 
 namespace GriddoUi.ColumnEdit;
 
-public partial class ColumnEditDialog : Window
+public partial class GridConfigurator : Window
 {
     private readonly List<IGriddoColumnView> _columnHeaderRegistry = [];
 
     /// <summary>Fired when Apply is pressed; argument is an ordered snapshot (clones).</summary>
     public event EventHandler<IReadOnlyList<ColumnEditRow>>? PreviewApply;
 
-    /// <summary>Grid whose columns this dialog edits (for nested “Choose columns…” from the preview grid).</summary>
+    /// <summary>Grid whose columns this dialog edits (for nested "Grid configurator..." from the preview grid).</summary>
     public global::Griddo.Grid.Griddo? TargetSourceGrid { get; set; }
 
     /// <summary>Applies current rows, frozen counts, and general options to the grid that opened the dialog.</summary>
@@ -27,7 +27,7 @@ public partial class ColumnEditDialog : Window
 
     public IReadOnlyList<IGriddoColumnView> ColumnHeaderRegistry => _columnHeaderRegistry;
 
-    public ColumnEditDialog(
+    public GridConfigurator(
         IReadOnlyList<ColumnEditRow> templateRows,
         int initialFrozenColumns,
         int initialFrozenRows,
@@ -258,6 +258,7 @@ public partial class ColumnEditDialog : Window
                 ((ColumnEditRow)r).SortAscending = b;
                 return true;
             }));
+        AddColumn(new ReadonlyColumn("Source", 120, r => r.SourceObjectName));
         AddColumn(new ReadonlyColumn("Property", 140, r => r.PropertyName));
         AddColumn(new GriddoColumnView(
             "Header",

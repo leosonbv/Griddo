@@ -1,6 +1,6 @@
 namespace GriddoUi.ColumnEdit;
 
-/// <summary>One editable row in <see cref="ColumnEditDialog"/> (maps to a property on the data shape).</summary>
+/// <summary>One editable row in <see cref="GridConfigurator"/> (maps to a property on the data shape).</summary>
 public sealed class ColumnEditRow
 {
     /// <summary>Original column index when built from a data grid; -1 when from CLR metadata only.</summary>
@@ -8,6 +8,7 @@ public sealed class ColumnEditRow
 
     /// <summary>CLR property / member name (from <see cref="IGriddoColumnSourceMember"/> or reflection inference).</summary>
     public string PropertyName { get; init; } = string.Empty;
+    public string SourceObjectName { get; init; } = string.Empty;
 
     /// <summary>User-facing column header text applied to <see cref="IGriddoColumnView.Header"/>.</summary>
     public string Title { get; set; } = string.Empty;
@@ -33,6 +34,7 @@ public sealed class ColumnEditRow
     {
         SourceColumnIndex = SourceColumnIndex,
         PropertyName = PropertyName,
+        SourceObjectName = SourceObjectName,
         Title = Title,
         Description = Description,
         Visible = Visible,

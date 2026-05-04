@@ -4,7 +4,7 @@ using Griddo.Grid;
 
 namespace GriddoUi.ColumnEdit;
 
-/// <summary>Applies <see cref="ColumnEditDialog"/> results to a live <see cref="Griddo"/>.</summary>
+/// <summary>Applies <see cref="GridConfigurator"/> results to a live <see cref="Griddo"/>.</summary>
 public static class ColumnChooserGridApplier
 {
     /// <param name="columnRegistry">When non-null, snapshot and <see cref="ColumnEditRow.SourceColumnIndex"/> refer to this list (includes hidden columns). When null, uses current <see cref="Griddo.Columns"/> only.</param>
