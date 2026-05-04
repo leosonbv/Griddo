@@ -150,7 +150,7 @@ public sealed partial class Griddo
         var foregroundBrush = ResolveColumnForegroundBrush(col, cellView);
         var underline = HasUnderlineStyle(col, cellView);
 
-        if (Columns[col] is GriddoBoolColumnView)
+        if (Columns[col] is IGriddoCheckboxToggleColumnView toggleCol && toggleCol.IsCheckboxCell(rowData))
         {
             var rawBool = Columns[col].GetValue(rowData);
             var isChecked = rawBool is true;

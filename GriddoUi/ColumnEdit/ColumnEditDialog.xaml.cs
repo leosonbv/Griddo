@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Media;
 using Griddo.Columns;
 using Griddo.Editing;
@@ -15,6 +14,7 @@ namespace GriddoUi.ColumnEdit;
 public partial class GridConfigurator : Window
 {
     private readonly List<IGriddoColumnView> _columnHeaderRegistry = [];
+    private readonly List<IGriddoColumnView> _generalColumnHeaderRegistry = [];
     private int _valueColumnIndex = -1;
 
     /// <summary>Fired when Apply is pressed; argument is an ordered snapshot (clones).</summary>
@@ -27,9 +27,12 @@ public partial class GridConfigurator : Window
     public Action<IReadOnlyList<ColumnEditRow>, int, int, ColumnChooserGeneralOptions>? ApplyToSourceGrid { get; set; }
 
     /// <summary>Host hook for column header context menu (e.g. <see cref="MainWindow"/> demo menu).</summary>
-    public Action<global::Griddo.Grid.Griddo, GriddoColumnHeaderMouseEventArgs>? ColumnHeaderMenuHandler { get; set; }
+    public Action<global::Griddo.Grid.Griddo, IReadOnlyList<IGriddoColumnView>, GriddoColumnHeaderMouseEventArgs>? ColumnHeaderMenuHandler { get; set; }
 
     public IReadOnlyList<IGriddoColumnView> ColumnHeaderRegistry => _columnHeaderRegistry;
+    public IReadOnlyList<IGriddoColumnView> GeneralColumnHeaderRegistry => _generalColumnHeaderRegistry;
+    public global::Griddo.Grid.Griddo ConfigColumnsGrid => ColumnGrid;
+    public global::Griddo.Grid.Griddo ConfigGeneralSettingsGrid => GeneralPropertyGrid;
 
     public GridConfigurator(
         IReadOnlyList<ColumnEditRow> templateRows,
@@ -44,80 +47,121 @@ public partial class GridConfigurator : Window
         }
 
         BuildColumns();
-        FrozenColumnsBox.Text = Math.Clamp(initialFrozenColumns, 0, ColumnGrid.Rows.Count).ToString();
-        FrozenRowsBox.Text = initialFrozenRows.ToString();
-        AttachUnsignedIntegerOnlyInput(FrozenColumnsBox);
-        AttachUnsignedIntegerOnlyInput(FrozenRowsBox);
-        AttachUnsignedIntegerOnlyInput(VisibleRowsBox);
         var options = initialOptions ?? new ColumnChooserGeneralOptions();
-        VisibleRowsBox.Text = options.VisibleRowCount.ToString();
-        ShowSelectionColorBox.IsChecked = options.ShowSelectionColor;
-        ShowCurrentCellRectBox.IsChecked = options.ShowCurrentCellRect;
-        ShowRowSelectionColorBox.IsChecked = options.ShowRowSelectionColor;
-        ShowColSelectionColorBox.IsChecked = options.ShowColSelectionColor;
-        ShowEditCellRectBox.IsChecked = options.ShowEditCellRect;
-        ShowSortingIndicatorsBox.IsChecked = options.ShowSortingIndicators;
-        ShowHorizontalScrollBarBox.IsChecked = options.ShowHorizontalScrollBar;
-        ShowVerticalScrollBarBox.IsChecked = options.ShowVerticalScrollBar;
-        ImmediateCellEditBox.IsChecked = options.ImmediatePlottoEdit;
+        BuildGeneralPropertyGrid(options, initialFrozenColumns, initialFrozenRows);
         ColumnGrid.CellPropertyViewResolver = ResolveCellPropertyViewForConfigurator;
         ColumnGrid.ColumnHeaderRightClick += ColumnGrid_ColumnHeaderRightClick;
-        Closed += (_, _) => ColumnGrid.ColumnHeaderRightClick -= ColumnGrid_ColumnHeaderRightClick;
+        GeneralPropertyGrid.ColumnHeaderRightClick += GeneralPropertyGrid_ColumnHeaderRightClick;
+        Closed += (_, _) =>
+        {
+            ColumnGrid.ColumnHeaderRightClick -= ColumnGrid_ColumnHeaderRightClick;
+            GeneralPropertyGrid.ColumnHeaderRightClick -= GeneralPropertyGrid_ColumnHeaderRightClick;
+        };
     }
 
-    /// <summary>Allows only ASCII digits (non-negative integers); paste inserts digits from clipboard.</summary>
-    private static void AttachUnsignedIntegerOnlyInput(System.Windows.Controls.TextBox textBox)
+    private void BuildGeneralPropertyGrid(ColumnChooserGeneralOptions options, int frozenColumns, int frozenRows)
     {
-        textBox.PreviewTextInput += (_, e) =>
-        {
-            if (!e.Text.All(static c => c is >= '0' and <= '9'))
-            {
-                e.Handled = true;
-            }
-        };
+        _generalColumnHeaderRegistry.Clear();
+        GeneralPropertyGrid.Columns.Clear();
+        GeneralPropertyGrid.Rows.Clear();
+        var settingColumn = new GriddoColumnView(
+            "Setting",
+            280,
+            static row => ((GeneralSettingRow)row).DisplayName,
+            static (_, _) => false,
+            GriddoCellEditors.Text,
+            TextAlignment.Left,
+            fill: false);
+        var valueColumn = new GeneralSettingValueColumnView("Value", 120);
+        GeneralPropertyGrid.Columns.Add(settingColumn);
+        GeneralPropertyGrid.Columns.Add(valueColumn);
+        _generalColumnHeaderRegistry.Add(settingColumn);
+        _generalColumnHeaderRegistry.Add(valueColumn);
 
-        textBox.PreviewKeyDown += (_, e) =>
-        {
-            if (e.Key == Key.Space)
-            {
-                e.Handled = true;
-            }
-        };
-
-        CommandManager.AddPreviewExecutedHandler(
-            textBox,
-            (sender, e) =>
-            {
-                if (e.Command != ApplicationCommands.Paste || sender is not System.Windows.Controls.TextBox box)
-                {
-                    return;
-                }
-
-                if (!System.Windows.Clipboard.ContainsText())
-                {
-                    return;
-                }
-
-                var digits = string.Concat(System.Windows.Clipboard.GetText().Where(static c => c is >= '0' and <= '9'));
-                e.Handled = true;
-                if (digits.Length == 0)
-                {
-                    return;
-                }
-
-                var start = box.SelectionStart;
-                var selLen = box.SelectionLength;
-                var left = Math.Clamp(start, 0, box.Text.Length);
-                var removeEnd = Math.Clamp(left + selLen, left, box.Text.Length);
-                box.Text = string.Concat(box.Text.AsSpan(0, left), digits, box.Text.AsSpan(removeEnd));
-                box.CaretIndex = left + digits.Length;
-                box.SelectionLength = 0;
-            });
+        var fc = Math.Clamp(frozenColumns, 0, ColumnGrid.Rows.Count);
+        GeneralPropertyGrid.Rows.Add(
+            new GeneralSettingRow(
+                GeneralSettingKind.RowHeight,
+                GeneralSettingValueKind.UnsignedInt,
+                "Row height",
+                options.RowHeight));
+        GeneralPropertyGrid.Rows.Add(
+            new GeneralSettingRow(
+                GeneralSettingKind.FillRowsVisibleCount,
+                GeneralSettingValueKind.UnsignedInt,
+                "Fill rows (visible row count, 0–10)",
+                options.VisibleRowCount));
+        GeneralPropertyGrid.Rows.Add(
+            new GeneralSettingRow(GeneralSettingKind.FrozenColumns, GeneralSettingValueKind.UnsignedInt, "Frozen columns", fc));
+        GeneralPropertyGrid.Rows.Add(
+            new GeneralSettingRow(GeneralSettingKind.FrozenRows, GeneralSettingValueKind.UnsignedInt, "Frozen rows", Math.Max(0, frozenRows)));
+        GeneralPropertyGrid.Rows.Add(
+            new GeneralSettingRow(
+                GeneralSettingKind.ImmediatePlottoEdit,
+                GeneralSettingValueKind.Boolean,
+                "Immediate edit (Plot only)",
+                boolValue: options.ImmediatePlottoEdit));
+        GeneralPropertyGrid.Rows.Add(
+            new GeneralSettingRow(
+                GeneralSettingKind.ShowSortingIndicators,
+                GeneralSettingValueKind.Boolean,
+                "Show sorting indicators",
+                boolValue: options.ShowSortingIndicators));
+        GeneralPropertyGrid.Rows.Add(
+            new GeneralSettingRow(
+                GeneralSettingKind.ShowHorizontalScrollBar,
+                GeneralSettingValueKind.Boolean,
+                "Show horizontal scrollbar",
+                boolValue: options.ShowHorizontalScrollBar));
+        GeneralPropertyGrid.Rows.Add(
+            new GeneralSettingRow(
+                GeneralSettingKind.ShowVerticalScrollBar,
+                GeneralSettingValueKind.Boolean,
+                "Show vertical scrollbar",
+                boolValue: options.ShowVerticalScrollBar));
+        GeneralPropertyGrid.Rows.Add(
+            new GeneralSettingRow(
+                GeneralSettingKind.ShowSelectionColor,
+                GeneralSettingValueKind.Boolean,
+                "Show selection color",
+                boolValue: options.ShowSelectionColor));
+        GeneralPropertyGrid.Rows.Add(
+            new GeneralSettingRow(
+                GeneralSettingKind.ShowRowSelectionColor,
+                GeneralSettingValueKind.Boolean,
+                "Show row header selection color",
+                boolValue: options.ShowRowSelectionColor));
+        GeneralPropertyGrid.Rows.Add(
+            new GeneralSettingRow(
+                GeneralSettingKind.ShowColSelectionColor,
+                GeneralSettingValueKind.Boolean,
+                "Show column header selection color",
+                boolValue: options.ShowColSelectionColor));
+        GeneralPropertyGrid.Rows.Add(
+            new GeneralSettingRow(
+                GeneralSettingKind.ShowCurrentCellRect,
+                GeneralSettingValueKind.Boolean,
+                "Show current cell rectangle",
+                boolValue: options.ShowCurrentCellRect));
+        GeneralPropertyGrid.Rows.Add(
+            new GeneralSettingRow(
+                GeneralSettingKind.ShowEditCellRect,
+                GeneralSettingValueKind.Boolean,
+                "Show edit cell rectangle",
+                boolValue: options.ShowEditCellRect));
     }
+
+    private GeneralSettingRow? GeneralRow(GeneralSettingKind kind) =>
+        GeneralPropertyGrid.Rows.OfType<GeneralSettingRow>().FirstOrDefault(r => r.Setting == kind);
 
     private void ColumnGrid_ColumnHeaderRightClick(object? sender, GriddoColumnHeaderMouseEventArgs e)
     {
-        ColumnHeaderMenuHandler?.Invoke(ColumnGrid, e);
+        ColumnHeaderMenuHandler?.Invoke(ColumnGrid, _columnHeaderRegistry, e);
+    }
+
+    private void GeneralPropertyGrid_ColumnHeaderRightClick(object? sender, GriddoColumnHeaderMouseEventArgs e)
+    {
+        ColumnHeaderMenuHandler?.Invoke(GeneralPropertyGrid, _generalColumnHeaderRegistry, e);
     }
 
     public IReadOnlyList<ColumnEditRow>? ResultRows { get; private set; }
@@ -348,6 +392,7 @@ public partial class GridConfigurator : Window
         _ = e;
         if (!TryCommitFrozenColumns(out var frozenColumns)
             || !TryCommitFrozenRows(out var frozenRows)
+            || !TryCommitRowHeight(out _)
             || !TryCommitVisibleRows(out _))
         {
             return;
@@ -365,6 +410,7 @@ public partial class GridConfigurator : Window
         _ = e;
         if (!TryCommitFrozenColumns(out var frozenColumns)
             || !TryCommitFrozenRows(out var frozenRows)
+            || !TryCommitRowHeight(out _)
             || !TryCommitVisibleRows(out _))
         {
             return;
@@ -390,7 +436,14 @@ public partial class GridConfigurator : Window
     private bool TryCommitFrozenColumns(out int frozenColumns)
     {
         frozenColumns = 0;
-        if (!int.TryParse(FrozenColumnsBox.Text.Trim(), out var fc) || fc < 0)
+        var row = GeneralRow(GeneralSettingKind.FrozenColumns);
+        if (row is null)
+        {
+            return false;
+        }
+
+        var fc = row.IntValue;
+        if (fc < 0)
         {
             System.Windows.MessageBox.Show(
                 this,
@@ -408,7 +461,14 @@ public partial class GridConfigurator : Window
     private bool TryCommitFrozenRows(out int frozenRows)
     {
         frozenRows = 0;
-        if (!int.TryParse(FrozenRowsBox.Text.Trim(), out var fr) || fr < 0)
+        var row = GeneralRow(GeneralSettingKind.FrozenRows);
+        if (row is null)
+        {
+            return false;
+        }
+
+        var fr = row.IntValue;
+        if (fr < 0)
         {
             System.Windows.MessageBox.Show(
                 this,
@@ -426,7 +486,14 @@ public partial class GridConfigurator : Window
     private bool TryCommitVisibleRows(out int visibleRows)
     {
         visibleRows = 0;
-        if (!int.TryParse(VisibleRowsBox.Text.Trim(), out var vr) || vr < 0 || vr > 10)
+        var row = GeneralRow(GeneralSettingKind.FillRowsVisibleCount);
+        if (row is null)
+        {
+            return false;
+        }
+
+        var vr = row.IntValue;
+        if (vr < 0 || vr > 10)
         {
             System.Windows.MessageBox.Show(
                 this,
@@ -441,21 +508,48 @@ public partial class GridConfigurator : Window
         return true;
     }
 
+    private bool TryCommitRowHeight(out int rowHeight)
+    {
+        rowHeight = 24;
+        var row = GeneralRow(GeneralSettingKind.RowHeight);
+        if (row is null)
+        {
+            return false;
+        }
+
+        var rh = row.IntValue;
+        if (rh < 18 || rh > 400)
+        {
+            System.Windows.MessageBox.Show(
+                this,
+                "Row height must be an integer between 18 and 400.",
+                Title,
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return false;
+        }
+
+        rowHeight = rh;
+        return true;
+    }
+
     private ColumnChooserGeneralOptions BuildGeneralOptions()
     {
+        _ = TryCommitRowHeight(out var rowHeight);
         _ = TryCommitVisibleRows(out var visibleRows);
         return new ColumnChooserGeneralOptions
         {
+            RowHeight = rowHeight,
             VisibleRowCount = visibleRows,
-            ShowSelectionColor = ShowSelectionColorBox.IsChecked == true,
-            ShowCurrentCellRect = ShowCurrentCellRectBox.IsChecked == true,
-            ShowRowSelectionColor = ShowRowSelectionColorBox.IsChecked == true,
-            ShowColSelectionColor = ShowColSelectionColorBox.IsChecked == true,
-            ShowEditCellRect = ShowEditCellRectBox.IsChecked == true,
-            ShowSortingIndicators = ShowSortingIndicatorsBox.IsChecked == true,
-            ShowHorizontalScrollBar = ShowHorizontalScrollBarBox.IsChecked == true,
-            ShowVerticalScrollBar = ShowVerticalScrollBarBox.IsChecked == true,
-            ImmediatePlottoEdit = ImmediateCellEditBox.IsChecked == true
+            ShowSelectionColor = GeneralRow(GeneralSettingKind.ShowSelectionColor)?.BoolValue ?? true,
+            ShowCurrentCellRect = GeneralRow(GeneralSettingKind.ShowCurrentCellRect)?.BoolValue ?? true,
+            ShowRowSelectionColor = GeneralRow(GeneralSettingKind.ShowRowSelectionColor)?.BoolValue ?? true,
+            ShowColSelectionColor = GeneralRow(GeneralSettingKind.ShowColSelectionColor)?.BoolValue ?? true,
+            ShowEditCellRect = GeneralRow(GeneralSettingKind.ShowEditCellRect)?.BoolValue ?? true,
+            ShowSortingIndicators = GeneralRow(GeneralSettingKind.ShowSortingIndicators)?.BoolValue ?? true,
+            ShowHorizontalScrollBar = GeneralRow(GeneralSettingKind.ShowHorizontalScrollBar)?.BoolValue ?? true,
+            ShowVerticalScrollBar = GeneralRow(GeneralSettingKind.ShowVerticalScrollBar)?.BoolValue ?? true,
+            ImmediatePlottoEdit = GeneralRow(GeneralSettingKind.ImmediatePlottoEdit)?.BoolValue ?? false
         };
     }
 

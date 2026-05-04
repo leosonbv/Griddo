@@ -64,6 +64,22 @@ public sealed partial class Griddo
         InvalidateVisual();
     }
 
+    /// <summary>
+    /// Gets the current logical width (same unit as <see cref="IGriddoColumnView.Width"/>), including user drag overrides.
+    /// </summary>
+    public double GetLogicalColumnWidth(int columnIndex)
+    {
+        if (columnIndex < 0 || columnIndex >= Columns.Count)
+        {
+            return MinColumnWidth;
+        }
+
+        var logical = _columnWidthOverrides.TryGetValue(columnIndex, out var overrideWidth)
+            ? overrideWidth
+            : Columns[columnIndex].Width;
+        return Math.Max(MinColumnWidth, logical);
+    }
+
     /// <summary>Clears per-column width overrides so layout uses each column view’s nominal <see cref="IGriddoColumnView.Width"/>.</summary>
     public void ClearColumnWidthOverrides()
     {

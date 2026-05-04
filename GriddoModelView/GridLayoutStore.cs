@@ -73,6 +73,7 @@ public sealed class GridLayoutStore
     private static GridLayoutDefinition Clone(GridLayoutDefinition source) => new()
     {
         GridKey = source.GridKey,
+        RowHeight = source.RowHeight,
         VisibleRowCount = source.VisibleRowCount,
         FrozenColumns = source.FrozenColumns,
         FrozenRows = source.FrozenRows,

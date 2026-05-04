@@ -97,7 +97,14 @@ public sealed partial class Griddo
 
     private void SetUniformRowHeightFromScreen(double screenPixelHeight)
     {
-        _uniformRowHeight = Math.Max(MinRowHeight, screenPixelHeight / ContentScale);
+        var clamped = Math.Max(MinRowHeight, screenPixelHeight / ContentScale);
+        if (Math.Abs(_uniformRowHeight - clamped) < double.Epsilon)
+        {
+            return;
+        }
+
+        _uniformRowHeight = clamped;
+        UniformRowHeightChanged?.Invoke(this, EventArgs.Empty);
         UpdateScrollBars();
     }
 

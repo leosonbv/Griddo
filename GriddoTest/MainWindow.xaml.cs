@@ -19,6 +19,8 @@ public partial class MainWindow : Window
     private const string PlottoColumnHeader = "Plotto Cell";
     private const string CalibrationColumnHeader = "Calibration";
     private const string DemoGridLayoutKey = "GriddoTest.MainWindow.DemoGrid";
+    private const string ConfigColumnsGridLayoutKey = "GriddoTest.MainWindow.Config.Columns";
+    private const string ConfigGeneralGridLayoutKey = "GriddoTest.MainWindow.Config.General";
     private const string PrimarySource = "Primary";
     private const string AnalyticsSource = "Analytics";
     private readonly List<IGriddoColumnView> _allColumns = [];
@@ -46,8 +48,9 @@ public partial class MainWindow : Window
         _viewStore.Load();
         _gridLayoutStore.Load();
         ConfigureGrid();
-        DemoGrid.ColumnHeaderRightClick += (_, e) => OnColumnHeaderRightClick(DemoGrid, _allColumns, DemoGrid, e);
+        DemoGrid.ColumnHeaderRightClick += (_, e) => OnColumnHeaderRightClick(DemoGrid, _allColumns, e);
         DemoGrid.SortDescriptorsChanged += (_, _) => PersistGridLayoutFromCurrentGrid(DemoGrid, DemoGridLayoutKey, _allColumns);
+        DemoGrid.UniformRowHeightChanged += (_, _) => PersistGridLayoutFromCurrentGrid(DemoGrid, DemoGridLayoutKey, _allColumns);
         DemoGrid.UniformRowHeight = 132;
         DemoGrid.FixedColumnCount = 1;
         DemoGrid.ImmediateCellEditOnSingleClick = false;
@@ -57,7 +60,6 @@ public partial class MainWindow : Window
     private void OnColumnHeaderRightClick(
         global::Griddo.Grid.Griddo targetGrid,
         IReadOnlyList<IGriddoColumnView> columnRegistry,
-        global::Griddo.Grid.Griddo sourceGridForChooser,
         GriddoColumnHeaderMouseEventArgs e)
     {
         if (e.ColumnIndex < 0 || e.ColumnIndex >= targetGrid.Columns.Count)
@@ -81,10 +83,11 @@ public partial class MainWindow : Window
             PlacementTarget = targetGrid,
             Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint
         };
-        void PersistLiveLayout() => PersistGridLayoutFromCurrentGrid(targetGrid, DemoGridLayoutKey, columnRegistry);
+        var layoutKey = ResolveLayoutKey(targetGrid, columnRegistry);
+        void PersistLiveLayout() => PersistGridLayoutFromCurrentGrid(targetGrid, layoutKey, columnRegistry);
 
         var gridConfiguratorItem = new MenuItem { Header = "_Grid configurator…" };
-        gridConfiguratorItem.Click += (_, _) => OpenGridConfigurator(sourceGridForChooser);
+        gridConfiguratorItem.Click += (_, _) => OpenGridConfigurator(targetGrid, columnRegistry, layoutKey);
         menu.Items.Add(gridConfiguratorItem);
         var appearanceSubmenu = new MenuItem { Header = "Grid features", StaysOpenOnClick = true };
         menu.Items.Add(appearanceSubmenu);
@@ -747,15 +750,43 @@ public partial class MainWindow : Window
     {
         _ = sender;
         _ = e;
-        OpenGridConfigurator(DemoGrid);
+        OpenGridConfigurator(DemoGrid, _allColumns, DemoGridLayoutKey);
     }
 
-    private void OpenGridConfigurator(global::Griddo.Grid.Griddo grid)
+    private void OpenGridConfigurator(
+        global::Griddo.Grid.Griddo grid,
+        IReadOnlyList<IGriddoColumnView> columnRegistry,
+        string layoutKey)
     {
-        var rows = ColumnMetadataBuilder.BuildRowsFromGrid(grid, _allColumns);
-        ApplyPersistedRowMetadata(rows);
+        var rows = ColumnMetadataBuilder.BuildRowsFromGrid(grid, columnRegistry);
+        for (var sourceIndex = 0; sourceIndex < columnRegistry.Count; sourceIndex++)
+        {
+            var registryColumn = columnRegistry[sourceIndex];
+            var visibleGridIndex = grid.Columns.IndexOf(registryColumn);
+            if (visibleGridIndex < 0)
+            {
+                continue;
+            }
+
+            var row = rows.FirstOrDefault(r => r.SourceColumnIndex == sourceIndex);
+            if (row is null)
+            {
+                continue;
+            }
+
+            // BuildRowsFromGrid uses column definition width; capture current live grid width overrides too.
+            row.Width = grid.GetLogicalColumnWidth(visibleGridIndex);
+        }
+        var shouldPersistPropertyViews = ReferenceEquals(columnRegistry, _allColumns);
+        if (shouldPersistPropertyViews)
+        {
+            ApplyPersistedRowMetadata(rows);
+        }
+        var frozenColumns = grid.FixedColumnCount;
+        var frozenRows = grid.FixedRowCount;
         var initialOptions = new ColumnChooserGeneralOptions
         {
+            RowHeight = (int)Math.Round(grid.UniformRowHeight),
             VisibleRowCount = grid.VisibleRowCount,
             ShowSelectionColor = grid.ShowCellSelectionColoring,
             ShowCurrentCellRect = grid.ShowCurrentCellColor,
@@ -767,17 +798,101 @@ public partial class MainWindow : Window
             ShowVerticalScrollBar = grid.ShowVerticalScrollBar,
             ImmediatePlottoEdit = grid.HostedPlotDirectEditOnMouseDown
         };
-        var dlg = new GridConfigurator(rows, grid.FixedColumnCount, grid.FixedRowCount, initialOptions) { Owner = this };
+
+        // Persisted configurator state should not depend on which source grid opened the dialog.
+        var dlg = new GridConfigurator(rows, frozenColumns, frozenRows, initialOptions) { Owner = this };
+        if (ReferenceEquals(columnRegistry, _allColumns))
+        {
+            ApplyPersistedGridLayoutForRegistry(dlg.ConfigColumnsGrid, dlg.ColumnHeaderRegistry, ConfigColumnsGridLayoutKey);
+            ApplyPersistedGridLayoutForRegistry(dlg.ConfigGeneralSettingsGrid, dlg.GeneralColumnHeaderRegistry, ConfigGeneralGridLayoutKey);
+        }
         dlg.TargetSourceGrid = grid;
         dlg.ApplyToSourceGrid = (r, fc, fr, go) =>
         {
-            ColumnChooserGridApplier.Apply(grid, r, fc, fr, go, _allColumns);
-            PersistPropertyViews(r);
-            PersistGridLayout(grid, DemoGridLayoutKey, r, fc, fr, go);
+            ColumnChooserGridApplier.Apply(grid, r, fc, fr, go, columnRegistry);
+            if (shouldPersistPropertyViews)
+            {
+                PersistPropertyViews(r);
+            }
+            PersistGridLayout(grid, layoutKey, r, fc, fr, go);
+            PersistGridLayoutFromCurrentGrid(dlg.ConfigColumnsGrid, ConfigColumnsGridLayoutKey, dlg.ColumnHeaderRegistry);
+            PersistGridLayoutFromCurrentGrid(dlg.ConfigGeneralSettingsGrid, ConfigGeneralGridLayoutKey, dlg.GeneralColumnHeaderRegistry);
         };
-        dlg.ColumnHeaderMenuHandler = (g, ev) => OnColumnHeaderRightClick(g, dlg.ColumnHeaderRegistry, grid, ev);
+        dlg.ColumnHeaderMenuHandler = (g, registry, ev) => OnColumnHeaderRightClick(g, registry, ev);
         grid.ClearCellSelection();
         dlg.ShowDialog();
+    }
+
+    private static bool IsGeneralConfigRegistry(IReadOnlyList<IGriddoColumnView> columnRegistry)
+    {
+        if (columnRegistry.Count != 2)
+        {
+            return false;
+        }
+
+        return string.Equals(columnRegistry[0].Header, "Setting", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(columnRegistry[1].Header, "Value", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string ResolveLayoutKey(global::Griddo.Grid.Griddo targetGrid, IReadOnlyList<IGriddoColumnView> columnRegistry)
+    {
+        if (ReferenceEquals(targetGrid, DemoGrid))
+        {
+            return DemoGridLayoutKey;
+        }
+
+        return IsGeneralConfigRegistry(columnRegistry) ? ConfigGeneralGridLayoutKey : ConfigColumnsGridLayoutKey;
+    }
+
+    private void ApplyPersistedGridLayoutForRegistry(
+        global::Griddo.Grid.Griddo grid,
+        IReadOnlyList<IGriddoColumnView> registry,
+        string layoutKey)
+    {
+        if (!_gridLayoutStore.TryGet(layoutKey, out var layout))
+        {
+            return;
+        }
+
+        var rows = ColumnMetadataBuilder.BuildRowsFromGrid(grid, registry);
+        var byIndex = layout.Columns.ToDictionary(c => c.SourceColumnIndex);
+        foreach (var row in rows)
+        {
+            if (!byIndex.TryGetValue(row.SourceColumnIndex, out var state))
+            {
+                continue;
+            }
+
+            row.Fill = state.Fill;
+            row.Visible = state.Visible;
+            row.Width = Math.Max(28, state.Width);
+            row.SortPriority = Math.Max(0, state.SortPriority);
+            row.SortAscending = state.SortAscending;
+        }
+
+        var options = new ColumnChooserGeneralOptions
+        {
+            RowHeight = layout.RowHeight,
+            VisibleRowCount = layout.VisibleRowCount,
+            ShowSelectionColor = layout.ShowSelectionColor,
+            ShowCurrentCellRect = layout.ShowCurrentCellRect,
+            ShowRowSelectionColor = layout.ShowRowSelectionColor,
+            ShowColSelectionColor = layout.ShowColSelectionColor,
+            ShowEditCellRect = layout.ShowEditCellRect,
+            ShowSortingIndicators = layout.ShowSortingIndicators,
+            ShowHorizontalScrollBar = layout.ShowHorizontalScrollBar,
+            ShowVerticalScrollBar = layout.ShowVerticalScrollBar,
+            ImmediatePlottoEdit = layout.ImmediatePlottoEdit
+        };
+
+        ColumnChooserGridApplier.Apply(
+            grid,
+            rows,
+            layout.FrozenColumns,
+            layout.FrozenRows,
+            options,
+            registry,
+            new HashSet<int>(byIndex.Keys));
     }
 
     private void ApplyPersistedPropertyViews()
@@ -954,6 +1069,7 @@ public partial class MainWindow : Window
 
         var options = new ColumnChooserGeneralOptions
         {
+            RowHeight = layout.RowHeight,
             VisibleRowCount = layout.VisibleRowCount,
             ShowSelectionColor = layout.ShowSelectionColor,
             ShowCurrentCellRect = layout.ShowCurrentCellRect,
@@ -986,6 +1102,7 @@ public partial class MainWindow : Window
         var definition = new GridLayoutDefinition
         {
             GridKey = gridKey,
+            RowHeight = options.RowHeight,
             VisibleRowCount = options.VisibleRowCount,
             FrozenColumns = frozenColumns,
             FrozenRows = frozenRows,
@@ -1041,8 +1158,26 @@ public partial class MainWindow : Window
         IReadOnlyList<IGriddoColumnView> registry)
     {
         var rows = ColumnMetadataBuilder.BuildRowsFromGrid(grid, registry);
+        for (var sourceIndex = 0; sourceIndex < registry.Count; sourceIndex++)
+        {
+            var registryColumn = registry[sourceIndex];
+            var visibleGridIndex = grid.Columns.IndexOf(registryColumn);
+            if (visibleGridIndex < 0)
+            {
+                continue;
+            }
+
+            var row = rows.FirstOrDefault(r => r.SourceColumnIndex == sourceIndex);
+            if (row is null)
+            {
+                continue;
+            }
+
+            row.Width = grid.GetLogicalColumnWidth(visibleGridIndex);
+        }
         var options = new ColumnChooserGeneralOptions
         {
+            RowHeight = (int)Math.Round(grid.UniformRowHeight),
             VisibleRowCount = grid.VisibleRowCount,
             ShowSelectionColor = grid.ShowCellSelectionColoring,
             ShowCurrentCellRect = grid.ShowCurrentCellColor,

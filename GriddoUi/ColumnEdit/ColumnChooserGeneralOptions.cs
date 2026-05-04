@@ -2,6 +2,7 @@ namespace GriddoUi.ColumnEdit;
 
 public sealed class ColumnChooserGeneralOptions
 {
+    public int RowHeight { get; set; } = 24;
     public int VisibleRowCount { get; set; }
     public bool ShowSelectionColor { get; set; } = true;
     public bool ShowCurrentCellRect { get; set; } = true;
@@ -15,6 +16,7 @@ public sealed class ColumnChooserGeneralOptions
 
     public ColumnChooserGeneralOptions Clone() => new()
     {
+        RowHeight = RowHeight,
         VisibleRowCount = VisibleRowCount,
         ShowSelectionColor = ShowSelectionColor,
         ShowCurrentCellRect = ShowCurrentCellRect,

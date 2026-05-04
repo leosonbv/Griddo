@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using Griddo.Columns;
+using Griddo.Editing;
 using Griddo.Primitives;
 
 namespace Griddo.Grid;
@@ -52,7 +53,14 @@ public sealed partial class Griddo
                 var caretIndex = GetCaretIndexFromEditPoint(pointer);
                 if (e.ClickCount >= 2)
                 {
-                    _editSession.SelectWordAt(caretIndex);
+                    if (TryGetCurrentColumn(out var currentColumn) && currentColumn.Editor is GriddoNumberCellEditor)
+                    {
+                        _editSession.SelectAll();
+                    }
+                    else
+                    {
+                        _editSession.SelectWordAt(caretIndex);
+                    }
                 }
                 else
                 {
@@ -431,7 +439,7 @@ public sealed partial class Griddo
                 _selectedCells.Add(clicked);
                 _currentCell = clicked;
                 _isDraggingSelection = false;
-                if (Columns[clicked.ColumnIndex] is GriddoBoolColumnView)
+                if (IsCheckboxToggleCell(clicked))
                 {
                     ToggleBoolCell(clicked);
                 }
@@ -487,7 +495,7 @@ public sealed partial class Griddo
             if (ImmediateCellEditOnSingleClick
                 && e.ClickCount == 1
                 && Columns[clicked.ColumnIndex] is not IGriddoHostedColumnView
-                && Columns[clicked.ColumnIndex] is not GriddoBoolColumnView)
+                && !IsCheckboxToggleCell(clicked))
             {
                 _selectedCells.Clear();
                 _selectedCells.Add(clicked);
@@ -516,7 +524,7 @@ public sealed partial class Griddo
                     _pendingHostedEditActivation = true;
                     _pendingHostedEditCell = clicked;
                 }
-                else if (Columns[clicked.ColumnIndex] is GriddoBoolColumnView)
+                else if (IsCheckboxToggleCell(clicked))
                 {
                     _selectedCells.Clear();
                     _selectedCells.Add(clicked);

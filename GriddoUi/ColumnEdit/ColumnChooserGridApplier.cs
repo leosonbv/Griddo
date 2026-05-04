@@ -162,6 +162,7 @@ public static class ColumnChooserGridApplier
         grid.FixedRowCount = Math.Clamp(frozenRows, 0, grid.Rows.Count);
         if (generalOptions is not null)
         {
+            grid.UniformRowHeight = Math.Max(18, generalOptions.RowHeight);
             grid.VisibleRowCount = generalOptions.VisibleRowCount;
             grid.ShowCellSelectionColoring = generalOptions.ShowSelectionColor;
             grid.ShowCurrentCellColor = generalOptions.ShowCurrentCellRect;

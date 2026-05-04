@@ -3,6 +3,7 @@ namespace GriddoModelView;
 public sealed class GridLayoutDefinition
 {
     public string GridKey { get; set; } = string.Empty;
+    public int RowHeight { get; set; } = 24;
     public int VisibleRowCount { get; set; }
     public int FrozenColumns { get; set; }
     public int FrozenRows { get; set; }

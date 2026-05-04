@@ -267,6 +267,7 @@ public sealed partial class Griddo : FrameworkElement
 
     public event EventHandler<GriddoColumnHeaderMouseEventArgs>? ColumnHeaderRightClick;
     public event EventHandler? SortDescriptorsChanged;
+    public event EventHandler? UniformRowHeightChanged;
 
     /// <summary>Fires on row header right-click; see <see cref="GriddoRowHeaderMouseEventArgs.SelectedRowIndices"/> for the full scope.</summary>
     public event EventHandler<GriddoRowHeaderMouseEventArgs>? RowHeaderRightClick;
@@ -285,7 +286,14 @@ public sealed partial class Griddo : FrameworkElement
         get => _uniformRowHeight;
         set
         {
-            _uniformRowHeight = Math.Max(MinRowHeight, value);
+            var clamped = Math.Max(MinRowHeight, value);
+            if (Math.Abs(_uniformRowHeight - clamped) < double.Epsilon)
+            {
+                return;
+            }
+
+            _uniformRowHeight = clamped;
+            UniformRowHeightChanged?.Invoke(this, EventArgs.Empty);
             InvalidateMeasure();
             InvalidateVisual();
         }

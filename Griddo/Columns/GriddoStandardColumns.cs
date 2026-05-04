@@ -151,7 +151,7 @@ public sealed class HtmlGriddoColumnView : IGriddoColumnView, IGriddoColumnSourc
 /// Boolean column: centered checkbox rendering, <see cref="GriddoCellEditors.Bool"/> for typed/F2 edits,
 /// Space / second click / double-click toggle in the grid.
 /// </summary>
-public sealed class GriddoBoolColumnView : IGriddoColumnView, IGriddoColumnSourceMember, IGriddoColumnSourceObject, IGriddoColumnTitleView, IGriddoColumnDescriptionView, IGriddoColumnFormatView, IGriddoColumnFontView, IGriddoColumnColorView
+public sealed class GriddoBoolColumnView : IGriddoColumnView, IGriddoColumnSourceMember, IGriddoColumnSourceObject, IGriddoColumnTitleView, IGriddoColumnDescriptionView, IGriddoColumnFormatView, IGriddoColumnFontView, IGriddoColumnColorView, IGriddoCheckboxToggleColumnView
 {
     private readonly Func<object, object?> _valueGetter;
     private readonly Func<object, object?, bool> _valueSetter;
@@ -219,4 +219,6 @@ public sealed class GriddoBoolColumnView : IGriddoColumnView, IGriddoColumnSourc
             _ => bool.TryParse(value.ToString(), out var p) ? p.ToString(CultureInfo.CurrentCulture) : string.Empty
         };
     }
+
+    public bool IsCheckboxCell(object rowSource) => true;
 }

@@ -412,7 +412,7 @@ public sealed partial class Griddo
             return false;
         }
 
-        if (Columns[_currentCell.ColumnIndex] is not GriddoBoolColumnView)
+        if (!IsCheckboxToggleCell(_currentCell))
         {
             return false;
         }
