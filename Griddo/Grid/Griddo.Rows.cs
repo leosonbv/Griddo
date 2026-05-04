@@ -101,6 +101,23 @@ public sealed partial class Griddo
         UpdateScrollBars();
     }
 
+    /// <summary>
+    /// Fill-rows mode derives height from the viewport and ignores <see cref="UniformRowHeight"/>.
+    /// Before row-divider hit math (anchor Y), switch to uniform height equal to what is currently drawn
+    /// so the first mouse-move does not jump row layout under the cursor.
+    /// </summary>
+    private void ExitFillRowsUsingCurrentDisplayedRowHeight()
+    {
+        if (_visibleRowCount <= 0)
+        {
+            return;
+        }
+
+        var hScreen = GetRowHeight(0);
+        VisibleRowCount = 0;
+        SetUniformRowHeightFromScreen(hScreen);
+    }
+
     private void SetRowHeightKeepingRowTop(int rowIndex, double newScreenHeight)
     {
         if (Rows.Count == 0)
@@ -110,16 +127,89 @@ public sealed partial class Griddo
         }
 
         var clampedRowIndex = Math.Clamp(rowIndex, 0, Rows.Count - 1);
+        var oldMaxVerticalOffset = Math.Max(0, GetScrollableRowsContentHeight() - GetScrollRowsViewportHeight());
         var oldHeight = GetRowHeight(clampedRowIndex);
         var oldOffset = _verticalOffset;
 
+        // Fill-rows mode (VisibleRowCount > 0) forces row height from viewport / count and ignores
+        // UniformRowHeight. Manual divider drag must leave that mode so the dragged height applies.
+        if (_visibleRowCount > 0)
+        {
+            VisibleRowCount = 0;
+        }
+
         SetUniformRowHeightFromScreen(newScreenHeight);
+
+        var newMaxVerticalOffset = Math.Max(0, GetScrollableRowsContentHeight() - GetScrollRowsViewportHeight());
+        if (oldMaxVerticalOffset <= 1e-6 && newMaxVerticalOffset <= 1e-6)
+        {
+            // No vertical scroll range before/after resize: keep natural layout flow.
+            // Applying top-preservation offset compensation in this mode causes
+            // cursor/divider drift while dragging.
+            return;
+        }
+
+        // During interactive row resize, scroll compensation fights closed-form height math and
+        // causes divider Y to oscillate until the body fills the viewport.
+        if (_isResizingRow)
+        {
+            return;
+        }
 
         var updatedHeight = GetRowHeight(clampedRowIndex);
         var deltaH = updatedHeight - oldHeight;
         var fr = Math.Min(_fixedRowCount, Rows.Count);
         var offsetDelta = fr * deltaH + Math.Max(0, clampedRowIndex - fr) * deltaH;
         SetVerticalOffset(oldOffset + offsetDelta);
+    }
+
+    /// <summary>
+    /// Uniform row height h so the bottom edge of row <paramref name="dividerRowIndex"/> lies at
+    /// <paramref name="bodyPointerY"/> (Y relative to top of body strip, below column headers).
+    /// Uses a frozen effective fixed-row count during divider drag to avoid f(h) feedback oscillation.
+    /// </summary>
+    private double GetUniformRowHeightScreenFromDividerBodyY(int dividerRowIndex, double bodyPointerY)
+    {
+        if (Rows.Count == 0 || _viewportBodyHeight <= 0)
+        {
+            return Math.Max(MinRowHeight * ContentScale, bodyPointerY);
+        }
+
+        var k = Math.Clamp(dividerRowIndex, 0, Rows.Count - 1);
+        // Must match live layout (frozen + scroll); a frozen snapshot can disagree with
+        // GetRowBodyTopRel when effective fixed-row count changes with row height.
+        var f = GetEffectiveFixedRowCount();
+        var hScreen = k < f
+            ? bodyPointerY / (k + 1)
+            : (bodyPointerY + _verticalOffset) / (k + 1);
+        return Math.Max(MinRowHeight * ContentScale, hScreen);
+    }
+
+    /// <summary>One-shot scroll adjustment after interactive row-height drag (see <see cref="SetRowHeightKeepingRowTop"/>).</summary>
+    private void ApplyInteractiveRowResizeScrollPreservation(int dividerRowIndex, double rowHeightAtDragStart, double verticalOffsetAtDragStart)
+    {
+        if (Rows.Count == 0 || dividerRowIndex < 0)
+        {
+            return;
+        }
+
+        var maxV = Math.Max(0, GetScrollableRowsContentHeight() - GetScrollRowsViewportHeight());
+        if (maxV <= 1e-6)
+        {
+            return;
+        }
+
+        var clamped = Math.Clamp(dividerRowIndex, 0, Rows.Count - 1);
+        var newH = GetRowHeight(clamped);
+        var deltaH = newH - rowHeightAtDragStart;
+        if (Math.Abs(deltaH) < 1e-9)
+        {
+            return;
+        }
+
+        var fr = Math.Min(_fixedRowCount, Rows.Count);
+        var offsetDelta = fr * deltaH + Math.Max(0, clamped - fr) * deltaH;
+        SetVerticalOffset(verticalOffsetAtDragStart + offsetDelta);
     }
 
     private void AutoSizeRow(int rowIndex)

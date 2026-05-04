@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -14,6 +15,7 @@ namespace GriddoUi.ColumnEdit;
 public partial class GridConfigurator : Window
 {
     private readonly List<IGriddoColumnView> _columnHeaderRegistry = [];
+    private int _valueColumnIndex = -1;
 
     /// <summary>Fired when Apply is pressed; argument is an ordered snapshot (clones).</summary>
     public event EventHandler<IReadOnlyList<ColumnEditRow>>? PreviewApply;
@@ -58,6 +60,7 @@ public partial class GridConfigurator : Window
         ShowHorizontalScrollBarBox.IsChecked = options.ShowHorizontalScrollBar;
         ShowVerticalScrollBarBox.IsChecked = options.ShowVerticalScrollBar;
         ImmediateCellEditBox.IsChecked = options.ImmediatePlottoEdit;
+        ColumnGrid.CellPropertyViewResolver = ResolveCellPropertyViewForConfigurator;
         ColumnGrid.ColumnHeaderRightClick += ColumnGrid_ColumnHeaderRightClick;
         Closed += (_, _) => ColumnGrid.ColumnHeaderRightClick -= ColumnGrid_ColumnHeaderRightClick;
     }
@@ -293,7 +296,26 @@ public partial class GridConfigurator : Window
                 ((ColumnEditRow)r).Description = v?.ToString() ?? string.Empty;
                 return true;
             }));
-        AddColumn(new ReadonlyColumn("Value", 220, r => r.SampleDisplay));
+        _valueColumnIndex = ColumnGrid.Columns.Count;
+        AddColumn(new ValuePreviewColumn("Value", 220));
+    }
+
+    private GriddoCellPropertyView? ResolveCellPropertyViewForConfigurator(object rowSource, int columnIndex)
+    {
+        if (columnIndex != _valueColumnIndex || rowSource is not ColumnEditRow row)
+        {
+            return null;
+        }
+
+        return new GriddoCellPropertyView
+        {
+            FormatString = row.FormatString ?? string.Empty,
+            FontFamilyName = row.FontFamilyName ?? string.Empty,
+            FontSize = row.FontSize,
+            FontStyleName = row.FontStyleName ?? string.Empty,
+            ForegroundColor = row.ForegroundColor ?? string.Empty,
+            BackgroundColor = row.BackgroundColor ?? string.Empty
+        };
     }
 
     private void MoveUpButton_Click(object sender, RoutedEventArgs e)
@@ -653,9 +675,9 @@ public partial class GridConfigurator : Window
 
     private sealed class ReadonlyColumn : IGriddoColumnView
     {
-        private readonly Func<ColumnEditRow, string> _get;
+        private readonly Func<ColumnEditRow, object?> _get;
 
-        public ReadonlyColumn(string header, double width, Func<ColumnEditRow, string> get)
+        public ReadonlyColumn(string header, double width, Func<ColumnEditRow, object?> get)
         {
             Header = header;
             Width = width;
@@ -674,6 +696,163 @@ public partial class GridConfigurator : Window
         public bool TrySetValue(object rowSource, object? value) => true;
 
         public string FormatValue(object? value) => value?.ToString() ?? string.Empty;
+    }
+
+    private sealed class ValuePreviewColumn(string header, double width) : IGriddoColumnView, IGriddoHostedColumnView
+    {
+        public string Header { get; set; } = header;
+        public double Width { get; } = width;
+        public bool Fill { get; set; }
+        public bool IsHtml => false;
+        public TextAlignment ContentAlignment { get; } = TextAlignment.Left;
+        public IGriddoCellEditor Editor => GriddoCellEditors.Text;
+
+        public object? GetValue(object rowSource) => rowSource is ColumnEditRow row ? row.SampleValue ?? row.SampleDisplay : string.Empty;
+        public bool TrySetValue(object rowSource, object? value) => true;
+        public string FormatValue(object? value) => value?.ToString() ?? string.Empty;
+
+        public FrameworkElement CreateHostElement() => new ContentControl();
+
+        public void UpdateHostElement(FrameworkElement host, object rowSource, bool isSelected, bool isCurrentCell)
+        {
+            if (host is not ContentControl content || rowSource is not ColumnEditRow row)
+            {
+                return;
+            }
+
+            if (row.SourceColumnView is IGriddoHostedColumnView hostedSource && row.SampleRowSource is not null)
+            {
+                var active = content.Content as FrameworkElement;
+                if (active is null || !ReferenceEquals(content.Tag, hostedSource))
+                {
+                    active = hostedSource.CreateHostElement();
+                    content.Content = active;
+                    content.Tag = hostedSource;
+                }
+
+                hostedSource.UpdateHostElement(active, row.SampleRowSource, isSelected, isCurrentCell);
+                return;
+            }
+
+            var textBlock = content.Content as TextBlock;
+            if (textBlock is null)
+            {
+                textBlock = new TextBlock
+                {
+                    VerticalAlignment = VerticalAlignment.Center,
+                    TextTrimming = TextTrimming.CharacterEllipsis
+                };
+                content.Content = textBlock;
+                content.Tag = null;
+            }
+
+            textBlock.Text = FormatSample(row);
+            textBlock.FontSize = row.FontSize > 0 ? row.FontSize : 12;
+            if (!string.IsNullOrWhiteSpace(row.FontFamilyName))
+            {
+                try
+                {
+                    textBlock.FontFamily = new FontFamily(row.FontFamilyName);
+                }
+                catch
+                {
+                    // Keep default font.
+                }
+            }
+
+            var normalizedStyle = NormalizeStyle(row.FontStyleName);
+            textBlock.FontStyle = normalizedStyle.Contains("italic", StringComparison.Ordinal) ? FontStyles.Italic : FontStyles.Normal;
+            textBlock.FontWeight = normalizedStyle.Contains("bold", StringComparison.Ordinal) ? FontWeights.Bold : FontWeights.Normal;
+            textBlock.TextDecorations = normalizedStyle.Contains("underline", StringComparison.Ordinal) ? TextDecorations.Underline : null;
+            textBlock.Foreground = TryBrush(row.ForegroundColor) ?? Brushes.Black;
+            content.Background = TryBrush(row.BackgroundColor);
+        }
+
+        public bool IsHostInEditMode(FrameworkElement host)
+        {
+            _ = host;
+            return false;
+        }
+
+        public void SetHostEditMode(FrameworkElement host, bool isEditing)
+        {
+            _ = host;
+            _ = isEditing;
+        }
+
+        public bool TryGetClipboardHtmlFragment(FrameworkElement? host, object rowSource, int cellWidthPx, int cellHeightPx, out string htmlFragment)
+        {
+            _ = host;
+            _ = rowSource;
+            _ = cellWidthPx;
+            _ = cellHeightPx;
+            htmlFragment = string.Empty;
+            return false;
+        }
+
+        public void SyncHostedUiScale(FrameworkElement host, double contentScale)
+        {
+            _ = host;
+            _ = contentScale;
+        }
+
+        private static Brush? TryBrush(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return null;
+            }
+
+            try
+            {
+                return new BrushConverter().ConvertFromString(text) as Brush;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string NormalizeStyle(string style)
+        {
+            if (string.IsNullOrWhiteSpace(style))
+            {
+                return string.Empty;
+            }
+
+            return style
+                .Trim()
+                .Replace("-", " ", StringComparison.Ordinal)
+                .Replace("_", " ", StringComparison.Ordinal)
+                .ToLowerInvariant();
+        }
+
+        private static string FormatSample(ColumnEditRow row)
+        {
+            if (row.SampleValue is null)
+            {
+                return row.SampleDisplay;
+            }
+
+            if (!string.IsNullOrWhiteSpace(row.FormatString) && row.SampleValue is IFormattable formattable)
+            {
+                try
+                {
+                    return formattable.ToString(row.FormatString, CultureInfo.CurrentCulture);
+                }
+                catch (FormatException)
+                {
+                    // Fall through.
+                }
+            }
+
+            return row.SampleValue switch
+            {
+                string text => text,
+                IFormattable fmt => fmt.ToString(null, CultureInfo.CurrentCulture),
+                _ => row.SampleValue.ToString() ?? string.Empty
+            };
+        }
     }
 
 }

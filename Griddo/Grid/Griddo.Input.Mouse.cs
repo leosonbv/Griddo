@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using Griddo.Columns;
@@ -669,6 +670,9 @@ public sealed partial class Griddo
 
         _isResizingRow = true;
         _resizingRowIndex = dividerRow;
+        ExitFillRowsUsingCurrentDisplayedRowHeight();
+        _resizePreserveOldRowHeight = GetRowHeight(dividerRow);
+        _resizePreserveOldVerticalOffset = _verticalOffset;
         _resizeStartPoint = pointer;
         _resizeInitialSize = GetRowHeight(dividerRow);
         CaptureMouse();
@@ -796,8 +800,9 @@ public sealed partial class Griddo
 
         if (_isResizingRow)
         {
-            var delta = pointer.Y - _resizeStartPoint.Y;
-            SetRowHeightKeepingRowTop(_resizingRowIndex, _resizeInitialSize + delta);
+            var bodyPy = pointer.Y - ScaledColumnHeaderHeight;
+            var requestedHeight = GetUniformRowHeightScreenFromDividerBodyY(_resizingRowIndex, bodyPy);
+            SetRowHeightKeepingRowTop(_resizingRowIndex, requestedHeight);
             InvalidateVisual();
             e.Handled = true;
             base.OnMouseMove(e);
@@ -943,6 +948,17 @@ public sealed partial class Griddo
         InvalidateVisual();
         e.Handled = true;
         base.OnMouseMove(e);
+    }
+
+    protected override void OnToolTipOpening(ToolTipEventArgs e)
+    {
+        UpdateColumnHeaderTooltip(Mouse.GetPosition(this));
+        if (ToolTip is null)
+        {
+            e.Handled = true;
+        }
+
+        base.OnToolTipOpening(e);
     }
 
     private void UpdateColumnHeaderTooltip(Point pointer)
@@ -1212,7 +1228,16 @@ public sealed partial class Griddo
         if (_isResizingRow && e.ChangedButton == MouseButton.Left)
         {
             _isResizingRow = false;
+            var savedDivider = _resizingRowIndex;
             _resizingRowIndex = -1;
+            if (savedDivider >= 0)
+            {
+                ApplyInteractiveRowResizeScrollPreservation(
+                    savedDivider,
+                    _resizePreserveOldRowHeight,
+                    _resizePreserveOldVerticalOffset);
+            }
+
             if (!_isDraggingSelection && IsMouseCaptured)
             {
                 ReleaseMouseCapture();

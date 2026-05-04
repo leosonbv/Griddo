@@ -140,7 +140,7 @@ public sealed partial class Griddo
         }
 
         var bodyY = point.Y - ScaledColumnHeaderHeight;
-        for (var row = 0; row < Rows.Count - 1; row++)
+        for (var row = 0; row < Rows.Count; row++)
         {
             var topRel = GetRowBodyTopRel(row);
             var h = GetRowHeight(row);

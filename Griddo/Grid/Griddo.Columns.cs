@@ -77,6 +77,18 @@ public sealed partial class Griddo
         InvalidateMeasure();
         InvalidateVisual();
     }
+
+    /// <summary>Clears <see cref="MarkInitialAutoWidthSuppressedForGridColumn"/> markers (e.g. before rebuilding columns).</summary>
+    public void ClearInitialAutoWidthSuppressions() => _suppressInitialAutoWidthColumns.Clear();
+
+    /// <summary>Skip initial sample-based auto-width for this grid column index (e.g. width from persisted layout).</summary>
+    public void MarkInitialAutoWidthSuppressedForGridColumn(int columnIndex)
+    {
+        if (columnIndex >= 0 && columnIndex < Columns.Count)
+        {
+            _suppressInitialAutoWidthColumns.Add(columnIndex);
+        }
+    }
     private void AutoSizeColumn(int columnIndex)
     {
         if (columnIndex < 0 || columnIndex >= Columns.Count)
@@ -148,6 +160,11 @@ public sealed partial class Griddo
         var sampledRows = GetAutoSizeSampleRows();
         for (var columnIndex = 0; columnIndex < Columns.Count; columnIndex++)
         {
+            if (_suppressInitialAutoWidthColumns.Contains(columnIndex))
+            {
+                continue;
+            }
+
             var max = MeasureAutoWidthForColumn(columnIndex, sampledRows);
             SetColumnWidth(columnIndex, max);
         }
@@ -167,7 +184,7 @@ public sealed partial class Griddo
         Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
         {
             _initialSampleAutoSizeScheduled = false;
-            if (_hasAutoSizedColumns || _columnWidthOverrides.Count > 0 || Rows.Count == 0 || Columns.Count == 0)
+            if (_hasAutoSizedColumns || Rows.Count == 0 || Columns.Count == 0)
             {
                 return;
             }
@@ -202,8 +219,8 @@ public sealed partial class Griddo
         }
 
         var fallbackTypeface = new Typeface("Segoe UI");
-        var typeface = ResolveColumnTypeface(columnIndex, fallbackTypeface);
-        var fontSize = ResolveColumnFontSize(columnIndex);
+        var typeface = ResolveColumnTypeface(columnIndex, fallbackTypeface, null);
+        var fontSize = ResolveColumnFontSize(columnIndex, null);
         var pad = 12 * _contentScale;
         var max = MeasureTextWidth(column.Header, typeface, fontSize) + pad;
         foreach (var rowIndex in sampledRows)

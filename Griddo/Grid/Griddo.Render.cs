@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
 using System.Linq;
@@ -113,8 +114,9 @@ public sealed partial class Griddo
         var rect = new Rect(x, y, colWidth, rowHeight);
         var address = new GriddoCellAddress(row, col);
 
+        var cellView = ResolveCellPropertyView(rowData, col);
         var isHostedCellEditing = IsHostedCellInEditMode(address);
-        if (TryGetColumnBackgroundBrush(col, out var columnBackgroundBrush))
+        if (TryGetColumnBackgroundBrush(col, cellView, out var columnBackgroundBrush))
         {
             dc.DrawRectangle(columnBackgroundBrush, null, rect);
         }
@@ -143,10 +145,10 @@ public sealed partial class Griddo
             return;
         }
 
-        var columnTypeface = ResolveColumnTypeface(col, typeface);
-        var columnFontSize = ResolveColumnFontSize(col);
-        var foregroundBrush = ResolveColumnForegroundBrush(col);
-        var underline = HasUnderlineStyle(col);
+        var columnTypeface = ResolveColumnTypeface(col, typeface, cellView);
+        var columnFontSize = ResolveColumnFontSize(col, cellView);
+        var foregroundBrush = ResolveColumnForegroundBrush(col, cellView);
+        var underline = HasUnderlineStyle(col, cellView);
 
         if (Columns[col] is GriddoBoolColumnView)
         {
@@ -164,7 +166,7 @@ public sealed partial class Griddo
         var rawValue = Columns[col].GetValue(rowData);
         var isGraphic = rawValue is ImageSource or Geometry;
         var paintValue = (!isGraphic && !Columns[col].IsHtml)
-            ? Columns[col].FormatValue(rawValue)
+            ? FormatCellValue(rawValue, col, cellView)
             : rawValue;
         // Intersect with viewport so HTML (and plain text) centers in the visible strip when the row is clipped vertically.
         var paintBounds = isGraphic ? rect : Rect.Intersect(rect, bodyViewport);
@@ -185,7 +187,42 @@ public sealed partial class Griddo
         }
     }
 
-    private Typeface ResolveColumnTypeface(int col, Typeface fallback)
+    private GriddoCellPropertyView? ResolveCellPropertyView(object rowData, int col)
+    {
+        if (CellPropertyViewResolver is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return CellPropertyViewResolver(rowData, col);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private object? FormatCellValue(object? rawValue, int col, GriddoCellPropertyView? cellView)
+    {
+        var format = cellView?.FormatString?.Trim() ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(format) && rawValue is IFormattable fmt)
+        {
+            try
+            {
+                return fmt.ToString(format, CultureInfo.CurrentCulture);
+            }
+            catch (FormatException)
+            {
+                // Fall back to the column's formatting.
+            }
+        }
+
+        return Columns[col].FormatValue(rawValue);
+    }
+
+    private Typeface ResolveColumnTypeface(int col, Typeface fallback, GriddoCellPropertyView? cellView)
     {
         if (col < 0 || col >= Columns.Count)
         {
@@ -193,17 +230,23 @@ public sealed partial class Griddo
         }
 
         var source = Columns[col];
-        var hasFamily = source is IGriddoColumnFontView { FontFamilyName: { Length: > 0 } };
-        var hasStyle = source is IGriddoColumnFontView { FontStyleName: { Length: > 0 } };
+        var overrideFamily = cellView?.FontFamilyName?.Trim() ?? string.Empty;
+        var overrideStyle = cellView?.FontStyleName?.Trim() ?? string.Empty;
+        var hasFamily = overrideFamily.Length > 0 || source is IGriddoColumnFontView { FontFamilyName: { Length: > 0 } };
+        var hasStyle = overrideStyle.Length > 0 || source is IGriddoColumnFontView { FontStyleName: { Length: > 0 } };
         if (!hasFamily && !hasStyle)
         {
             return fallback;
         }
 
-        var family = hasFamily
-            ? ((IGriddoColumnFontView)source).FontFamilyName
+        var family = overrideFamily.Length > 0
+            ? overrideFamily
+            : source is IGriddoColumnFontView familyView && !string.IsNullOrWhiteSpace(familyView.FontFamilyName)
+                ? familyView.FontFamilyName
             : fallback.FontFamily.Source;
-        var styleName = source is IGriddoColumnFontView styleView ? styleView.FontStyleName : string.Empty;
+        var styleName = overrideStyle.Length > 0
+            ? overrideStyle
+            : source is IGriddoColumnFontView styleView ? styleView.FontStyleName : string.Empty;
         var style = ParseFontStyle(styleName);
         var weight = ParseFontWeight(styleName);
         try
@@ -216,11 +259,16 @@ public sealed partial class Griddo
         }
     }
 
-    private double ResolveColumnFontSize(int col)
+    private double ResolveColumnFontSize(int col, GriddoCellPropertyView? cellView)
     {
         if (col < 0 || col >= Columns.Count)
         {
             return EffectiveFontSize;
+        }
+
+        if (cellView is { FontSize: > 0 })
+        {
+            return Math.Max(6, cellView.FontSize * ContentScale);
         }
 
         if (Columns[col] is IGriddoColumnFontView { FontSize: > 0 } fontView)
@@ -231,11 +279,17 @@ public sealed partial class Griddo
         return EffectiveFontSize;
     }
 
-    private Brush ResolveColumnForegroundBrush(int col)
+    private Brush ResolveColumnForegroundBrush(int col, GriddoCellPropertyView? cellView)
     {
         if (col < 0 || col >= Columns.Count)
         {
             return Brushes.Black;
+        }
+
+        if (cellView is { ForegroundColor.Length: > 0 }
+            && TryParseBrush(cellView.ForegroundColor, out var overrideBrush))
+        {
+            return overrideBrush;
         }
 
         if (Columns[col] is IGriddoColumnColorView colorView
@@ -247,12 +301,19 @@ public sealed partial class Griddo
         return Brushes.Black;
     }
 
-    private bool TryGetColumnBackgroundBrush(int col, out Brush brush)
+    private bool TryGetColumnBackgroundBrush(int col, GriddoCellPropertyView? cellView, out Brush brush)
     {
         brush = Brushes.Transparent;
         if (col < 0 || col >= Columns.Count)
         {
             return false;
+        }
+
+        if (cellView is { BackgroundColor.Length: > 0 }
+            && TryParseBrush(cellView.BackgroundColor, out var overrideBrush))
+        {
+            brush = overrideBrush;
+            return true;
         }
 
         if (Columns[col] is IGriddoColumnColorView colorView
@@ -317,8 +378,14 @@ public sealed partial class Griddo
         return FontWeights.Normal;
     }
 
-    private bool HasUnderlineStyle(int col)
+    private bool HasUnderlineStyle(int col, GriddoCellPropertyView? cellView)
     {
+        var overrideStyle = cellView?.FontStyleName?.Trim() ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(overrideStyle))
+        {
+            return NormalizeStyleText(overrideStyle).Contains("underline", StringComparison.Ordinal);
+        }
+
         if (col < 0 || col >= Columns.Count || Columns[col] is not IGriddoColumnFontView fontView)
         {
             return false;
@@ -710,7 +777,7 @@ public sealed partial class Griddo
             dc.DrawText(buttonText, new Point(buttonTextX, buttonTextY));
         }
         var verticalAlignment = VerticalAlignment.Center;
-        var underline = _currentCell.IsValid && HasUnderlineStyle(_currentCell.ColumnIndex);
+        var underline = _currentCell.IsValid && HasUnderlineStyle(_currentCell.ColumnIndex, null);
         // Edit mode should show the literal source text (including HTML markup), not rendered HTML.
         GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, underline, false, false, column.ContentAlignment, verticalAlignment);
 

@@ -1,5 +1,7 @@
 namespace GriddoUi.ColumnEdit;
 
+using Griddo.Columns;
+
 /// <summary>One editable row in <see cref="GridConfigurator"/> (maps to a property on the data shape).</summary>
 public sealed class ColumnEditRow
 {
@@ -34,6 +36,9 @@ public sealed class ColumnEditRow
 
     /// <summary>Formatted sample from the first data row, if one was supplied when the dialog was built.</summary>
     public string SampleDisplay { get; init; } = string.Empty;
+    public object? SampleValue { get; init; }
+    public object? SampleRowSource { get; init; }
+    public IGriddoColumnView? SourceColumnView { get; init; }
 
     public ColumnEditRow Clone() => new()
     {
@@ -56,6 +61,9 @@ public sealed class ColumnEditRow
         IsDateTimeProperty = IsDateTimeProperty,
         SortPriority = SortPriority,
         SortAscending = SortAscending,
-        SampleDisplay = SampleDisplay
+        SampleDisplay = SampleDisplay,
+        SampleValue = SampleValue,
+        SampleRowSource = SampleRowSource,
+        SourceColumnView = SourceColumnView
     };
 }

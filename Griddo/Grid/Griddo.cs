@@ -55,6 +55,8 @@ public sealed partial class Griddo : FrameworkElement
     private readonly HashSet<int> _rowHeaderRightClickOutline = [];
     private readonly HashSet<GriddoCellAddress> _selectionDragSnapshot = [];
     private readonly Dictionary<int, double> _columnWidthOverrides = [];
+    /// <summary>Grid column indices that should not receive initial sample auto-width (e.g. width restored from persistence).</summary>
+    private readonly HashSet<int> _suppressInitialAutoWidthColumns = [];
     private readonly GriddoTextEditSession _editSession = new();
     private ContextMenu? _activeEditOptionsMenu;
     private readonly VisualCollection _children;
@@ -107,6 +109,8 @@ public sealed partial class Griddo : FrameworkElement
     private int _resizingRowIndex = -1;
     private Point _resizeStartPoint;
     private double _resizeInitialSize;
+    private double _resizePreserveOldRowHeight;
+    private double _resizePreserveOldVerticalOffset;
     private bool _isTrackingColumnMove;
     private bool _isMovingColumn;
     private bool _isMovingPointerInColumnHeader;
@@ -265,6 +269,7 @@ public sealed partial class Griddo : FrameworkElement
 
     /// <summary>Optional context menu for body-cell right-click (after selection rules are applied).</summary>
     public ContextMenu? CellContextMenu { get; set; }
+    public Func<object, int, GriddoCellPropertyView?>? CellPropertyViewResolver { get; set; }
 
     /// <summary>Fires before <see cref="CellContextMenu"/> opens; set <see cref="GriddoCellContextMenuEventArgs.Handled"/> to suppress the default menu.</summary>
     public event EventHandler<GriddoCellContextMenuEventArgs>? CellContextMenuOpening;
@@ -552,9 +557,10 @@ public sealed partial class Griddo : FrameworkElement
         {
             _hasAutoSizedColumns = false;
             _initialSampleAutoSizeScheduled = false;
+            _suppressInitialAutoWidthColumns.Clear();
         }
 
-        if (Rows.Count > 0 && Columns.Count > 0 && !_hasAutoSizedColumns && _columnWidthOverrides.Count == 0)
+        if (Rows.Count > 0 && Columns.Count > 0 && !_hasAutoSizedColumns)
         {
             ScheduleInitialSampleAutoSize();
         }

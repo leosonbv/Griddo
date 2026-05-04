@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using Griddo.Columns;
 using Griddo.Grid;
@@ -8,13 +9,15 @@ namespace GriddoUi.ColumnEdit;
 public static class ColumnChooserGridApplier
 {
     /// <param name="columnRegistry">When non-null, snapshot and <see cref="ColumnEditRow.SourceColumnIndex"/> refer to this list (includes hidden columns). When null, uses current <see cref="Griddo.Columns"/> only.</param>
+    /// <param name="persistedLayoutSourceColumnIndices">Source column indices that had persisted layout; initial auto-width is skipped for those columns after apply.</param>
     public static void Apply(
         global::Griddo.Grid.Griddo grid,
         IReadOnlyList<ColumnEditRow> orderedRows,
         int frozenColumns,
         int frozenRows,
         ColumnChooserGeneralOptions? generalOptions = null,
-        IReadOnlyList<IGriddoColumnView>? columnRegistry = null)
+        IReadOnlyList<IGriddoColumnView>? columnRegistry = null,
+        IReadOnlyCollection<int>? persistedLayoutSourceColumnIndices = null)
     {
         try
         {
@@ -47,6 +50,7 @@ public static class ColumnChooserGridApplier
             }
 
             grid.ClearColumnWidthOverrides();
+            grid.ClearInitialAutoWidthSuppressions();
 
             grid.Columns.Clear();
             var sourceToGridIndex = new Dictionary<int, int>();
@@ -114,6 +118,11 @@ public static class ColumnChooserGridApplier
             for (var i = 0; i < grid.Columns.Count && i < visible.Count; i++)
             {
                 grid.SetLogicalColumnWidth(i, visible[i].Width);
+                if (persistedLayoutSourceColumnIndices is not null
+                    && persistedLayoutSourceColumnIndices.Contains(visible[i].SourceColumnIndex))
+                {
+                    grid.MarkInitialAutoWidthSuppressedForGridColumn(i);
+                }
             }
 
             var sortDescriptors = orderedRows

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -970,7 +971,8 @@ public partial class MainWindow : Window
             layout.FrozenColumns,
             layout.FrozenRows,
             options,
-            _allColumns);
+            _allColumns,
+            new HashSet<int>(byIndex.Keys));
     }
 
     private void PersistGridLayout(

@@ -113,7 +113,10 @@ public static class ColumnMetadataBuilder
             Width = col.Width,
             SortPriority = sortMap.TryGetValue(sourceColumnIndex, out var sd) ? sd.Priority : 0,
             SortAscending = sortMap.TryGetValue(sourceColumnIndex, out var sd2) ? sd2.Ascending : true,
-            SampleDisplay = sampleDisplay
+            SampleDisplay = sampleDisplay,
+            SampleValue = sampleRaw,
+            SampleRowSource = sample,
+            SourceColumnView = col
         };
     }
 
@@ -290,12 +293,13 @@ public static class ColumnMetadataBuilder
                 : descAttr?.Description ?? string.Empty;
 
             string sample = string.Empty;
+            object? sampleValue = null;
             if (sampleRow is not null)
             {
                 try
                 {
-                    var raw = p.GetValue(sampleRow);
-                    sample = FormatSample(raw);
+                    sampleValue = p.GetValue(sampleRow);
+                    sample = FormatSample(sampleValue);
                 }
                 catch
                 {
@@ -313,7 +317,9 @@ public static class ColumnMetadataBuilder
                 Visible = true,
                 Fill = false,
                 Width = 140,
-                SampleDisplay = sample
+                SampleDisplay = sample,
+                SampleValue = sampleValue,
+                SampleRowSource = sampleRow
             });
         }
 
