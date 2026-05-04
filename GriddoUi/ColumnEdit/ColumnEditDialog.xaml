@@ -10,89 +10,6 @@
     ShowInTaskbar="False">
     <DockPanel>
         <Border
-            DockPanel.Dock="Top"
-            Padding="10,8"
-            Background="#FFF7F7F7"
-            BorderBrush="#FFD0D0D0"
-            BorderThickness="0,0,0,1">
-            <StackPanel>
-                <WrapPanel VerticalAlignment="Center">
-                    <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="Fill rows:" />
-                    <TextBox
-                        x:Name="VisibleRowsBox"
-                        Width="56"
-                        Margin="0,0,10,0"
-                        VerticalAlignment="Center"
-                        Text="0" />
-                    <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="Frozen columns:" />
-                    <TextBox
-                        x:Name="FrozenColumnsBox"
-                        Width="56"
-                        Margin="0,0,10,0"
-                        VerticalAlignment="Center"
-                        Text="0" />
-                    <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="Frozen rows:" />
-                    <TextBox
-                        x:Name="FrozenRowsBox"
-                        Width="56"
-                        Margin="0,0,10,0"
-                        VerticalAlignment="Center"
-                        Text="0" />
-                </WrapPanel>
-                <WrapPanel Margin="0,4,0,0" VerticalAlignment="Center">
-                    <CheckBox
-                        x:Name="ImmediateCellEditBox"
-                        Margin="0,0,14,0"
-                        VerticalAlignment="Center"
-                        Content="Immediate edit (Plot only)" />
-                    <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="Show indicators:" />
-                    <CheckBox
-                        x:Name="ShowSortingIndicatorsBox"
-                        Margin="0,0,14,0"
-                        VerticalAlignment="Center"
-                        Content="Sorting" />
-                    <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="Show scrollbars:" />
-                    <CheckBox
-                        x:Name="ShowHorizontalScrollBarBox"
-                        Margin="0,0,10,0"
-                        VerticalAlignment="Center"
-                        Content="Horizontal" />
-                    <CheckBox
-                        x:Name="ShowVerticalScrollBarBox"
-                        Margin="0,0,14,0"
-                        VerticalAlignment="Center"
-                        Content="Vertical" />
-                    <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="Show colors:" />
-                    <CheckBox
-                        x:Name="ShowSelectionColorBox"
-                        Margin="0,0,10,0"
-                        VerticalAlignment="Center"
-                        Content="Selection" />
-                    <CheckBox
-                        x:Name="ShowRowSelectionColorBox"
-                        Margin="0,0,10,0"
-                        VerticalAlignment="Center"
-                        Content="Row" />
-                    <CheckBox
-                        x:Name="ShowColSelectionColorBox"
-                        Margin="0,0,14,0"
-                        VerticalAlignment="Center"
-                        Content="Col" />
-                    <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="Show rects:" />
-                    <CheckBox
-                        x:Name="ShowCurrentCellRectBox"
-                        Margin="0,0,10,0"
-                        VerticalAlignment="Center"
-                        Content="Current cell" />
-                    <CheckBox
-                        x:Name="ShowEditCellRectBox"
-                        Margin="0,0,14,0"
-                        VerticalAlignment="Center"
-                        Content="Edit cell" />
-                </WrapPanel>
-            </StackPanel>
-        </Border>
-        <Border
             DockPanel.Dock="Bottom"
             Padding="10,8"
             Background="#FFF0F0F0"
@@ -133,9 +50,93 @@
                 </StackPanel>
             </DockPanel>
         </Border>
-        <grid:Griddo
-            x:Name="ColumnGrid"
-            Margin="8"
-            UniformRowHeight="26" />
+        <TabControl Margin="8">
+            <TabItem Header="Columns">
+                <grid:Griddo
+                    x:Name="ColumnGrid"
+                    Margin="0"
+                    UniformRowHeight="26" />
+            </TabItem>
+            <TabItem Header="General settings">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="10,8">
+                        <WrapPanel VerticalAlignment="Center">
+                            <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="Fill rows:" />
+                            <TextBox
+                                x:Name="VisibleRowsBox"
+                                Width="56"
+                                Margin="0,0,10,0"
+                                VerticalAlignment="Center"
+                                Text="0" />
+                            <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="Frozen columns:" />
+                            <TextBox
+                                x:Name="FrozenColumnsBox"
+                                Width="56"
+                                Margin="0,0,10,0"
+                                VerticalAlignment="Center"
+                                Text="0" />
+                            <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="Frozen rows:" />
+                            <TextBox
+                                x:Name="FrozenRowsBox"
+                                Width="56"
+                                Margin="0,0,10,0"
+                                VerticalAlignment="Center"
+                                Text="0" />
+                        </WrapPanel>
+                        <WrapPanel Margin="0,8,0,0" VerticalAlignment="Center">
+                            <CheckBox
+                                x:Name="ImmediateCellEditBox"
+                                Margin="0,0,14,0"
+                                VerticalAlignment="Center"
+                                Content="Immediate edit (Plot only)" />
+                            <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="Show indicators:" />
+                            <CheckBox
+                                x:Name="ShowSortingIndicatorsBox"
+                                Margin="0,0,14,0"
+                                VerticalAlignment="Center"
+                                Content="Sorting" />
+                            <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="Show scrollbars:" />
+                            <CheckBox
+                                x:Name="ShowHorizontalScrollBarBox"
+                                Margin="0,0,10,0"
+                                VerticalAlignment="Center"
+                                Content="Horizontal" />
+                            <CheckBox
+                                x:Name="ShowVerticalScrollBarBox"
+                                Margin="0,0,14,0"
+                                VerticalAlignment="Center"
+                                Content="Vertical" />
+                            <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="Show colors:" />
+                            <CheckBox
+                                x:Name="ShowSelectionColorBox"
+                                Margin="0,0,10,0"
+                                VerticalAlignment="Center"
+                                Content="Selection" />
+                            <CheckBox
+                                x:Name="ShowRowSelectionColorBox"
+                                Margin="0,0,10,0"
+                                VerticalAlignment="Center"
+                                Content="Row" />
+                            <CheckBox
+                                x:Name="ShowColSelectionColorBox"
+                                Margin="0,0,14,0"
+                                VerticalAlignment="Center"
+                                Content="Col" />
+                            <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="Show rects:" />
+                            <CheckBox
+                                x:Name="ShowCurrentCellRectBox"
+                                Margin="0,0,10,0"
+                                VerticalAlignment="Center"
+                                Content="Current cell" />
+                            <CheckBox
+                                x:Name="ShowEditCellRectBox"
+                                Margin="0,0,14,0"
+                                VerticalAlignment="Center"
+                                Content="Edit cell" />
+                        </WrapPanel>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
     </DockPanel>
 </Window>
