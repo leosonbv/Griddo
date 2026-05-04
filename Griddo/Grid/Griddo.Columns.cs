@@ -143,6 +143,34 @@ public sealed partial class Griddo
         InvalidateVisual();
     }
 
+    public void AutoSizeColumns(IEnumerable<int> columnIndices)
+    {
+        if (Columns.Count == 0)
+        {
+            return;
+        }
+
+        var any = false;
+        foreach (var idx in columnIndices.Distinct())
+        {
+            if (idx < 0 || idx >= Columns.Count)
+            {
+                continue;
+            }
+
+            AutoSizeColumn(idx);
+            any = true;
+        }
+
+        if (!any)
+        {
+            return;
+        }
+
+        _hasAutoSizedColumns = true;
+        InvalidateVisual();
+    }
+
     private void AutoSizeColumnsFromSampleRows()
     {
         if (Columns.Count == 0 || Rows.Count == 0)

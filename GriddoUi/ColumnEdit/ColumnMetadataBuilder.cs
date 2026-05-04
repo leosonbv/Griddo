@@ -4,8 +4,9 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using Griddo.Columns;
+using Griddo.Grid;
 
-namespace GriddoTest.ColumnEdit;
+namespace GriddoUi.ColumnEdit;
 
 /// <summary>
 /// Builds <see cref="ColumnEditRow"/> entries from CLR metadata.
@@ -14,7 +15,7 @@ namespace GriddoTest.ColumnEdit;
 /// </summary>
 /// <remarks>
 /// For library-only models without data annotations, prefer a small interface (e.g. <c>IColumnDescriptor</c>)
-/// or explicit metadata tables instead of reflection — annotations are convenient for POCOs and designers.
+/// or explicit metadata tables instead of reflection - annotations are convenient for POCOs and designers.
 /// </remarks>
 public static class ColumnMetadataBuilder
 {
@@ -36,6 +37,7 @@ public static class ColumnMetadataBuilder
         object? sample = grid.Rows.Count > 0 ? grid.Rows[0] : null;
         var rowType = sample?.GetType();
         var nameUseCount = new Dictionary<string, int>(StringComparer.Ordinal);
+        var sortMap = BuildSortMap(grid, fullColumnOrder);
 
         if (fullColumnOrder is null || fullColumnOrder.Count == 0)
         {
@@ -43,7 +45,7 @@ public static class ColumnMetadataBuilder
             for (var i = 0; i < grid.Columns.Count; i++)
             {
                 var col = grid.Columns[i];
-                list.Add(BuildOneRow(col, i, sample, rowType, nameUseCount, visible: true));
+                list.Add(BuildOneRow(col, i, sample, rowType, nameUseCount, visible: true, sortMap));
             }
 
             return list;
@@ -54,7 +56,7 @@ public static class ColumnMetadataBuilder
         {
             var col = fullColumnOrder[i];
             var visible = grid.Columns.Contains(col);
-            fullList.Add(BuildOneRow(col, i, sample, rowType, nameUseCount, visible));
+            fullList.Add(BuildOneRow(col, i, sample, rowType, nameUseCount, visible, sortMap));
         }
 
         return fullList;
@@ -66,7 +68,8 @@ public static class ColumnMetadataBuilder
         object? sample,
         Type? rowType,
         Dictionary<string, int> nameUseCount,
-        bool visible)
+        bool visible,
+        Dictionary<int, GriddoSortDescriptor> sortMap)
     {
         var baseKey = ResolveSourceMemberKey(col, sample, rowType);
         nameUseCount.TryGetValue(baseKey, out var n);
@@ -93,12 +96,55 @@ public static class ColumnMetadataBuilder
             SourceColumnIndex = sourceColumnIndex,
             PropertyName = propertyName,
             Title = col.Header,
+            AbbreviatedTitle = col is IGriddoColumnTitleView titleView ? titleView.AbbreviatedHeader : string.Empty,
+            FormatString = col is IGriddoColumnFormatView formatView ? formatView.FormatString : string.Empty,
+            FontFamilyName = col is IGriddoColumnFontView fontView ? fontView.FontFamilyName : string.Empty,
+            FontSize = col is IGriddoColumnFontView fontView2 ? fontView2.FontSize : 0,
             Description = string.Empty,
             Visible = visible,
             Fill = col.Fill,
             Width = col.Width,
+            SortPriority = sortMap.TryGetValue(sourceColumnIndex, out var sd) ? sd.Priority : 0,
+            SortAscending = sortMap.TryGetValue(sourceColumnIndex, out var sd2) ? sd2.Ascending : true,
             SampleDisplay = sampleDisplay
         };
+    }
+
+    private static Dictionary<int, GriddoSortDescriptor> BuildSortMap(
+        global::Griddo.Grid.Griddo grid,
+        IReadOnlyList<IGriddoColumnView>? fullColumnOrder)
+    {
+        if (fullColumnOrder is null || fullColumnOrder.Count == 0)
+        {
+            return grid.SortDescriptors.ToDictionary(d => d.ColumnIndex);
+        }
+
+        var map = new Dictionary<int, GriddoSortDescriptor>();
+        foreach (var d in grid.SortDescriptors)
+        {
+            if (d.ColumnIndex < 0 || d.ColumnIndex >= grid.Columns.Count)
+            {
+                continue;
+            }
+
+            var col = grid.Columns[d.ColumnIndex];
+            var sourceIndex = -1;
+            for (var i = 0; i < fullColumnOrder.Count; i++)
+            {
+                if (ReferenceEquals(fullColumnOrder[i], col))
+                {
+                    sourceIndex = i;
+                    break;
+                }
+            }
+
+            if (sourceIndex >= 0)
+            {
+                map[sourceIndex] = new GriddoSortDescriptor(sourceIndex, d.Ascending, d.Priority);
+            }
+        }
+
+        return map;
     }
 
     private static string ResolveSourceMemberKey(IGriddoColumnView col, object? sample, Type? rowType)

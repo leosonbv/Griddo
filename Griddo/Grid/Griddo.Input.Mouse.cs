@@ -178,6 +178,13 @@ public sealed partial class Griddo
         var clickedColumnHeader = HitTestColumnHeader(pointer);
         if (clickedColumnHeader >= 0)
         {
+            if (e.ChangedButton == MouseButton.Left && e.ClickCount == 2)
+            {
+                ToggleHeaderSort(clickedColumnHeader, additive: isCtrlPressed);
+                CompleteMouseDown(e, handled: true);
+                return;
+            }
+
             ClearHeaderFocus();
             var target = new GriddoCellAddress(
                 Rows.Count == 0 ? 0 : Math.Clamp(oldCurrentCell.RowIndex, 0, Rows.Count - 1),
@@ -190,6 +197,10 @@ public sealed partial class Griddo
                 && Rows.Count > 0
                 && Columns.Count > 0)
             {
+                SelectColumn(clickedColumnHeader, isCtrlPressed);
+                _currentCell = target;
+                _isEditing = false;
+                InvalidateVisual();
                 _isTrackingColumnMove = true;
                 _isMovingColumn = false;
                 _columnMoveStartedFromSelectedHeader = true;
@@ -199,6 +210,7 @@ public sealed partial class Griddo
                 _pendingColumnHeaderSelectionOnMouseUp = true;
                 _pendingColumnHeaderIndex = clickedColumnHeader;
                 _pendingColumnHeaderSelectionAdditive = isCtrlPressed;
+                _pendingColumnHeaderPreserveSelection = clickedSelectedColumnHeader && !isCtrlPressed;
                 CaptureMouse();
                 CompleteMouseDown(e, handled: true);
                 return;
@@ -250,6 +262,10 @@ public sealed partial class Griddo
                 && Rows.Count > 0
                 && Columns.Count > 0)
             {
+                SelectRow(clickedRowHeader, isCtrlPressed);
+                _currentCell = target;
+                _isEditing = false;
+                InvalidateVisual();
                 _isTrackingRowMove = true;
                 _isMovingRow = false;
                 _movingRowIndex = clickedRowHeader;
@@ -258,6 +274,7 @@ public sealed partial class Griddo
                 _pendingRowHeaderSelectionOnMouseUp = true;
                 _pendingRowHeaderIndex = clickedRowHeader;
                 _pendingRowHeaderSelectionAdditive = isCtrlPressed;
+                _pendingRowHeaderPreserveSelection = clickedSelectedRowHeader && !isCtrlPressed;
                 CaptureMouse();
                 CompleteMouseDown(e, handled: true);
                 return;
@@ -403,6 +420,21 @@ public sealed partial class Griddo
                     hostedDirect.RelayDirectEditMouseDown(hostForRelay, e);
                 }
 
+                InvalidateVisual();
+                CompleteMouseDown(e, handled: true);
+                return;
+            }
+
+            if (ImmediateCellEditOnSingleClick
+                && e.ClickCount == 1
+                && Columns[clicked.ColumnIndex] is not IGriddoHostedColumnView
+                && Columns[clicked.ColumnIndex] is not GriddoBoolColumnView)
+            {
+                _selectedCells.Clear();
+                _selectedCells.Add(clicked);
+                _currentCell = clicked;
+                _isDraggingSelection = false;
+                BeginEditWithoutReplacing();
                 InvalidateVisual();
                 CompleteMouseDown(e, handled: true);
                 return;
@@ -1038,7 +1070,11 @@ public sealed partial class Griddo
             else if (_pendingColumnHeaderSelectionOnMouseUp
                 && _pendingColumnHeaderIndex >= 0)
             {
-                SelectColumn(_pendingColumnHeaderIndex, _pendingColumnHeaderSelectionAdditive);
+                if (!_pendingColumnHeaderPreserveSelection)
+                {
+                    SelectColumn(_pendingColumnHeaderIndex, _pendingColumnHeaderSelectionAdditive);
+                }
+
                 _currentCell = new GriddoCellAddress(
                     Rows.Count == 0 ? 0 : Math.Clamp(_currentCell.RowIndex, 0, Rows.Count - 1),
                     _pendingColumnHeaderIndex);
@@ -1064,7 +1100,11 @@ public sealed partial class Griddo
             else if (_pendingRowHeaderSelectionOnMouseUp
                 && _pendingRowHeaderIndex >= 0)
             {
-                SelectRow(_pendingRowHeaderIndex, _pendingRowHeaderSelectionAdditive);
+                if (!_pendingRowHeaderPreserveSelection)
+                {
+                    SelectRow(_pendingRowHeaderIndex, _pendingRowHeaderSelectionAdditive);
+                }
+
                 _currentCell = new GriddoCellAddress(
                     _pendingRowHeaderIndex,
                     Columns.Count == 0 ? 0 : Math.Clamp(_currentCell.ColumnIndex, 0, Columns.Count - 1));

@@ -4,7 +4,7 @@ using Griddo.Editing;
 
 namespace Griddo.Columns;
 
-public sealed class GriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMember
+public sealed class GriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMember, IGriddoColumnTitleView, IGriddoColumnFormatView, IGriddoColumnFontView
 {
     private readonly Func<object, object?> _valueGetter;
     private readonly Func<object, object?, bool> _valueSetter;
@@ -30,6 +30,10 @@ public sealed class GriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMem
     }
 
     public string Header { get; set; }
+    public string AbbreviatedHeader { get; set; } = string.Empty;
+    public string FormatString { get; set; } = string.Empty;
+    public string FontFamilyName { get; set; } = string.Empty;
+    public double FontSize { get; set; }
 
     /// <inheritdoc cref="IGriddoColumnSourceMember.SourceMemberName"/>
     /// <remarks>Empty when not specified at construction; column chooser may infer from row type.</remarks>
@@ -46,6 +50,11 @@ public sealed class GriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMem
 
     public string FormatValue(object? value)
     {
+        if (!string.IsNullOrWhiteSpace(FormatString) && value is IFormattable formatValue)
+        {
+            return formatValue.ToString(FormatString, CultureInfo.CurrentCulture);
+        }
+
         return value switch
         {
             null => string.Empty,
@@ -56,7 +65,7 @@ public sealed class GriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMem
     }
 }
 
-public sealed class HtmlGriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMember
+public sealed class HtmlGriddoColumnView : IGriddoColumnView, IGriddoColumnSourceMember, IGriddoColumnTitleView, IGriddoColumnFormatView, IGriddoColumnFontView
 {
     private readonly Func<object, string> _valueGetter;
     private readonly Func<object, string, bool> _valueSetter;
@@ -82,6 +91,10 @@ public sealed class HtmlGriddoColumnView : IGriddoColumnView, IGriddoColumnSourc
     }
 
     public string Header { get; set; }
+    public string AbbreviatedHeader { get; set; } = string.Empty;
+    public string FormatString { get; set; } = string.Empty;
+    public string FontFamilyName { get; set; } = string.Empty;
+    public double FontSize { get; set; }
 
     public string SourceMemberName { get; }
     public double Width { get; }
@@ -95,14 +108,22 @@ public sealed class HtmlGriddoColumnView : IGriddoColumnView, IGriddoColumnSourc
     public bool TrySetValue(object rowSource, object? value)
         => _valueSetter(rowSource, value?.ToString() ?? string.Empty);
 
-    public string FormatValue(object? value) => value?.ToString() ?? string.Empty;
+    public string FormatValue(object? value)
+    {
+        if (!string.IsNullOrWhiteSpace(FormatString) && value is IFormattable formattable)
+        {
+            return formattable.ToString(FormatString, CultureInfo.CurrentCulture);
+        }
+
+        return value?.ToString() ?? string.Empty;
+    }
 }
 
 /// <summary>
 /// Boolean column: centered checkbox rendering, <see cref="GriddoCellEditors.Bool"/> for typed/F2 edits,
 /// Space / second click / double-click toggle in the grid.
 /// </summary>
-public sealed class GriddoBoolColumnView : IGriddoColumnView, IGriddoColumnSourceMember
+public sealed class GriddoBoolColumnView : IGriddoColumnView, IGriddoColumnSourceMember, IGriddoColumnTitleView, IGriddoColumnFormatView, IGriddoColumnFontView
 {
     private readonly Func<object, object?> _valueGetter;
     private readonly Func<object, object?, bool> _valueSetter;
@@ -126,6 +147,10 @@ public sealed class GriddoBoolColumnView : IGriddoColumnView, IGriddoColumnSourc
     }
 
     public string Header { get; set; }
+    public string AbbreviatedHeader { get; set; } = string.Empty;
+    public string FormatString { get; set; } = string.Empty;
+    public string FontFamilyName { get; set; } = string.Empty;
+    public double FontSize { get; set; }
 
     public string SourceMemberName { get; }
     public double Width { get; }
@@ -138,10 +163,18 @@ public sealed class GriddoBoolColumnView : IGriddoColumnView, IGriddoColumnSourc
 
     public bool TrySetValue(object rowSource, object? value) => _valueSetter(rowSource, value);
 
-    public string FormatValue(object? value) => value switch
+    public string FormatValue(object? value)
     {
-        null => string.Empty,
-        bool b => b.ToString(CultureInfo.CurrentCulture),
-        _ => bool.TryParse(value.ToString(), out var p) ? p.ToString(CultureInfo.CurrentCulture) : string.Empty
-    };
+        if (!string.IsNullOrWhiteSpace(FormatString) && value is IFormattable formattable)
+        {
+            return formattable.ToString(FormatString, CultureInfo.CurrentCulture);
+        }
+
+        return value switch
+        {
+            null => string.Empty,
+            bool b => b.ToString(CultureInfo.CurrentCulture),
+            _ => bool.TryParse(value.ToString(), out var p) ? p.ToString(CultureInfo.CurrentCulture) : string.Empty
+        };
+    }
 }

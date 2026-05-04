@@ -72,6 +72,7 @@ public sealed partial class Griddo : FrameworkElement
         Focusable = false
     };
     private readonly Dictionary<GriddoCellAddress, FrameworkElement> _hostedCells = [];
+    private readonly List<GriddoSortDescriptor> _sortDescriptors = [];
     private readonly ScrollBar _horizontalScrollBar;
     private readonly ScrollBar _verticalScrollBar;
     private readonly System.Windows.Controls.Grid _scaleFeedbackLayer = new()
@@ -113,6 +114,7 @@ public sealed partial class Griddo : FrameworkElement
     private bool _pendingColumnHeaderSelectionOnMouseUp;
     private int _pendingColumnHeaderIndex = -1;
     private bool _pendingColumnHeaderSelectionAdditive;
+    private bool _pendingColumnHeaderPreserveSelection;
     private bool _isDraggingColumnHeaderSelection;
     private bool _columnHeaderDragIsAdditive;
     private int _columnHeaderDragAnchorColumn = -1;
@@ -125,6 +127,7 @@ public sealed partial class Griddo : FrameworkElement
     private bool _pendingRowHeaderSelectionOnMouseUp;
     private int _pendingRowHeaderIndex = -1;
     private bool _pendingRowHeaderSelectionAdditive;
+    private bool _pendingRowHeaderPreserveSelection;
     private bool _isDraggingRowHeaderSelection;
     private bool _rowHeaderDragIsAdditive;
     private int _rowHeaderDragAnchorRow = -1;
@@ -147,6 +150,7 @@ public sealed partial class Griddo : FrameworkElement
     private bool _hasAutoSizedColumns;
     private bool _initialSampleAutoSizeScheduled;
     private int _visibleRowCount;
+    private int _suspendGridCollectionChanged;
 
     public Griddo()
     {
@@ -253,6 +257,7 @@ public sealed partial class Griddo : FrameworkElement
 
     /// <summary>Fires on row header right-click; see <see cref="GriddoRowHeaderMouseEventArgs.SelectedRowIndices"/> for the full scope.</summary>
     public event EventHandler<GriddoRowHeaderMouseEventArgs>? RowHeaderRightClick;
+    public IReadOnlyList<GriddoSortDescriptor> SortDescriptors => _sortDescriptors;
 
     /// <summary>Optional context menu for body-cell right-click (after selection rules are applied).</summary>
     public ContextMenu? CellContextMenu { get; set; }
@@ -297,10 +302,55 @@ public sealed partial class Griddo : FrameworkElement
     public Brush SelectionBackground { get; set; } = new SolidColorBrush(Color.FromArgb(120, 102, 178, 255));
     public Brush CurrentCellBorderBrush { get; set; } = Brushes.DodgerBlue;
     public Brush FindMatchBackground { get; set; } = new SolidColorBrush(Color.FromArgb(170, 255, 235, 120));
-    public bool HideCellSelectionColoring { get; set; }
-    public bool HideHeaderSelectionColoring { get; set; }
-    public bool HideCurrentCellColor { get; set; }
-    public bool HideEditCellColor { get; set; }
+    private bool _showColumnHeaderSelectionColoring = true;
+    private bool _showRowHeaderSelectionColoring = true;
+    private bool _immediateCellEditOnSingleClick;
+    public bool ShowCellSelectionColoring { get; set; } = true;
+    public bool ShowSortingIndicators { get; set; } = true;
+    public bool ShowHeaderSelectionColoring
+    {
+        get => ShowColumnHeaderSelectionColoring && ShowRowHeaderSelectionColoring;
+        set
+        {
+            ShowColumnHeaderSelectionColoring = value;
+            ShowRowHeaderSelectionColoring = value;
+        }
+    }
+    public bool ShowColumnHeaderSelectionColoring
+    {
+        get => _showColumnHeaderSelectionColoring;
+        set
+        {
+            if (_showColumnHeaderSelectionColoring == value)
+            {
+                return;
+            }
+
+            _showColumnHeaderSelectionColoring = value;
+            InvalidateVisual();
+        }
+    }
+    public bool ShowRowHeaderSelectionColoring
+    {
+        get => _showRowHeaderSelectionColoring;
+        set
+        {
+            if (_showRowHeaderSelectionColoring == value)
+            {
+                return;
+            }
+
+            _showRowHeaderSelectionColoring = value;
+            InvalidateVisual();
+        }
+    }
+    public bool ShowCurrentCellColor { get; set; } = true;
+    public bool ShowEditCellColor { get; set; } = true;
+    public bool ImmediateCellEditOnSingleClick
+    {
+        get => _immediateCellEditOnSingleClick;
+        set => _immediateCellEditOnSingleClick = value;
+    }
 
     /// <summary>Pen stroke for the right edge of the last fixed column only (freeze boundary before scrollable columns).</summary>
     public Brush FixedColumnRightBorderBrush { get; set; } = new SolidColorBrush(Color.FromRgb(118, 118, 118));
@@ -451,6 +501,11 @@ public sealed partial class Griddo : FrameworkElement
     {
         _ = sender;
         _ = e;
+        if (_suspendGridCollectionChanged > 0)
+        {
+            return;
+        }
+
         _fixedColumnCount = Math.Clamp(_fixedColumnCount, 0, Math.Max(0, Columns.Count));
         _fixedRowCount = Math.Clamp(_fixedRowCount, 0, Math.Max(0, Rows.Count));
         if (Rows.Count == 0)

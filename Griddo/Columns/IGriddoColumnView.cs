@@ -17,6 +17,22 @@ public interface IGriddoColumnView
     string FormatValue(object? value);
 }
 
+public interface IGriddoColumnTitleView
+{
+    string AbbreviatedHeader { get; set; }
+}
+
+public interface IGriddoColumnFormatView
+{
+    string FormatString { get; set; }
+}
+
+public interface IGriddoColumnFontView
+{
+    string FontFamilyName { get; set; }
+    double FontSize { get; set; }
+}
+
 public interface IGriddoSizedImageValue
 {
     ImageSource GetImage(Size size);

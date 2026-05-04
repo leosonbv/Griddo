@@ -1,4 +1,4 @@
-namespace GriddoTest.ColumnEdit;
+namespace GriddoUi.ColumnEdit;
 
 /// <summary>One editable row in <see cref="ColumnEditDialog"/> (maps to a property on the data shape).</summary>
 public sealed class ColumnEditRow
@@ -19,6 +19,12 @@ public sealed class ColumnEditRow
     public bool Fill { get; set; }
 
     public double Width { get; set; } = 140;
+    public string AbbreviatedTitle { get; set; } = string.Empty;
+    public string FormatString { get; set; } = string.Empty;
+    public string FontFamilyName { get; set; } = string.Empty;
+    public double FontSize { get; set; }
+    public int SortPriority { get; set; }
+    public bool SortAscending { get; set; } = true;
 
     /// <summary>Formatted sample from the first data row, if one was supplied when the dialog was built.</summary>
     public string SampleDisplay { get; init; } = string.Empty;
@@ -32,6 +38,12 @@ public sealed class ColumnEditRow
         Visible = Visible,
         Fill = Fill,
         Width = Width,
+        AbbreviatedTitle = AbbreviatedTitle,
+        FormatString = FormatString,
+        FontFamilyName = FontFamilyName,
+        FontSize = FontSize,
+        SortPriority = SortPriority,
+        SortAscending = SortAscending,
         SampleDisplay = SampleDisplay
     };
 }

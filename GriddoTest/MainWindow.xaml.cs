@@ -7,7 +7,7 @@ using Griddo.Editing;
 using Griddo.Grid;
 using Plotto.Charting.Controls;
 using Plotto.Charting.Core;
-using GriddoTest.ColumnEdit;
+using GriddoUi.ColumnEdit;
 
 namespace GriddoTest;
 
@@ -31,6 +31,7 @@ public partial class MainWindow : Window
         DemoGrid.ColumnHeaderRightClick += (_, e) => OnColumnHeaderRightClick(DemoGrid, _allColumns, DemoGrid, e);
         DemoGrid.UniformRowHeight = 132;
         DemoGrid.FixedColumnCount = 1;
+        DemoGrid.ImmediateCellEditOnSingleClick = false;
         DemoGrid.HostedPlotDirectEditOnMouseDown = true;
     }
 
@@ -62,9 +63,18 @@ public partial class MainWindow : Window
             Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint
         };
 
+        var chooseColumnsItem = new MenuItem { Header = "Choose _columns…" };
+        chooseColumnsItem.Click += (_, _) => OpenChooseColumnsDialog(sourceGridForChooser);
+        menu.Items.Add(chooseColumnsItem);
+        var autoWidthAllColumnsItem = new MenuItem { Header = "Auto width all columns" };
+        autoWidthAllColumnsItem.Click += (_, _) => targetGrid.AutoSizeAllColumns();
+        menu.Items.Add(autoWidthAllColumnsItem);
+        var autoWidthSelectedColumnsItem = new MenuItem { Header = "Auto width selected column(s)" };
+        autoWidthSelectedColumnsItem.Click += (_, _) => targetGrid.AutoSizeColumns(indices);
+        menu.Items.Add(autoWidthSelectedColumnsItem);
         var fillItem = new MenuItem
         {
-            Header = targetColumns.Count > 1 ? "Fill selected columns" : "Fill column",
+            Header = "Fill selected column(s)",
             IsCheckable = true,
             IsChecked = targetColumns.All(c => c.Fill)
         };
@@ -79,39 +89,14 @@ public partial class MainWindow : Window
             targetGrid.InvalidateVisual();
         };
         menu.Items.Add(fillItem);
-
-        var autoWidthAllColumnsItem = new MenuItem { Header = "Auto width all columns" };
-        autoWidthAllColumnsItem.Click += (_, _) => targetGrid.AutoSizeAllColumns();
-        menu.Items.Add(autoWidthAllColumnsItem);
-
-        var chooseColumnsItem = new MenuItem { Header = "Choose _columns…" };
-        chooseColumnsItem.Click += (_, _) => OpenChooseColumnsDialog(sourceGridForChooser);
-        menu.Items.Add(chooseColumnsItem);
-
-        menu.Items.Add(new Separator());
-        var hideEmptyColsItem = new MenuItem { Header = "Hide _empty columns" };
-        hideEmptyColsItem.Click += (_, _) => HideEmptyColumns(targetGrid, columnRegistry);
-        menu.Items.Add(hideEmptyColsItem);
-
-        var showAllColsItem = new MenuItem { Header = "_Show all columns" };
-        showAllColsItem.Click += (_, _) => ShowAllColumns(targetGrid, columnRegistry);
-        menu.Items.Add(showAllColsItem);
-
-        var showAllExceptEmptyItem = new MenuItem { Header = "Show all _except empty columns" };
-        showAllExceptEmptyItem.Click += (_, _) => ShowAllColumnsExceptEmpty(targetGrid, columnRegistry);
-        menu.Items.Add(showAllExceptEmptyItem);
         menu.Items.Add(new Separator());
 
-        var hideItem = new MenuItem
-        {
-            Header = targetColumns.Count > 1 ? "Hide selected columns" : "Hide column"
-        };
-        hideItem.Click += (_, _) =>
+        var visibilitySubmenu = new MenuItem { Header = "Column visibility actions" };
+        var hideSelectedColumnsItem = new MenuItem { Header = "Hide selected column(s)" };
+        hideSelectedColumnsItem.Click += (_, _) =>
         {
             var visibleCount = targetGrid.Columns.Count;
-            var removable = targetColumns
-                .Where(c => targetGrid.Columns.Contains(c))
-                .ToList();
+            var removable = targetColumns.Where(c => targetGrid.Columns.Contains(c)).ToList();
             if (visibleCount - removable.Count < 1)
             {
                 return;
@@ -125,79 +110,104 @@ public partial class MainWindow : Window
             targetGrid.InvalidateMeasure();
             targetGrid.InvalidateVisual();
         };
-        menu.Items.Add(hideItem);
-        menu.Items.Add(new Separator());
+        visibilitySubmenu.Items.Add(hideSelectedColumnsItem);
+        visibilitySubmenu.Items.Add(new Separator());
 
+        var hideEmptyColsItem = new MenuItem { Header = "Hide _empty columns" };
+        hideEmptyColsItem.Click += (_, _) => HideEmptyColumns(targetGrid, columnRegistry);
+        visibilitySubmenu.Items.Add(hideEmptyColsItem);
+
+        var showAllColsItem = new MenuItem { Header = "_Show all columns" };
+        showAllColsItem.Click += (_, _) => ShowAllColumns(targetGrid, columnRegistry);
+        visibilitySubmenu.Items.Add(showAllColsItem);
+
+        var showAllExceptEmptyItem = new MenuItem { Header = "Show all _except empty columns" };
+        showAllExceptEmptyItem.Click += (_, _) => ShowAllColumnsExceptEmpty(targetGrid, columnRegistry);
+        visibilitySubmenu.Items.Add(showAllExceptEmptyItem);
+        menu.Items.Add(visibilitySubmenu);
+
+        var appearanceSubmenu = new MenuItem { Header = "Column visibility" };
         var immediateEditItem = new MenuItem
         {
-            Header = "Immediate edit",
+            Header = "Immediate edit (Plotto only)",
             IsCheckable = true,
             IsChecked = targetGrid.HostedPlotDirectEditOnMouseDown
         };
-        immediateEditItem.Click += (_, _) =>
-        {
-            targetGrid.HostedPlotDirectEditOnMouseDown = immediateEditItem.IsChecked;
-        };
-        menu.Items.Add(immediateEditItem);
+        immediateEditItem.Click += (_, _) => targetGrid.HostedPlotDirectEditOnMouseDown = immediateEditItem.IsChecked;
+        appearanceSubmenu.Items.Add(immediateEditItem);
 
-        var hideSelectionColoringItem = new MenuItem
+        var showSelectionColoringItem = new MenuItem
         {
-            Header = "Hide cell selection coloring",
+            Header = "Show cell selection color",
             IsCheckable = true,
-            IsChecked = targetGrid.HideCellSelectionColoring
+            IsChecked = targetGrid.ShowCellSelectionColoring
         };
-        hideSelectionColoringItem.Click += (_, _) =>
+        showSelectionColoringItem.Click += (_, _) =>
         {
-            targetGrid.HideCellSelectionColoring = hideSelectionColoringItem.IsChecked;
+            targetGrid.ShowCellSelectionColoring = showSelectionColoringItem.IsChecked;
             targetGrid.InvalidateVisual();
         };
-        menu.Items.Add(hideSelectionColoringItem);
+        appearanceSubmenu.Items.Add(showSelectionColoringItem);
 
-        var hideHeaderSelectionColoringItem = new MenuItem
+        var showHeaderSelectionColoringItem = new MenuItem
         {
-            Header = "Hide row/col header selection color",
+            Header = "Show header selection color",
             IsCheckable = true,
-            IsChecked = targetGrid.HideHeaderSelectionColoring
+            IsChecked = targetGrid.ShowHeaderSelectionColoring
         };
-        hideHeaderSelectionColoringItem.Click += (_, _) =>
+        showHeaderSelectionColoringItem.Click += (_, _) =>
         {
-            targetGrid.HideHeaderSelectionColoring = hideHeaderSelectionColoringItem.IsChecked;
+            targetGrid.ShowHeaderSelectionColoring = showHeaderSelectionColoringItem.IsChecked;
             targetGrid.InvalidateVisual();
         };
-        menu.Items.Add(hideHeaderSelectionColoringItem);
+        appearanceSubmenu.Items.Add(showHeaderSelectionColoringItem);
 
-        var hideCurrentCellColorItem = new MenuItem
+        var showCurrentCellColorItem = new MenuItem
         {
-            Header = "Hide current cell color",
+            Header = "Show current cell color",
             IsCheckable = true,
-            IsChecked = targetGrid.HideCurrentCellColor
+            IsChecked = targetGrid.ShowCurrentCellColor
         };
-        hideCurrentCellColorItem.Click += (_, _) =>
+        showCurrentCellColorItem.Click += (_, _) =>
         {
-            targetGrid.HideCurrentCellColor = hideCurrentCellColorItem.IsChecked;
+            targetGrid.ShowCurrentCellColor = showCurrentCellColorItem.IsChecked;
             targetGrid.InvalidateVisual();
         };
-        menu.Items.Add(hideCurrentCellColorItem);
+        appearanceSubmenu.Items.Add(showCurrentCellColorItem);
 
-        var hideEditCellColorItem = new MenuItem
+        var showEditCellColorItem = new MenuItem
         {
-            Header = "Hide edit cell color",
+            Header = "Show edit cell color",
             IsCheckable = true,
-            IsChecked = targetGrid.HideEditCellColor
+            IsChecked = targetGrid.ShowEditCellColor
         };
-        hideEditCellColorItem.Click += (_, _) =>
+        showEditCellColorItem.Click += (_, _) =>
         {
-            targetGrid.HideEditCellColor = hideEditCellColorItem.IsChecked;
+            targetGrid.ShowEditCellColor = showEditCellColorItem.IsChecked;
             targetGrid.InvalidateVisual();
         };
-        menu.Items.Add(hideEditCellColorItem);
+        appearanceSubmenu.Items.Add(showEditCellColorItem);
+
+        var showSortIndicatorsItem = new MenuItem
+        {
+            Header = "Show sort indicators",
+            IsCheckable = true,
+            IsChecked = targetGrid.ShowSortingIndicators
+        };
+        showSortIndicatorsItem.Click += (_, _) =>
+        {
+            targetGrid.ShowSortingIndicators = showSortIndicatorsItem.IsChecked;
+            targetGrid.InvalidateVisual();
+        };
+        appearanceSubmenu.Items.Add(showSortIndicatorsItem);
+        menu.Items.Add(appearanceSubmenu);
         menu.Items.Add(new Separator());
 
-        var visibleRowsSubmenu = new MenuItem { Header = "Visible row count" };
+        var visibleRowsSubmenu = new MenuItem { Header = "Fill rows" };
         for (var mode = 0; mode <= 10; mode++)
         {
             var localMode = mode;
-            var label = localMode == 0 ? "X" : localMode.ToString();
+            var label = localMode == 0 ? "Auto" : localMode.ToString();
             var modeItem = new MenuItem
             {
                 Header = label,
@@ -215,33 +225,23 @@ public partial class MainWindow : Window
         menu.Items.Add(visibleRowsSubmenu);
         menu.Items.Add(new Separator());
 
-        var columnsSubmenu = new MenuItem { Header = "Columns" };
-        foreach (var col in columnRegistry)
-        {
-            var colMenuItem = new MenuItem
-            {
-                Header = col.Header,
-                IsCheckable = true,
-                IsChecked = targetGrid.Columns.Contains(col),
-                StaysOpenOnClick = true
-            };
-            colMenuItem.Click += (_, _) => ToggleColumnVisibility(targetGrid, columnRegistry, col, colMenuItem.IsChecked);
-            columnsSubmenu.Items.Add(colMenuItem);
-        }
-        menu.Items.Add(columnsSubmenu);
+        var findSubmenu = new MenuItem { Header = "Find" };
+        var findItem = new MenuItem { Header = "Find…", InputGestureText = "Ctrl+F" };
+        findItem.Click += (_, _) => targetGrid.OpenFindDialogAndFindFirst();
+        findSubmenu.Items.Add(findItem);
 
-        var clickedColumn = targetGrid.Columns[e.ColumnIndex];
-        if (string.Equals(clickedColumn.Header, PlottoColumnHeader, StringComparison.Ordinal))
-        {
-            menu.Items.Add(new Separator());
-            var configurePlottoItem = new MenuItem { Header = "Configure Plotto..." };
-            configurePlottoItem.Click += (_, _) =>
-            {
-                var dlg = new PlotConfigurationDialog(ResolvePlotConfigurationChart(targetGrid)) { Owner = this };
-                dlg.ShowDialog();
-            };
-            menu.Items.Add(configurePlottoItem);
-        }
+        var findNextItem = new MenuItem { Header = "Find next", InputGestureText = "F3" };
+        findNextItem.Click += (_, _) => targetGrid.FindNext();
+        findSubmenu.Items.Add(findNextItem);
+
+        var findPreviousItem = new MenuItem { Header = "Find previous", InputGestureText = "Shift+F3" };
+        findPreviousItem.Click += (_, _) => targetGrid.FindPrevious();
+        findSubmenu.Items.Add(findPreviousItem);
+
+        var findCancelItem = new MenuItem { Header = "Cancel", InputGestureText = "Esc" };
+        findCancelItem.Click += (_, _) => targetGrid.CancelFind();
+        findSubmenu.Items.Add(findCancelItem);
+        menu.Items.Add(findSubmenu);
 
         menu.IsOpen = true;
     }
@@ -605,9 +605,20 @@ public partial class MainWindow : Window
     private void OpenChooseColumnsDialog(global::Griddo.Grid.Griddo grid)
     {
         var rows = ColumnMetadataBuilder.BuildRowsFromGrid(grid, _allColumns);
-        var dlg = new ColumnEditDialog(rows, grid.FixedColumnCount, grid.FixedRowCount) { Owner = this };
+        var initialOptions = new ColumnChooserGeneralOptions
+        {
+            VisibleRowCount = grid.VisibleRowCount,
+            ShowSelectionColor = grid.ShowCellSelectionColoring,
+            ShowCurrentCellRect = grid.ShowCurrentCellColor,
+            ShowRowSelectionColor = grid.ShowRowHeaderSelectionColoring,
+            ShowColSelectionColor = grid.ShowColumnHeaderSelectionColoring,
+            ShowEditCellRect = grid.ShowEditCellColor,
+            ShowSortingIndicators = grid.ShowSortingIndicators,
+            ImmediatePlottoEdit = grid.HostedPlotDirectEditOnMouseDown
+        };
+        var dlg = new ColumnEditDialog(rows, grid.FixedColumnCount, grid.FixedRowCount, initialOptions) { Owner = this };
         dlg.TargetSourceGrid = grid;
-        dlg.ApplyToSourceGrid = (r, fc, fr) => ColumnChooserGridApplier.Apply(grid, r, fc, fr, _allColumns);
+        dlg.ApplyToSourceGrid = (r, fc, fr, go) => ColumnChooserGridApplier.Apply(grid, r, fc, fr, go, _allColumns);
         dlg.ColumnHeaderMenuHandler = (g, ev) => OnColumnHeaderRightClick(g, dlg.ColumnHeaderRegistry, grid, ev);
         grid.ClearCellSelection();
         dlg.ShowDialog();

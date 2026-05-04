@@ -23,7 +23,7 @@ public sealed partial class Griddo
     {
         var width = GetColumnWidth(col);
         var rect = new Rect(x, 0, width, ScaledColumnHeaderHeight);
-        var headerBackground = (IsColumnHeaderMarkedSelected(col) && !HideHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
+        var headerBackground = (IsColumnHeaderMarkedSelected(col) && ShowColumnHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
         dc.DrawRectangle(headerBackground, null, rect);
         var pen = new Pen(GridLineBrush, GridPenThickness);
         // Top edge of header strip is drawn once in DrawOuterWorksheetFrame (matches DrawLine rasterization for scroll columns).
@@ -32,8 +32,11 @@ public sealed partial class Griddo
         {
             dc.DrawLine(pen, rect.TopLeft, rect.BottomLeft);
         }
+        var headerLabel = Columns[col] is IGriddoColumnTitleView titleView && !string.IsNullOrWhiteSpace(titleView.AbbreviatedHeader)
+            ? titleView.AbbreviatedHeader
+            : Columns[col].Header;
         var headerText = new FormattedText(
-            Columns[col].Header,
+            headerLabel,
             System.Globalization.CultureInfo.CurrentCulture,
             FlowDirection.LeftToRight,
             typeface,
@@ -46,6 +49,7 @@ public sealed partial class Griddo
         headerText.Trimming = TextTrimming.CharacterEllipsis;
         var headerY = rect.Y + Math.Max(0, (rect.Height - headerText.Height) / 2);
         dc.DrawText(headerText, new Point(rect.X + 4, headerY));
+        DrawSortHeaderIndicator(dc, col, rect, typeface);
 
         if (_fixedColumnCount > 0 && col == _fixedColumnCount - 1)
         {
@@ -54,6 +58,43 @@ public sealed partial class Griddo
                 new Point(rect.Right, rect.Top),
                 new Point(rect.Right, rect.Bottom));
         }
+    }
+
+    private void DrawSortHeaderIndicator(DrawingContext dc, int col, Rect rect, Typeface typeface)
+    {
+        if (!ShowSortingIndicators)
+        {
+            return;
+        }
+
+        var priority = TryGetSortPriorityForColumn(col, out var ascending);
+        if (priority <= 0)
+        {
+            return;
+        }
+
+        var arrowText = ascending ? "▲" : "▼";
+        var arrow = new FormattedText(
+            arrowText,
+            System.Globalization.CultureInfo.CurrentCulture,
+            FlowDirection.LeftToRight,
+            typeface,
+            Math.Max(7.0, EffectiveFontSize * 0.7),
+            Brushes.DarkSlateBlue,
+            1.0);
+        var prio = new FormattedText(
+            priority.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            System.Globalization.CultureInfo.CurrentCulture,
+            FlowDirection.LeftToRight,
+            typeface,
+            Math.Max(8.0, EffectiveFontSize * 0.65),
+            Brushes.DarkSlateBlue,
+            1.0);
+        prio.SetFontWeight(FontWeights.Bold);
+
+        var right = rect.Right - 3;
+        dc.DrawText(prio, new Point(right - prio.Width, rect.Top + 1));
+        dc.DrawText(arrow, new Point(right - Math.Max(arrow.Width, prio.Width), rect.Top + 1 + prio.Height));
     }
 
     private void DrawBodyCell(
@@ -77,7 +118,7 @@ public sealed partial class Griddo
             dc.DrawRectangle(FindMatchBackground, null, rect);
         }
 
-        if (_selectedCells.Contains(address) && !isHostedCellEditing && !HideCellSelectionColoring)
+        if (_selectedCells.Contains(address) && !isHostedCellEditing && ShowCellSelectionColoring)
         {
             dc.DrawRectangle(SelectionBackground, null, rect);
         }
@@ -96,6 +137,9 @@ public sealed partial class Griddo
             return;
         }
 
+        var columnTypeface = ResolveColumnTypeface(col, typeface);
+        var columnFontSize = ResolveColumnFontSize(col);
+
         if (Columns[col] is GriddoBoolColumnView)
         {
             var rawBool = Columns[col].GetValue(rowData);
@@ -103,7 +147,7 @@ public sealed partial class Griddo
             var boolPaintBounds = Rect.Intersect(rect, bodyViewport);
             if (!boolPaintBounds.IsEmpty)
             {
-                GriddoValuePainter.DrawBoolCheckbox(dc, isChecked, boolPaintBounds, EffectiveFontSize);
+                GriddoValuePainter.DrawBoolCheckbox(dc, isChecked, boolPaintBounds, columnFontSize);
             }
 
             return;
@@ -119,14 +163,51 @@ public sealed partial class Griddo
                 dc,
                 value,
                 paintBounds,
-                typeface,
-                EffectiveFontSize,
+                columnTypeface,
+                columnFontSize,
                 Brushes.Black,
                 Columns[col].IsHtml,
                 true,
                 Columns[col].ContentAlignment,
                 isGraphic ? VerticalAlignment.Top : VerticalAlignment.Center);
         }
+    }
+
+    private Typeface ResolveColumnTypeface(int col, Typeface fallback)
+    {
+        if (col < 0 || col >= Columns.Count)
+        {
+            return fallback;
+        }
+
+        if (Columns[col] is IGriddoColumnFontView { FontFamilyName: { Length: > 0 } fontFamilyName })
+        {
+            try
+            {
+                return new Typeface(fontFamilyName);
+            }
+            catch
+            {
+                return fallback;
+            }
+        }
+
+        return fallback;
+    }
+
+    private double ResolveColumnFontSize(int col)
+    {
+        if (col < 0 || col >= Columns.Count)
+        {
+            return EffectiveFontSize;
+        }
+
+        if (Columns[col] is IGriddoColumnFontView { FontSize: > 0 } fontView)
+        {
+            return Math.Max(6, fontView.FontSize * ContentScale);
+        }
+
+        return EffectiveFontSize;
     }
 
     private void DrawHeaders(DrawingContext dc)
@@ -182,7 +263,7 @@ public sealed partial class Griddo
                 var rowHeight = GetRowHeight(row);
                 var y = ScaledColumnHeaderHeight + GetRowBodyTopRel(row);
                 var rect = new Rect(0, y, _rowHeaderWidth, rowHeight);
-                var rowHeaderBackground = (IsRowHeaderMarkedSelected(row) && !HideHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
+                var rowHeaderBackground = (IsRowHeaderMarkedSelected(row) && ShowRowHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
                 dc.DrawRectangle(rowHeaderBackground, null, rect);
                 // Top + bottom only; outer x=0 edge is one DrawLine in DrawOuterWorksheetFrame (avoids path vs line mismatch).
                 dc.DrawLine(rowHeaderPen, new Point(rect.Left, rect.Top), new Point(rect.Right, rect.Top));
@@ -401,7 +482,7 @@ public sealed partial class Griddo
             Math.Max(0, rect.Height - (currentCellInset * 2)));
         var isHostedEditMode = IsCurrentHostedCellInEditMode();
         var isEditCell = _isEditing || isHostedEditMode;
-        if ((isEditCell && HideEditCellColor) || (!isEditCell && HideCurrentCellColor))
+        if ((isEditCell && !ShowEditCellColor) || (!isEditCell && !ShowCurrentCellColor))
         {
             dc.Pop();
             return;

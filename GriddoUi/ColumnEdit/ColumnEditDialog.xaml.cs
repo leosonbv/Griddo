@@ -7,7 +7,7 @@ using Griddo.Columns;
 using Griddo.Editing;
 using Griddo.Grid;
 
-namespace GriddoTest.ColumnEdit;
+namespace GriddoUi.ColumnEdit;
 
 public partial class ColumnEditDialog : Window
 {
@@ -19,15 +19,19 @@ public partial class ColumnEditDialog : Window
     /// <summary>Grid whose columns this dialog edits (for nested “Choose columns…” from the preview grid).</summary>
     public global::Griddo.Grid.Griddo? TargetSourceGrid { get; set; }
 
-    /// <summary>Applies current rows and frozen counts to the grid that opened the dialog.</summary>
-    public Action<IReadOnlyList<ColumnEditRow>, int, int>? ApplyToSourceGrid { get; set; }
+    /// <summary>Applies current rows, frozen counts, and general options to the grid that opened the dialog.</summary>
+    public Action<IReadOnlyList<ColumnEditRow>, int, int, ColumnChooserGeneralOptions>? ApplyToSourceGrid { get; set; }
 
     /// <summary>Host hook for column header context menu (e.g. <see cref="MainWindow"/> demo menu).</summary>
     public Action<global::Griddo.Grid.Griddo, GriddoColumnHeaderMouseEventArgs>? ColumnHeaderMenuHandler { get; set; }
 
     public IReadOnlyList<IGriddoColumnView> ColumnHeaderRegistry => _columnHeaderRegistry;
 
-    public ColumnEditDialog(IReadOnlyList<ColumnEditRow> templateRows, int initialFrozenColumns, int initialFrozenRows)
+    public ColumnEditDialog(
+        IReadOnlyList<ColumnEditRow> templateRows,
+        int initialFrozenColumns,
+        int initialFrozenRows,
+        ColumnChooserGeneralOptions? initialOptions = null)
     {
         InitializeComponent();
         foreach (var r in templateRows)
@@ -40,11 +44,21 @@ public partial class ColumnEditDialog : Window
         FrozenRowsBox.Text = initialFrozenRows.ToString();
         AttachUnsignedIntegerOnlyInput(FrozenColumnsBox);
         AttachUnsignedIntegerOnlyInput(FrozenRowsBox);
+        AttachUnsignedIntegerOnlyInput(VisibleRowsBox);
+        var options = initialOptions ?? new ColumnChooserGeneralOptions();
+        VisibleRowsBox.Text = options.VisibleRowCount.ToString();
+        ShowSelectionColorBox.IsChecked = options.ShowSelectionColor;
+        ShowCurrentCellRectBox.IsChecked = options.ShowCurrentCellRect;
+        ShowRowSelectionColorBox.IsChecked = options.ShowRowSelectionColor;
+        ShowColSelectionColorBox.IsChecked = options.ShowColSelectionColor;
+        ShowEditCellRectBox.IsChecked = options.ShowEditCellRect;
+        ShowSortingIndicatorsBox.IsChecked = options.ShowSortingIndicators;
+        ImmediateCellEditBox.IsChecked = options.ImmediatePlottoEdit;
         ColumnGrid.ColumnHeaderRightClick += ColumnGrid_ColumnHeaderRightClick;
         Closed += (_, _) => ColumnGrid.ColumnHeaderRightClick -= ColumnGrid_ColumnHeaderRightClick;
     }
 
-    /// <summary>Allows only ASCII digits (non‑negative integers); paste inserts digits from clipboard.</summary>
+    /// <summary>Allows only ASCII digits (non-negative integers); paste inserts digits from clipboard.</summary>
     private static void AttachUnsignedIntegerOnlyInput(TextBox textBox)
     {
         textBox.PreviewTextInput += (_, e) =>
@@ -104,6 +118,8 @@ public partial class ColumnEditDialog : Window
     public int ResultFrozenColumns { get; private set; }
 
     public int ResultFrozenRows { get; private set; }
+
+    public ColumnChooserGeneralOptions ResultGeneralOptions { get; private set; } = new();
 
     private void BuildColumns()
     {
@@ -166,14 +182,99 @@ public partial class ColumnEditDialog : Window
             },
             GriddoCellEditors.Number,
             TextAlignment.Right));
+        AddColumn(new GriddoColumnView(
+            "Font",
+            120,
+            r => ((ColumnEditRow)r).FontFamilyName,
+            (r, v) =>
+            {
+                ((ColumnEditRow)r).FontFamilyName = v?.ToString() ?? string.Empty;
+                return true;
+            }));
+        AddColumn(new GriddoColumnView(
+            "Size",
+            58,
+            r => ((ColumnEditRow)r).FontSize,
+            (r, v) =>
+            {
+                if (v is double d)
+                {
+                    ((ColumnEditRow)r).FontSize = Math.Max(0, d);
+                    return true;
+                }
+
+                if (double.TryParse(v?.ToString(), out var x))
+                {
+                    ((ColumnEditRow)r).FontSize = Math.Max(0, x);
+                    return true;
+                }
+
+                return false;
+            },
+            GriddoCellEditors.Number,
+            TextAlignment.Right));
+        AddColumn(new GriddoColumnView(
+            "Format",
+            110,
+            r => ((ColumnEditRow)r).FormatString,
+            (r, v) =>
+            {
+                ((ColumnEditRow)r).FormatString = v?.ToString() ?? string.Empty;
+                return true;
+            }));
+        AddColumn(new GriddoColumnView(
+            "Sort#",
+            58,
+            r => ((ColumnEditRow)r).SortPriority,
+            (r, v) =>
+            {
+                if (v is double d)
+                {
+                    ((ColumnEditRow)r).SortPriority = Math.Max(0, (int)Math.Round(d));
+                    return true;
+                }
+
+                if (int.TryParse(v?.ToString(), out var x))
+                {
+                    ((ColumnEditRow)r).SortPriority = Math.Max(0, x);
+                    return true;
+                }
+
+                return false;
+            },
+            GriddoCellEditors.Number,
+            TextAlignment.Right));
+        AddColumn(new GriddoBoolColumnView(
+            "Asc",
+            48,
+            r => ((ColumnEditRow)r).SortAscending,
+            (r, v) =>
+            {
+                if (v is not bool b)
+                {
+                    return false;
+                }
+
+                ((ColumnEditRow)r).SortAscending = b;
+                return true;
+            }));
         AddColumn(new ReadonlyColumn("Property", 140, r => r.PropertyName));
         AddColumn(new GriddoColumnView(
             "Header",
-            160,
+            150,
             r => ((ColumnEditRow)r).Title,
             (r, v) =>
             {
                 ((ColumnEditRow)r).Title = v?.ToString() ?? string.Empty;
+                return true;
+            }));
+        AddColumn(new GriddoColumnView(
+            "Abbrev",
+            100,
+            r => ((ColumnEditRow)r).AbbreviatedTitle,
+            (r, v) =>
+            {
+                ((ColumnEditRow)r).AbbreviatedTitle = v?.ToString() ?? string.Empty;
                 return true;
             }));
         AddColumn(new ReadonlyColumn("Description", 260, r => r.Description));
@@ -208,13 +309,16 @@ public partial class ColumnEditDialog : Window
     {
         _ = sender;
         _ = e;
-        if (!TryCommitFrozenColumns(out var frozenColumns) || !TryCommitFrozenRows(out var frozenRows))
+        if (!TryCommitFrozenColumns(out var frozenColumns)
+            || !TryCommitFrozenRows(out var frozenRows)
+            || !TryCommitVisibleRows(out _))
         {
             return;
         }
 
         var rows = SnapshotRows();
-        ApplyToSourceGrid?.Invoke(rows, frozenColumns, frozenRows);
+        var generalOptions = BuildGeneralOptions();
+        ApplyToSourceGrid?.Invoke(rows, frozenColumns, frozenRows, generalOptions);
         PreviewApply?.Invoke(this, rows);
     }
 
@@ -222,16 +326,20 @@ public partial class ColumnEditDialog : Window
     {
         _ = sender;
         _ = e;
-        if (!TryCommitFrozenColumns(out var frozenColumns) || !TryCommitFrozenRows(out var frozenRows))
+        if (!TryCommitFrozenColumns(out var frozenColumns)
+            || !TryCommitFrozenRows(out var frozenRows)
+            || !TryCommitVisibleRows(out _))
         {
             return;
         }
 
         var rows = SnapshotRows();
-        ApplyToSourceGrid?.Invoke(rows, frozenColumns, frozenRows);
+        var generalOptions = BuildGeneralOptions();
+        ApplyToSourceGrid?.Invoke(rows, frozenColumns, frozenRows, generalOptions);
         ResultRows = rows;
         ResultFrozenColumns = frozenColumns;
         ResultFrozenRows = frozenRows;
+        ResultGeneralOptions = generalOptions.Clone();
         DialogResult = true;
     }
 
@@ -278,6 +386,40 @@ public partial class ColumnEditDialog : Window
         return true;
     }
 
+    private bool TryCommitVisibleRows(out int visibleRows)
+    {
+        visibleRows = 0;
+        if (!int.TryParse(VisibleRowsBox.Text.Trim(), out var vr) || vr < 0 || vr > 10)
+        {
+            MessageBox.Show(
+                this,
+                "Visible rows must be an integer between 0 and 10.",
+                Title,
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return false;
+        }
+
+        visibleRows = vr;
+        return true;
+    }
+
+    private ColumnChooserGeneralOptions BuildGeneralOptions()
+    {
+        _ = TryCommitVisibleRows(out var visibleRows);
+        return new ColumnChooserGeneralOptions
+        {
+            VisibleRowCount = visibleRows,
+            ShowSelectionColor = ShowSelectionColorBox.IsChecked == true,
+            ShowCurrentCellRect = ShowCurrentCellRectBox.IsChecked == true,
+            ShowRowSelectionColor = ShowRowSelectionColorBox.IsChecked == true,
+            ShowColSelectionColor = ShowColSelectionColorBox.IsChecked == true,
+            ShowEditCellRect = ShowEditCellRectBox.IsChecked == true,
+            ShowSortingIndicators = ShowSortingIndicatorsBox.IsChecked == true,
+            ImmediatePlottoEdit = ImmediateCellEditBox.IsChecked == true
+        };
+    }
+
     private List<ColumnEditRow> SnapshotRows() =>
         ColumnGrid.Rows.Cast<ColumnEditRow>().Select(static r => r.Clone()).ToList();
 
@@ -305,4 +447,5 @@ public partial class ColumnEditDialog : Window
 
         public string FormatValue(object? value) => value?.ToString() ?? string.Empty;
     }
+
 }

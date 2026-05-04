@@ -6,6 +6,34 @@ namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
+    public bool OpenFindDialogAndFindFirst()
+    {
+        if (!TryPromptFindText(out var findText))
+        {
+            InvalidateVisual();
+            return false;
+        }
+
+        _findText = findText;
+        AddFindHistory(findText);
+        RebuildFindMatches();
+        var found = FindNextMatch(forward: true, fromCurrentMatch: false);
+        InvalidateVisual();
+        return found;
+    }
+
+    public bool FindNext() => FindNextMatch(forward: true, fromCurrentMatch: true);
+
+    public bool FindPrevious() => FindNextMatch(forward: false, fromCurrentMatch: true);
+
+    public void CancelFind()
+    {
+        _findText = string.Empty;
+        _findMatchCell = new GriddoCellAddress(-1, -1);
+        _findMatchedCells.Clear();
+        InvalidateVisual();
+    }
+
     private bool FindNextMatch(bool forward, bool fromCurrentMatch)
     {
         if (_findMatchedCells.Count == 0 || Rows.Count == 0 || Columns.Count == 0)

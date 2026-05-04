@@ -167,6 +167,7 @@ public sealed partial class Griddo
         _columnMoveStartedFromSelectedHeader = false;
         _pendingColumnHeaderSelectionOnMouseUp = false;
         _pendingColumnHeaderIndex = -1;
+        _pendingColumnHeaderPreserveSelection = false;
         _movingColumnIndex = -1;
         _columnMoveCueIndex = -1;
         if (!_isDraggingSelection
@@ -189,6 +190,7 @@ public sealed partial class Griddo
         _rowMoveCueIndex = -1;
         _pendingRowHeaderSelectionOnMouseUp = false;
         _pendingRowHeaderIndex = -1;
+        _pendingRowHeaderPreserveSelection = false;
         if (!_isDraggingSelection
             && !_isDraggingColumnHeaderSelection
             && !_isDraggingRowHeaderSelection
@@ -268,6 +270,13 @@ public sealed partial class Griddo
         }
 
         RemapHeaderFocusColumnAfterMove(fromIndex, toIndex);
+        var oldToNew = new int[Columns.Count];
+        for (var i = 0; i < oldToNew.Length; i++)
+        {
+            oldToNew[i] = RemapColumnIndex(i, fromIndex, toIndex);
+        }
+
+        RemapSortDescriptorsAfterColumnMove(oldToNew);
     }
 
     private void MoveSelectedColumns(int anchorColumn, int targetColumn)
@@ -294,6 +303,7 @@ public sealed partial class Griddo
             insertAfterTarget,
             index => Columns.Move(index.from, index.to));
         RemapSelectionAfterColumnMove(oldToNew);
+        RemapSortDescriptorsAfterColumnMove(oldToNew);
     }
 
     private void MoveSelectedRows(int anchorRow, int targetRow)

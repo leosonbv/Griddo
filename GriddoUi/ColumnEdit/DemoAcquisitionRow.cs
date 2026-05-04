@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
-namespace GriddoTest.ColumnEdit;
+namespace GriddoUi.ColumnEdit;
 
 /// <summary>Sample row type for the column chooser demo (metadata via data annotations).</summary>
 public sealed class DemoAcquisitionRow
