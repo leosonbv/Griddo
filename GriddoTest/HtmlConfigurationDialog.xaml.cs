@@ -44,14 +44,29 @@ public partial class HtmlConfigurationDialog : Window
             fontStyleName: seed.FontStyleName));
 
         var savedByIndex = seed.Segments.ToDictionary(s => s.SourceFieldIndex);
-        SegmentsGrid.Records.Clear();
+        var excluded = new HashSet<int>();
         for (var sourceFieldIndex = 0; sourceFieldIndex < allFields.Count; sourceFieldIndex++)
         {
             var field = allFields[sourceFieldIndex];
-            if (field is IHtmlFieldLayoutTarget)
+            if (field is IHtmlFieldLayoutTarget || field is IPlotFieldLayoutTarget)
             {
-                continue;
+                excluded.Add(sourceFieldIndex);
             }
+        }
+
+        var configuredOrder = seed.Segments
+            .Select(s => s.SourceFieldIndex)
+            .Where(i => i >= 0 && i < allFields.Count && !excluded.Contains(i))
+            .Distinct()
+            .ToList();
+        var remainingOrder = Enumerable.Range(0, allFields.Count)
+            .Where(i => !excluded.Contains(i) && !configuredOrder.Contains(i))
+            .ToList();
+        var orderedSourceIndices = configuredOrder.Concat(remainingOrder);
+        SegmentsGrid.Records.Clear();
+        foreach (var sourceFieldIndex in orderedSourceIndices)
+        {
+            var field = allFields[sourceFieldIndex];
 
             var sourceTitle = field is IGriddoFieldTitleView tv ? tv.AbbreviatedHeader : string.Empty;
             var saved = savedByIndex.TryGetValue(sourceFieldIndex, out var hit) ? hit : null;

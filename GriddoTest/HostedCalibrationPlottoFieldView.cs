@@ -9,6 +9,7 @@ using Plotto.Charting.Core;
 using Griddo;
 using Griddo.Fields;
 using Griddo.Editing;
+using GriddoModelView;
 
 namespace GriddoTest;
 
@@ -16,17 +17,20 @@ public sealed class HostedCalibrationPlottoFieldView : IGriddoHostedFieldView, I
 {
     private static bool _sharedEditorHooked;
     private readonly Func<object, int> _seedGetter;
+    private readonly Func<IReadOnlyList<IGriddoFieldView>>? _allFieldsAccessor;
 
     public HostedCalibrationPlottoFieldView(
         string header,
         double width,
         Func<object, int> seedGetter,
+        Func<IReadOnlyList<IGriddoFieldView>>? allFieldsAccessor = null,
         string sourceObjectName = "",
         string sourceMemberName = "")
     {
         Header = header;
         Width = width;
         _seedGetter = seedGetter;
+        _allFieldsAccessor = allFieldsAccessor;
         SourceObjectName = sourceObjectName;
         SourceMemberName = sourceMemberName;
         Editor = GriddoCellEditors.Text;
@@ -35,9 +39,14 @@ public sealed class HostedCalibrationPlottoFieldView : IGriddoHostedFieldView, I
 
     public string Header { get; set; }
     public string Description { get; set; } = string.Empty;
+    public string PlotTypeKey => "Calibration curve";
     public string TitleSelection { get; set; } = "Calibration curve";
+    public bool ShowTitle { get; set; } = true;
+    public List<PlotTitleSegmentConfiguration> TitleSegments { get; set; } = [];
     public bool ShowXAxis { get; set; } = true;
     public bool ShowYAxis { get; set; } = true;
+    public bool ShowXAxisTitle { get; set; } = true;
+    public bool ShowYAxisTitle { get; set; } = true;
     public string XAxis { get; set; } = string.Empty;
     public string YAxis { get; set; } = string.Empty;
     public string XAxisTitle { get; set; } = "Concentration";
@@ -47,6 +56,13 @@ public sealed class HostedCalibrationPlottoFieldView : IGriddoHostedFieldView, I
     public string YAxisUnit { get; set; } = string.Empty;
     public int XAxisLabelPrecision { get; set; } = 2;
     public int YAxisLabelPrecision { get; set; } = 2;
+    public string XAxisLabelFormat { get; set; } = string.Empty;
+    public string YAxisLabelFormat { get; set; } = string.Empty;
+    public double AxisFontSize { get; set; } = 10d;
+    public double TitleFontSize { get; set; } = 11d;
+    public bool ChromatogramShowPeaks { get; set; }
+    public bool CalibrationShowRegression { get; set; }
+    public bool SpectrumNormalizeIntensity { get; set; }
 
     public string SourceObjectName { get; }
     public string SourceMemberName { get; }
@@ -76,7 +92,7 @@ public sealed class HostedCalibrationPlottoFieldView : IGriddoHostedFieldView, I
             FitMode = CalibrationFitMode.Linear,
             CalibrationPoints = MainWindow.CreateCalibrationPoints(0)
         };
-        ApplyChartSettings(chart);
+        ApplyChartSettings(chart, null);
 
         return new Border
         {
@@ -120,7 +136,7 @@ public sealed class HostedCalibrationPlottoFieldView : IGriddoHostedFieldView, I
 
             sharedEditor.CalibrationPoints = calibrationPoints;
             sharedEditor.FitMode = fitMode;
-            ApplyChartSettings(sharedEditor);
+            ApplyChartSettings(sharedEditor, recordSource);
 
             sharedEditor.Tag = seed;
             sharedEditor.IsHitTestVisible = true;
@@ -139,7 +155,7 @@ public sealed class HostedCalibrationPlottoFieldView : IGriddoHostedFieldView, I
                 chart.CalibrationPoints = calibrationPoints;
                 chart.FitMode = fitMode;
                 chart.IsHitTestVisible = true;
-                ApplyChartSettings(chart);
+                ApplyChartSettings(chart, recordSource);
             }
 
             border.IsHitTestVisible = true;
@@ -170,42 +186,115 @@ public sealed class HostedCalibrationPlottoFieldView : IGriddoHostedFieldView, I
             FitMode = (CalibrationFitMode)(Math.Abs(seed) % 4),
             CalibrationPoints = MainWindow.CreateCalibrationPoints(seed)
         };
-        ApplyChartSettings(chart);
+        ApplyChartSettings(chart, null);
         return chart;
     }
 
-    private void ApplyChartSettings(SkiaChartBaseControl chart)
+    private void ApplyChartSettings(SkiaChartBaseControl chart, object? recordSource)
     {
-        chart.ChartTitle = BuildColoredHtmlTitle(TitleSelection);
-        chart.AxisLabelX = XAxisTitle;
-        chart.AxisLabelY = YAxisTitle;
+        chart.ChartTitle = BuildTitleHtml(recordSource);
+        chart.ShowChartTitle = ShowTitle;
+        chart.AxisLabelX = ShowXAxisTitle ? XAxisTitle : string.Empty;
+        chart.AxisLabelY = ShowYAxisTitle ? YAxisTitle : string.Empty;
         chart.ChartLabel = Label;
         chart.AxisUnitX = XAxisUnit;
         chart.AxisUnitY = YAxisUnit;
         chart.AxisLabelPrecisionX = Math.Clamp(XAxisLabelPrecision, 0, 10);
         chart.AxisLabelPrecisionY = Math.Clamp(YAxisLabelPrecision, 0, 10);
+        chart.AxisLabelFormatX = XAxisLabelFormat ?? string.Empty;
+        chart.AxisLabelFormatY = YAxisLabelFormat ?? string.Empty;
+        chart.AxisFontSize = AxisFontSize;
+        chart.TitleFontSize = TitleFontSize;
         chart.ShowXAxis = ShowXAxis;
         chart.ShowYAxis = ShowYAxis;
     }
 
-    private static string BuildColoredHtmlTitle(string text)
+    private string BuildTitleHtml(object? recordSource)
     {
-        var lines = (text ?? string.Empty)
-            .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (lines.Length <= 1)
+        if (recordSource is null || _allFieldsAccessor is null)
         {
-            return WebUtility.HtmlEncode(lines.Length == 0 ? string.Empty : lines[0]);
+            return string.Empty;
         }
 
-        string[] palette = ["#4E79A7", "#F28E2B", "#E15759", "#76B7B2", "#59A14F", "#EDC948"];
-        var parts = new List<string>(lines.Length);
-        for (var i = 0; i < lines.Length; i++)
+        var allFields = _allFieldsAccessor();
+        var segments = TitleSegments.Where(s => s.Enabled).ToList();
+        if (segments.Count == 0)
         {
-            var color = palette[i % palette.Length];
-            parts.Add($"<span style='color:{color}'>{WebUtility.HtmlEncode(lines[i])}</span>");
+            return string.Empty;
         }
 
-        return string.Join(" <span style='color:#8E8E8E'>|</span> ", parts);
+        var rows = new List<string>(segments.Count);
+        foreach (var segment in segments)
+        {
+            if (segment.SourceFieldIndex < 0 || segment.SourceFieldIndex >= allFields.Count)
+            {
+                continue;
+            }
+
+            var field = allFields[segment.SourceFieldIndex];
+            var label = string.IsNullOrWhiteSpace(segment.AbbreviatedHeaderOverride)
+                ? (field.Header ?? string.Empty)
+                : segment.AbbreviatedHeaderOverride;
+            var value = field.GetValue(recordSource);
+            var rendered = field.IsHtml
+                ? (value?.ToString() ?? string.Empty)
+                : BuildStyledText(WebUtility.HtmlEncode(field.FormatValue(value)), field);
+            if (!segment.WordWrap)
+            {
+                rendered = rendered.Replace(" ", "\u00A0", StringComparison.Ordinal);
+            }
+
+            var breakBefore = segment.AddLineBreakAfter ? " data-break-before='1'" : string.Empty;
+            rows.Add($"<tr{breakBefore}><td><b>{WebUtility.HtmlEncode(label)}</b></td><td>{rendered}</td></tr>");
+        }
+
+        if (rows.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        return "<table style='border-collapse:collapse;border:none'><tbody>" +
+               string.Join(string.Empty, rows) +
+               "</tbody></table>";
+    }
+
+    private static string BuildStyledText(string text, IGriddoFieldView field)
+    {
+        var styles = new List<string>();
+        if (field is IGriddoFieldColorView colorView)
+        {
+            if (!string.IsNullOrWhiteSpace(colorView.ForegroundColor))
+            {
+                styles.Add($"color:{WebUtility.HtmlEncode(colorView.ForegroundColor)}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(colorView.BackgroundColor))
+            {
+                styles.Add($"background-color:{WebUtility.HtmlEncode(colorView.BackgroundColor)}");
+            }
+        }
+
+        if (field is IGriddoFieldFontView fontView)
+        {
+            if (!string.IsNullOrWhiteSpace(fontView.FontFamilyName))
+            {
+                styles.Add($"font-family:{WebUtility.HtmlEncode(fontView.FontFamilyName)}");
+            }
+
+            if (fontView.FontSize > 0)
+            {
+                styles.Add($"font-size:{fontView.FontSize.ToString(System.Globalization.CultureInfo.InvariantCulture)}px");
+            }
+
+            if (!string.IsNullOrWhiteSpace(fontView.FontStyleName))
+            {
+                styles.Add($"font-style:{WebUtility.HtmlEncode(fontView.FontStyleName)}");
+            }
+        }
+
+        return styles.Count == 0
+            ? text
+            : $"<span style='{string.Join(";", styles)}'>{text}</span>";
     }
 
     private static void EnsureSharedEditorHook(CalibrationCurveControl editor)

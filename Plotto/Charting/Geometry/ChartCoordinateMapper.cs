@@ -47,7 +47,12 @@ public sealed class ChartCoordinateMapper
         double actualHeightDip,
         double pixelsPerDip,
         bool useSparklineLayout,
-        float plotUiScale)
+        float plotUiScale,
+        bool showXAxis,
+        bool showYAxis,
+        double axisFontSize,
+        bool hasYAxisTitle,
+        bool hasXAxisTitle)
     {
         if (actualWidthDip <= 0 || actualHeightDip <= 0)
         {
@@ -65,16 +70,25 @@ public sealed class ChartCoordinateMapper
         _hitTestSyncedActualHeight = actualHeightDip;
         var pw = (int)Math.Max(1, Math.Round(actualWidthDip * pixelsPerDip));
         var ph = (int)Math.Max(1, Math.Round(actualHeightDip * pixelsPerDip));
-        ApplySurfaceDimensions(pw, ph, useSparklineLayout, plotUiScale);
+        ApplySurfaceDimensions(pw, ph, useSparklineLayout, plotUiScale, showXAxis, showYAxis, axisFontSize, hasYAxisTitle, hasXAxisTitle);
     }
 
-    public void ApplySurfaceDimensions(int surfaceWidth, int surfaceHeight, bool useSparklineLayout, float plotUiScale)
+    public void ApplySurfaceDimensions(
+        int surfaceWidth,
+        int surfaceHeight,
+        bool useSparklineLayout,
+        float plotUiScale,
+        bool showXAxis,
+        bool showYAxis,
+        double axisFontSize,
+        bool hasYAxisTitle,
+        bool hasXAxisTitle)
     {
         surfaceWidth = Math.Max(1, surfaceWidth);
         surfaceHeight = Math.Max(1, surfaceHeight);
         _surfacePixelWidth = surfaceWidth;
         _surfacePixelHeight = surfaceHeight;
-        _plotRect = ChartPlotLayout.ComputePlotRect(surfaceWidth, surfaceHeight, plotUiScale, useSparklineLayout);
+        _plotRect = ChartPlotLayout.ComputePlotRect(surfaceWidth, surfaceHeight, plotUiScale, useSparklineLayout, showXAxis, showYAxis, axisFontSize, hasYAxisTitle, hasXAxisTitle);
     }
 
     public Point LogicalPointToSurface(Point logical, double actualWidthDip, double actualHeightDip)

@@ -68,7 +68,7 @@ public abstract partial class SkiaChartBaseControl : SKElement
         var s = PlotUiScale;
         _linePaint.StrokeWidth = 2f * s;
         AxisStrokePaint.StrokeWidth = Math.Max(0.5f, 1f * s);
-        AxisFont.Size = 10f * s;
+        AxisFont.Size = (float)Math.Max(6d, AxisFontSize) * s;
         _overlayStroke.StrokeWidth = Math.Max(0.5f, 1f * s);
         _zoomRubberStrokePaint.StrokeWidth = Math.Max(0.5f, 1f * s);
     }
@@ -229,6 +229,19 @@ public abstract partial class SkiaChartBaseControl : SKElement
             typeof(SkiaChartBaseControl),
             new FrameworkPropertyMetadata(string.Empty, FrameworkPropertyMetadataOptions.AffectsRender));
 
+    public bool ShowChartTitle
+    {
+        get => (bool)GetValue(ShowChartTitleProperty);
+        set => SetValue(ShowChartTitleProperty, value);
+    }
+
+    public static readonly DependencyProperty ShowChartTitleProperty =
+        DependencyProperty.Register(
+            nameof(ShowChartTitle),
+            typeof(bool),
+            typeof(SkiaChartBaseControl),
+            new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));
+
     public string AxisLabelX
     {
         get => (string)GetValue(AxisLabelXProperty);
@@ -320,6 +333,58 @@ public abstract partial class SkiaChartBaseControl : SKElement
             typeof(SkiaChartBaseControl),
             new FrameworkPropertyMetadata(2, FrameworkPropertyMetadataOptions.AffectsRender));
 
+    public string AxisLabelFormatX
+    {
+        get => (string)GetValue(AxisLabelFormatXProperty);
+        set => SetValue(AxisLabelFormatXProperty, value);
+    }
+
+    public static readonly DependencyProperty AxisLabelFormatXProperty =
+        DependencyProperty.Register(
+            nameof(AxisLabelFormatX),
+            typeof(string),
+            typeof(SkiaChartBaseControl),
+            new FrameworkPropertyMetadata(string.Empty, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public string AxisLabelFormatY
+    {
+        get => (string)GetValue(AxisLabelFormatYProperty);
+        set => SetValue(AxisLabelFormatYProperty, value);
+    }
+
+    public static readonly DependencyProperty AxisLabelFormatYProperty =
+        DependencyProperty.Register(
+            nameof(AxisLabelFormatY),
+            typeof(string),
+            typeof(SkiaChartBaseControl),
+            new FrameworkPropertyMetadata(string.Empty, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public double AxisFontSize
+    {
+        get => (double)GetValue(AxisFontSizeProperty);
+        set => SetValue(AxisFontSizeProperty, value);
+    }
+
+    public static readonly DependencyProperty AxisFontSizeProperty =
+        DependencyProperty.Register(
+            nameof(AxisFontSize),
+            typeof(double),
+            typeof(SkiaChartBaseControl),
+            new FrameworkPropertyMetadata(10d, FrameworkPropertyMetadataOptions.AffectsRender, OnUiScaleChanged));
+
+    public double TitleFontSize
+    {
+        get => (double)GetValue(TitleFontSizeProperty);
+        set => SetValue(TitleFontSizeProperty, value);
+    }
+
+    public static readonly DependencyProperty TitleFontSizeProperty =
+        DependencyProperty.Register(
+            nameof(TitleFontSize),
+            typeof(double),
+            typeof(SkiaChartBaseControl),
+            new FrameworkPropertyMetadata(11d, FrameworkPropertyMetadataOptions.AffectsRender));
+
     public bool ShowXAxis
     {
         get => (bool)GetValue(ShowXAxisProperty);
@@ -401,7 +466,12 @@ public abstract partial class SkiaChartBaseControl : SKElement
             ActualHeight,
             dpi.PixelsPerDip,
             UseSparklineLayout,
-            PlotUiScale);
+            PlotUiScale,
+            ShowXAxis,
+            ShowYAxis,
+            AxisFontSize,
+            ShowYAxis && !string.IsNullOrWhiteSpace(AxisLabelY),
+            ShowXAxis && !string.IsNullOrWhiteSpace(AxisLabelX));
     }
 
     private double SurfaceScaleX() => ActualWidth > 0 ? _coordinates.SurfacePixelWidth / ActualWidth : 1d;

@@ -109,10 +109,18 @@ public abstract partial class SkiaChartBaseControl
 
         var zs = PlotUiScale;
         var pad = ChartPlotLayout.CellPadding * zs;
-        var ax = ChartPlotLayout.AxisReserveX * zs;
-        var ay = ChartPlotLayout.AxisReserveY * zs;
+        var ax = ShowYAxis
+            ? ChartPlotLayout.ComputeYAxisReserveX(zs, AxisFontSize, !string.IsNullOrWhiteSpace(AxisLabelY))
+            : 0f;
+        var ay = ShowXAxis
+            ? ChartPlotLayout.ComputeXAxisReserveY(zs, AxisFontSize, !string.IsNullOrWhiteSpace(AxisLabelX))
+            : 0f;
         if (UseSparklineLayout)
         {
+            if (!ShowXAxis)
+            {
+                return false;
+            }
             var plotLeft = pad;
             var plotRight = w - pad;
             var bandTop = h - pad - ay;

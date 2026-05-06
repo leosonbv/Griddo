@@ -158,6 +158,7 @@ public partial class MainWindow : Window
                 var seed = selectedPlotTargets[0];
                 var dialog = new PlotConfigurationDialog(
                     seed,
+                    _allFields,
                     previewApply: result =>
                     {
                         foreach (var target in selectedPlotTargets)
@@ -865,6 +866,7 @@ public partial class MainWindow : Window
             header: ChromatogramFieldHeader,
             width: 220,
             plottoSeedGetter: record => GetAnalyticsSource(record).PlottoSeed,
+            allFieldsAccessor: () => _allFields,
             sourceObjectName: AnalyticsSource,
             sourceMemberName: nameof(AnalyticsDemoSource.PlottoSeed)));
 
@@ -872,6 +874,7 @@ public partial class MainWindow : Window
             header: CalibrationFieldHeader,
             width: 240,
             seedGetter: record => GetAnalyticsSource(record).PlottoSeed,
+            allFieldsAccessor: () => _allFields,
             sourceObjectName: AnalyticsSource,
             sourceMemberName: nameof(AnalyticsDemoSource.PlottoSeed)));
         if (_htmlField is not null && _htmlField.Segments.Count == 0)
@@ -1281,6 +1284,25 @@ public partial class MainWindow : Window
         string layoutKey)
     {
         var records = FieldMetadataBuilder.BuildRecordsFromGrid(grid, fieldRegistry);
+        var sourceIndexByField = fieldRegistry
+            .Select((field, index) => (field, index))
+            .ToDictionary(x => x.field, x => x.index);
+        var visibleSourceOrder = grid.Fields
+            .Where(sourceIndexByField.ContainsKey)
+            .Select(f => sourceIndexByField[f])
+            .ToList();
+        var hiddenSourceOrder = records
+            .Select(r => r.SourceFieldIndex)
+            .Where(i => !visibleSourceOrder.Contains(i))
+            .ToList();
+        var orderedSourceIndices = visibleSourceOrder.Concat(hiddenSourceOrder).ToList();
+        records = records
+            .OrderBy(r =>
+            {
+                var idx = orderedSourceIndices.IndexOf(r.SourceFieldIndex);
+                return idx < 0 ? int.MaxValue : idx;
+            })
+            .ToList();
         for (var sourceIndex = 0; sourceIndex < fieldRegistry.Count; sourceIndex++)
         {
             var registryField = fieldRegistry[sourceIndex];
@@ -1582,8 +1604,21 @@ public partial class MainWindow : Window
             }
 
             target.TitleSelection = plot.TitleSelection ?? string.Empty;
+            target.ShowTitle = plot.ShowTitle;
+            target.TitleSegments = plot.TitleSegments
+                .Select(s => new PlotTitleSegmentConfiguration
+                {
+                    SourceFieldIndex = s.SourceFieldIndex,
+                    Enabled = s.Enabled,
+                    AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
+                    AddLineBreakAfter = s.AddLineBreakAfter,
+                    WordWrap = s.WordWrap
+                })
+                .ToList();
             target.ShowXAxis = plot.ShowXAxis;
             target.ShowYAxis = plot.ShowYAxis;
+            target.ShowXAxisTitle = plot.ShowXAxisTitle;
+            target.ShowYAxisTitle = plot.ShowYAxisTitle;
             target.XAxis = plot.XAxis ?? string.Empty;
             target.YAxis = plot.YAxis ?? string.Empty;
             target.XAxisTitle = plot.XAxisTitle ?? string.Empty;
@@ -1593,6 +1628,13 @@ public partial class MainWindow : Window
             target.YAxisUnit = plot.YAxisUnit ?? string.Empty;
             target.XAxisLabelPrecision = Math.Clamp(plot.XAxisLabelPrecision, 0, 10);
             target.YAxisLabelPrecision = Math.Clamp(plot.YAxisLabelPrecision, 0, 10);
+            target.XAxisLabelFormat = plot.XAxisLabelFormat ?? string.Empty;
+            target.YAxisLabelFormat = plot.YAxisLabelFormat ?? string.Empty;
+            target.AxisFontSize = Math.Clamp(plot.AxisFontSize, 6d, 96d);
+            target.TitleFontSize = Math.Clamp(plot.TitleFontSize, 6d, 120d);
+            target.ChromatogramShowPeaks = plot.ChromatogramShowPeaks;
+            target.CalibrationShowRegression = plot.CalibrationShowRegression;
+            target.SpectrumNormalizeIntensity = plot.SpectrumNormalizeIntensity;
         }
         foreach (var html in layout.HtmlFields)
         {
@@ -1708,8 +1750,21 @@ public partial class MainWindow : Window
                     {
                         SourceFieldIndex = x.index,
                         TitleSelection = p.TitleSelection ?? string.Empty,
+                        ShowTitle = p.ShowTitle,
+                        TitleSegments = p.TitleSegments
+                            .Select(s => new PlotTitleSegmentConfiguration
+                            {
+                                SourceFieldIndex = s.SourceFieldIndex,
+                                Enabled = s.Enabled,
+                                AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
+                                AddLineBreakAfter = s.AddLineBreakAfter,
+                                WordWrap = s.WordWrap
+                            })
+                            .ToList(),
                         ShowXAxis = p.ShowXAxis,
                         ShowYAxis = p.ShowYAxis,
+                        ShowXAxisTitle = p.ShowXAxisTitle,
+                        ShowYAxisTitle = p.ShowYAxisTitle,
                         XAxis = p.XAxis ?? string.Empty,
                         YAxis = p.YAxis ?? string.Empty,
                         XAxisTitle = p.XAxisTitle ?? string.Empty,
@@ -1718,7 +1773,14 @@ public partial class MainWindow : Window
                         XAxisUnit = p.XAxisUnit ?? string.Empty,
                         YAxisUnit = p.YAxisUnit ?? string.Empty,
                         XAxisLabelPrecision = Math.Clamp(p.XAxisLabelPrecision, 0, 10),
-                        YAxisLabelPrecision = Math.Clamp(p.YAxisLabelPrecision, 0, 10)
+                        YAxisLabelPrecision = Math.Clamp(p.YAxisLabelPrecision, 0, 10),
+                        XAxisLabelFormat = p.XAxisLabelFormat ?? string.Empty,
+                        YAxisLabelFormat = p.YAxisLabelFormat ?? string.Empty,
+                        AxisFontSize = Math.Clamp(p.AxisFontSize, 6d, 96d),
+                        TitleFontSize = Math.Clamp(p.TitleFontSize, 6d, 120d),
+                        ChromatogramShowPeaks = p.ChromatogramShowPeaks,
+                        CalibrationShowRegression = p.CalibrationShowRegression,
+                        SpectrumNormalizeIntensity = p.SpectrumNormalizeIntensity
                     };
                 })
                 .ToList(),
@@ -2012,7 +2074,6 @@ public partial class MainWindow : Window
 
             var enabledSegments = Segments
                 .Where(s => s.Enabled)
-                .OrderBy(s => s.SourceFieldIndex)
                 .ToList();
             if (enabledSegments.Count == 0)
             {
@@ -2133,7 +2194,6 @@ public partial class MainWindow : Window
         {
             var enabledSegments = Segments
                 .Where(s => s.Enabled)
-                .OrderBy(s => s.SourceFieldIndex)
                 .ToList();
 
             var categorySegments = enabledSegments
@@ -2404,15 +2464,35 @@ public partial class MainWindow : Window
     private static void ApplyPlotLayout(IPlotFieldLayoutTarget target, PlotFieldDialogResult settings)
     {
         target.TitleSelection = settings.TitleSelection ?? string.Empty;
+        target.ShowTitle = settings.ShowTitle;
+        target.TitleSegments = settings.TitleSegments
+            .Select(s => new PlotTitleSegmentConfiguration
+            {
+                SourceFieldIndex = s.SourceFieldIndex,
+                Enabled = s.Enabled,
+                AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
+                AddLineBreakAfter = s.AddLineBreakAfter,
+                WordWrap = s.WordWrap
+            })
+            .ToList();
         target.Label = settings.Label ?? string.Empty;
         target.ShowXAxis = settings.ShowXAxis;
         target.ShowYAxis = settings.ShowYAxis;
+        target.ShowXAxisTitle = settings.ShowXAxisTitle;
+        target.ShowYAxisTitle = settings.ShowYAxisTitle;
         target.XAxisTitle = settings.XAxisTitle ?? string.Empty;
         target.YAxisTitle = settings.YAxisTitle ?? string.Empty;
         target.XAxisUnit = settings.XAxisUnit ?? string.Empty;
         target.YAxisUnit = settings.YAxisUnit ?? string.Empty;
         target.XAxisLabelPrecision = Math.Clamp(settings.XAxisLabelPrecision, 0, 10);
         target.YAxisLabelPrecision = Math.Clamp(settings.YAxisLabelPrecision, 0, 10);
+        target.XAxisLabelFormat = settings.XAxisLabelFormat ?? string.Empty;
+        target.YAxisLabelFormat = settings.YAxisLabelFormat ?? string.Empty;
+        target.AxisFontSize = Math.Clamp(settings.AxisFontSize, 6d, 96d);
+        target.TitleFontSize = Math.Clamp(settings.TitleFontSize, 6d, 120d);
+        target.ChromatogramShowPeaks = settings.ChromatogramShowPeaks;
+        target.CalibrationShowRegression = settings.CalibrationShowRegression;
+        target.SpectrumNormalizeIntensity = settings.SpectrumNormalizeIntensity;
     }
 
     private static void ApplyHtmlLayout(IHtmlFieldLayoutTarget target, HtmlFieldConfiguration settings)

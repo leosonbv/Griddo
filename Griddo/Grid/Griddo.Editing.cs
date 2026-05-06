@@ -203,6 +203,10 @@ public sealed partial class Griddo
         var options = optionsEditor is IGriddoContextualOptionsCellEditor contextualEditor
             ? contextualEditor.GetOptions(recordSource)
             : optionsEditor.Options;
+        if (options.Count == 0)
+        {
+            return;
+        }
         var menu = new ContextMenu
         {
             PlacementTarget = this,
