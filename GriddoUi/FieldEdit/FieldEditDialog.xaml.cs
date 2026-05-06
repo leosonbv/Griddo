@@ -112,7 +112,6 @@ public partial class FieldConfigurator : Window
         AddGeneralSetting(GeneralSettingKind.ShowSortingIndicators, GeneralSettingValueKind.Boolean, 4, "Interaction", "Interaction", "Sorting indicators", boolValue: options.ShowSortingIndicators);
         AddGeneralSetting(GeneralSettingKind.ShowHorizontalScrollBar, GeneralSettingValueKind.Boolean, 5, "Scrollbars", "Scrollbars", "Horizontal scrollbar", boolValue: options.ShowHorizontalScrollBar);
         AddGeneralSetting(GeneralSettingKind.ShowVerticalScrollBar, GeneralSettingValueKind.Boolean, 5, "Scrollbars", "Scrollbars", "Vertical scrollbar", boolValue: options.ShowVerticalScrollBar);
-        AddGeneralSetting(GeneralSettingKind.HtmlLayoutUseTable, GeneralSettingValueKind.Boolean, 6, "HTML", "HTML", "HTML layout as table", boolValue: options.HtmlLayoutUseTable);
         GeneralPropertyGrid.SetSortDescriptors(
         [
             new GriddoSortDescriptor(0, Ascending: true, Priority: 1),
@@ -246,6 +245,20 @@ public partial class FieldConfigurator : Window
                 return true;
             },
             GriddoCellEditors.FormatStringOptions));
+        AddField(new GriddoBoolFieldView(
+            "Nowrap",
+            74,
+            r => ((FieldEditRecord)r).NoWrap,
+            (r, v) =>
+            {
+                if (v is not bool b)
+                {
+                    return false;
+                }
+
+                ((FieldEditRecord)r).NoWrap = b;
+                return true;
+            }));
         AddField(new GriddoFieldView(
             "Sort#",
             58,
@@ -328,6 +341,7 @@ public partial class FieldConfigurator : Window
             FontFamilyName = record.FontFamilyName ?? string.Empty,
             FontSize = record.FontSize,
             FontStyleName = record.FontStyleName ?? string.Empty,
+            NoWrap = record.NoWrap,
             ForegroundColor = record.ForegroundColor ?? string.Empty,
             BackgroundColor = record.BackgroundColor ?? string.Empty
         };
@@ -523,8 +537,7 @@ public partial class FieldConfigurator : Window
             ShowHorizontalScrollBar = GeneralRecord(GeneralSettingKind.ShowHorizontalScrollBar)?.BoolValue ?? true,
             ShowVerticalScrollBar = GeneralRecord(GeneralSettingKind.ShowVerticalScrollBar)?.BoolValue ?? true,
             IsTransposed = GeneralRecord(GeneralSettingKind.TransposeLayout)?.BoolValue ?? false,
-            ImmediatePlottoEdit = GeneralRecord(GeneralSettingKind.ImmediatePlottoEdit)?.BoolValue ?? false,
-            HtmlLayoutUseTable = GeneralRecord(GeneralSettingKind.HtmlLayoutUseTable)?.BoolValue ?? true
+            ImmediatePlottoEdit = GeneralRecord(GeneralSettingKind.ImmediatePlottoEdit)?.BoolValue ?? false
         };
     }
 

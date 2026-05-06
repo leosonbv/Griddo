@@ -92,6 +92,10 @@ public static class FieldChooserGridApplier
                     fontView.FontSize = Math.Max(0, r.FontSize);
                     fontView.FontStyleName = r.FontStyleName?.Trim() ?? string.Empty;
                 }
+                if (c is IGriddoFieldWrapView wrapView)
+                {
+                    wrapView.NoWrap = r.NoWrap;
+                }
 
                 if (c is IGriddoFieldColorView colorView)
                 {

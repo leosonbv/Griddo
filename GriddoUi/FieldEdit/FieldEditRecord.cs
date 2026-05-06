@@ -27,6 +27,7 @@ public sealed class FieldEditRecord
     public string FontFamilyName { get; set; } = string.Empty;
     public double FontSize { get; set; }
     public string FontStyleName { get; set; } = string.Empty;
+    public bool NoWrap { get; set; }
     public string ForegroundColor { get; set; } = string.Empty;
     public string BackgroundColor { get; set; } = string.Empty;
     public bool IsNumericProperty { get; init; }
@@ -55,6 +56,7 @@ public sealed class FieldEditRecord
         FontFamilyName = FontFamilyName,
         FontSize = FontSize,
         FontStyleName = FontStyleName,
+        NoWrap = NoWrap,
         ForegroundColor = ForegroundColor,
         BackgroundColor = BackgroundColor,
         IsNumericProperty = IsNumericProperty,

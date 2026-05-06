@@ -14,8 +14,6 @@ public sealed class FieldChooserGeneralOptions
     public bool ShowVerticalScrollBar { get; set; } = true;
     public bool IsTransposed { get; set; }
     public bool ImmediatePlottoEdit { get; set; }
-    public bool HtmlLayoutUseTable { get; set; } = true;
-
     public FieldChooserGeneralOptions Clone() => new()
     {
         RecordThickness = RecordThickness,
@@ -29,7 +27,6 @@ public sealed class FieldChooserGeneralOptions
         ShowHorizontalScrollBar = ShowHorizontalScrollBar,
         ShowVerticalScrollBar = ShowVerticalScrollBar,
         IsTransposed = IsTransposed,
-        ImmediatePlottoEdit = ImmediatePlottoEdit,
-        HtmlLayoutUseTable = HtmlLayoutUseTable
+        ImmediatePlottoEdit = ImmediatePlottoEdit
     };
 }

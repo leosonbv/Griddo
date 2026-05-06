@@ -225,6 +225,7 @@ public sealed partial class Griddo
         var fieldFontSize = ResolveFieldFontSize(col, cellView);
         var foregroundBrush = ResolveFieldForegroundBrush(col, cellView);
         var underline = HasUnderlineStyle(col, cellView);
+        var noWrap = HasNoWrapStyle(col, cellView);
 
         if (Fields[col] is IGriddoCheckboxToggleFieldView toggleCol && toggleCol.IsCheckboxCell(recordData))
         {
@@ -259,7 +260,8 @@ public sealed partial class Griddo
                 Fields[col].IsHtml,
                 true,
                 Fields[col].ContentAlignment,
-                isGraphic ? VerticalAlignment.Top : VerticalAlignment.Center);
+                isGraphic ? VerticalAlignment.Top : VerticalAlignment.Center,
+                noWrap);
         }
     }
 
@@ -468,6 +470,17 @@ public sealed partial class Griddo
         }
 
         return NormalizeStyleText(fontView.FontStyleName).Contains("underline", StringComparison.Ordinal);
+    }
+
+    private bool HasNoWrapStyle(int col, GriddoCellPropertyView? cellView)
+    {
+        if (cellView is { NoWrap: true })
+        {
+            return true;
+        }
+
+        return col >= 0 && col < Fields.Count
+            && Fields[col] is IGriddoFieldWrapView { NoWrap: true };
     }
 
     private static string NormalizeStyleText(string style)

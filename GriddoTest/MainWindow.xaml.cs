@@ -1318,8 +1318,7 @@ public partial class MainWindow : Window
             ShowHorizontalScrollBar = grid.ShowHorizontalScrollBar,
             ShowVerticalScrollBar = grid.ShowVerticalScrollBar,
             IsTransposed = grid.IsTransposed,
-            ImmediatePlottoEdit = grid.HostedPlotDirectEditOnMouseDown,
-            HtmlLayoutUseTable = (_htmlField?.LayoutMode ?? HtmlLayoutMode.Table) == HtmlLayoutMode.Table
+            ImmediatePlottoEdit = grid.HostedPlotDirectEditOnMouseDown
         };
 
         // Persisted configurator state should not depend on which source grid opened the dialog.
@@ -1333,11 +1332,6 @@ public partial class MainWindow : Window
         dlg.ApplyToSourceGrid = (r, fc, fr, go) =>
         {
             FieldChooserGridApplier.Apply(grid, r, fc, fr, go, fieldRegistry);
-            var generalHtmlLayout = go.HtmlLayoutUseTable ? HtmlLayoutMode.Table : HtmlLayoutMode.SingleDiv;
-            foreach (var htmlTarget in _allFields.OfType<IHtmlFieldLayoutTarget>())
-            {
-                htmlTarget.LayoutMode = generalHtmlLayout;
-            }
             if (shouldPersistPropertyViews)
             {
                 PersistPropertyViews(r);
@@ -1413,8 +1407,7 @@ public partial class MainWindow : Window
             ShowHorizontalScrollBar = layout.ShowHorizontalScrollBar,
             ShowVerticalScrollBar = layout.ShowVerticalScrollBar,
             IsTransposed = layout.IsTransposed,
-            ImmediatePlottoEdit = layout.ImmediatePlottoEdit,
-            HtmlLayoutUseTable = layout.HtmlLayoutUseTable
+            ImmediatePlottoEdit = layout.ImmediatePlottoEdit
         };
 
         FieldChooserGridApplier.Apply(
@@ -1482,6 +1475,10 @@ public partial class MainWindow : Window
                 fontView.FontSize = Math.Max(0, definition.FontSize);
                 fontView.FontStyleName = definition.FontStyle ?? string.Empty;
             }
+            if (field is IGriddoFieldWrapView wrapView)
+            {
+                wrapView.NoWrap = definition.NoWrap;
+            }
 
             if (field is IGriddoFieldColorView colorView)
             {
@@ -1512,6 +1509,7 @@ public partial class MainWindow : Window
                 StringFormat = record.FormatString ?? string.Empty,
                 FontSize = Math.Max(0, record.FontSize),
                 FontStyle = record.FontStyleName ?? string.Empty,
+                NoWrap = record.NoWrap,
                 ForegroundColor = record.ForegroundColor ?? string.Empty,
                 BackgroundColor = record.BackgroundColor ?? string.Empty
             };
@@ -1557,6 +1555,7 @@ public partial class MainWindow : Window
             record.FormatString = definition.StringFormat ?? string.Empty;
             record.FontSize = Math.Max(0, definition.FontSize);
             record.FontStyleName = definition.FontStyle ?? string.Empty;
+            record.NoWrap = definition.NoWrap;
             record.ForegroundColor = definition.ForegroundColor ?? string.Empty;
             record.BackgroundColor = definition.BackgroundColor ?? string.Empty;
         }
@@ -1606,7 +1605,6 @@ public partial class MainWindow : Window
                 continue;
             }
 
-            target.LayoutMode = html.LayoutMode;
             target.FontFamilyName = html.FontFamilyName ?? string.Empty;
             target.FontSize = Math.Max(0, html.FontSize);
             target.FontStyleName = html.FontStyleName ?? string.Empty;
@@ -1621,15 +1619,6 @@ public partial class MainWindow : Window
                 })
                 .ToList();
         }
-        if (layout.HtmlFields.Count == 0)
-        {
-            var fallbackLayoutMode = layout.HtmlLayoutUseTable ? HtmlLayoutMode.Table : HtmlLayoutMode.SingleDiv;
-            foreach (var htmlTarget in _allFields.OfType<IHtmlFieldLayoutTarget>())
-            {
-                htmlTarget.LayoutMode = fallbackLayoutMode;
-            }
-        }
-
         var records = FieldMetadataBuilder.BuildRecordsFromGrid(grid, _allFields);
         ApplyPersistedRecordMetadata(records);
         var byIndex = layout.Fields.ToDictionary(c => c.SourceFieldIndex);
@@ -1661,8 +1650,7 @@ public partial class MainWindow : Window
             ShowHorizontalScrollBar = layout.ShowHorizontalScrollBar,
             ShowVerticalScrollBar = layout.ShowVerticalScrollBar,
             IsTransposed = layout.IsTransposed,
-            ImmediatePlottoEdit = layout.ImmediatePlottoEdit,
-            HtmlLayoutUseTable = layout.HtmlLayoutUseTable
+            ImmediatePlottoEdit = layout.ImmediatePlottoEdit
         };
         FieldChooserGridApplier.Apply(
             grid,
@@ -1699,7 +1687,6 @@ public partial class MainWindow : Window
             ShowVerticalScrollBar = options.ShowVerticalScrollBar,
             IsTransposed = options.IsTransposed,
             ImmediatePlottoEdit = options.ImmediatePlottoEdit,
-            HtmlLayoutUseTable = options.HtmlLayoutUseTable,
             Fields = records.Select(r => new FieldConfiguration
             {
                 SourceFieldIndex = r.SourceFieldIndex,
@@ -1742,7 +1729,6 @@ public partial class MainWindow : Window
                     return new HtmlFieldConfiguration
                     {
                         SourceFieldIndex = x.index,
-                        LayoutMode = h.LayoutMode,
                         FontFamilyName = h.FontFamilyName ?? string.Empty,
                         FontSize = Math.Max(0, h.FontSize),
                         FontStyleName = h.FontStyleName ?? string.Empty,
@@ -1801,8 +1787,7 @@ public partial class MainWindow : Window
             ShowHorizontalScrollBar = grid.ShowHorizontalScrollBar,
             ShowVerticalScrollBar = grid.ShowVerticalScrollBar,
             IsTransposed = grid.IsTransposed,
-            ImmediatePlottoEdit = grid.HostedPlotDirectEditOnMouseDown,
-            HtmlLayoutUseTable = (_htmlField?.LayoutMode ?? HtmlLayoutMode.Table) == HtmlLayoutMode.Table
+            ImmediatePlottoEdit = grid.HostedPlotDirectEditOnMouseDown
         };
         if (IsConfiguratorInternalLayoutKey(gridKey))
         {
@@ -1976,7 +1961,7 @@ public partial class MainWindow : Window
         return string.Empty;
     }
 
-    private sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescriptionView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldFontView, IHtmlFieldLayoutTarget
+    private sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescriptionView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldFontView, IGriddoFieldWrapView, IHtmlFieldLayoutTarget
     {
         private readonly Func<IReadOnlyList<IGriddoFieldView>> _allFieldsAccessor;
 
@@ -2002,13 +1987,13 @@ public partial class MainWindow : Window
         public double Width { get; }
         public string ForegroundColor { get; set; } = string.Empty;
         public string BackgroundColor { get; set; } = string.Empty;
+        public bool NoWrap { get; set; }
         public bool Fill { get; set; }
         public bool IsHtml => true;
         public TextAlignment ContentAlignment => TextAlignment.Left;
         public IGriddoCellEditor Editor => GriddoCellEditors.Text;
         public string SourceMemberName { get; }
         public string SourceObjectName { get; }
-        public HtmlLayoutMode LayoutMode { get; set; } = HtmlLayoutMode.Table;
         public double FontSize { get; set; }
         public string FontStyleName { get; set; } = string.Empty;
         public List<HtmlFieldSegmentConfiguration> Segments { get; set; } = [];
@@ -2030,31 +2015,13 @@ public partial class MainWindow : Window
                 return string.Empty;
             }
 
-            if (LayoutMode == HtmlLayoutMode.Table)
-            {
-                var rows = BuildTableRowsHtml(enabledSegments, allFields, recordSource);
-                if (rows.Count == 0)
-                {
-                    return string.Empty;
-                }
-
-                return $"<table>{string.Concat(rows)}</table>";
-            }
-
-            var divs = enabledSegments
-                .Select((segment, index) => BuildDivHtml(
-                    segment,
-                    allFields,
-                    recordSource,
-                    appendPairSeparator: !segment.AddLineBreakAfter && index < enabledSegments.Count - 1))
-                .Where(text => !string.IsNullOrWhiteSpace(text))
-                .ToList();
-            if (divs.Count == 0)
+            var rows = BuildTableRowsHtml(enabledSegments, allFields, recordSource);
+            if (rows.Count == 0)
             {
                 return string.Empty;
             }
 
-            return $"<div>{string.Concat(divs)}</div>";
+            return $"<table>{string.Concat(rows)}</table>";
         }
 
         public bool TrySetValue(object recordSource, object? value)
@@ -2078,10 +2045,16 @@ public partial class MainWindow : Window
             var renderedValue = sourceField.FormatValue(rawValue);
             const string labelNoWrapStyle = " style=\"white-space:nowrap;\"";
             var valueWrapStyle = segment.WordWrap ? string.Empty : " style=\"white-space:nowrap;\"";
+            var encodedLabel = WebUtility.HtmlEncode(label).Replace(" ", "\u00A0", StringComparison.Ordinal);
+            var encodedRenderedValue = WebUtility.HtmlEncode(renderedValue);
+            if (!segment.WordWrap)
+            {
+                encodedRenderedValue = encodedRenderedValue.Replace(" ", "\u00A0", StringComparison.Ordinal);
+            }
             var valueHtml = sourceField.IsHtml
                 ? BuildStyledHtml(rawValue?.ToString() ?? string.Empty, sourceField, forceVisibleTextColor: true)
-                : BuildStyledText(WebUtility.HtmlEncode(renderedValue), sourceField, forceVisibleTextColor: true);
-            return $"<td{labelNoWrapStyle}>{WebUtility.HtmlEncode(label)}</td><td{valueWrapStyle}>{valueHtml}</td>";
+                : BuildStyledText(encodedRenderedValue, sourceField, forceVisibleTextColor: true);
+            return $"<td{labelNoWrapStyle}><b>{encodedLabel}</b></td><td{valueWrapStyle}>{valueHtml}</td>";
         }
 
         private string BuildDivHtml(
@@ -2375,7 +2348,6 @@ public partial class MainWindow : Window
 
     private static void ApplyHtmlLayout(IHtmlFieldLayoutTarget target, HtmlFieldConfiguration settings)
     {
-        target.LayoutMode = settings.LayoutMode;
         target.FontFamilyName = settings.FontFamilyName ?? string.Empty;
         target.FontSize = Math.Max(0, settings.FontSize);
         target.FontStyleName = settings.FontStyleName ?? string.Empty;

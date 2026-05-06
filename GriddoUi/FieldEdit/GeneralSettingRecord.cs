@@ -12,7 +12,6 @@ public enum GeneralSettingKind
     ShowHorizontalScrollBar,
     ShowVerticalScrollBar,
     TransposeLayout,
-    HtmlLayoutUseTable,
     ShowSelectionColor,
     ShowRecordSelectionColor,
     ShowColSelectionColor,

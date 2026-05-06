@@ -103,6 +103,7 @@ public static class FieldMetadataBuilder
             FontFamilyName = col is IGriddoFieldFontView fontView ? fontView.FontFamilyName : string.Empty,
             FontSize = col is IGriddoFieldFontView fontView2 ? fontView2.FontSize : 0,
             FontStyleName = col is IGriddoFieldFontView fontView3 ? fontView3.FontStyleName : string.Empty,
+            NoWrap = col is IGriddoFieldWrapView wrapView && wrapView.NoWrap,
             ForegroundColor = col is IGriddoFieldColorView colorView ? colorView.ForegroundColor : string.Empty,
             BackgroundColor = col is IGriddoFieldColorView colorView2 ? colorView2.BackgroundColor : string.Empty,
             IsNumericProperty = IsNumericValueType(sampleRaw),

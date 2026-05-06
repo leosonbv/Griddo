@@ -20,7 +20,8 @@ public static class GriddoValuePainter
         bool treatAsHtml = false,
         bool autoDetectHtml = true,
         TextAlignment alignment = TextAlignment.Left,
-        VerticalAlignment verticalAlignment = VerticalAlignment.Top)
+        VerticalAlignment verticalAlignment = VerticalAlignment.Top,
+        bool noWrap = false)
     {
         if (value is IGriddoSizedImageValue sizedImageValue)
         {
@@ -49,11 +50,11 @@ public static class GriddoValuePainter
         {
             if (LooksLikeHtmlTable(text))
             {
-                DrawHtmlTable(drawingContext, text, bounds, typeface, fontSize, foregroundBrush, verticalAlignment);
+                DrawHtmlTable(drawingContext, text, bounds, typeface, fontSize, foregroundBrush, verticalAlignment, noWrap);
                 return;
             }
 
-            DrawHtmlText(drawingContext, text, bounds, typeface, fontSize, foregroundBrush, alignment, verticalAlignment);
+            DrawHtmlText(drawingContext, text, bounds, typeface, fontSize, foregroundBrush, alignment, verticalAlignment, noWrap);
             return;
         }
 
@@ -73,6 +74,7 @@ public static class GriddoValuePainter
         formatted.TextAlignment = alignment;
         formatted.MaxTextWidth = Math.Max(1, bounds.Width - 8);
         formatted.MaxTextHeight = Math.Max(1, bounds.Height - 4);
+        formatted.MaxLineCount = noWrap ? 1 : int.MaxValue;
         formatted.Trimming = TextTrimming.CharacterEllipsis;
         var topPadding = 2.0;
         var y = verticalAlignment == VerticalAlignment.Center
@@ -323,7 +325,8 @@ public static class GriddoValuePainter
         double fontSize,
         Brush foregroundBrush,
         TextAlignment alignment,
-        VerticalAlignment verticalAlignment = VerticalAlignment.Center)
+        VerticalAlignment verticalAlignment = VerticalAlignment.Center,
+        bool noWrap = false)
     {
         var formatted = BuildHtmlFormattedText(html, typeface, fontSize, foregroundBrush);
         if (formatted.Text.Length == 0)
@@ -346,6 +349,7 @@ public static class GriddoValuePainter
         const double padY = 2.0;
         // Fill cell width for wrapping; do not force full cell height—use natural height, then cap if needed.
         formatted.MaxTextWidth = Math.Max(1, bounds.Width - padX * 2);
+        formatted.MaxLineCount = noWrap ? 1 : int.MaxValue;
 
         var innerH = Math.Max(1, bounds.Height - padY * 2);
         if (formatted.Height > innerH)
@@ -649,7 +653,8 @@ public static class GriddoValuePainter
         Typeface typeface,
         double fontSize,
         Brush foregroundBrush,
-        VerticalAlignment verticalAlignment)
+        VerticalAlignment verticalAlignment,
+        bool noWrap = false)
     {
         var records = ParseHtmlTable(html);
         if (records.Count == 0)
@@ -697,7 +702,6 @@ public static class GriddoValuePainter
         }
 
         var naturalTableWidth = colWidths.Sum();
-        var tableWidth = naturalTableWidth;
         if (naturalTableWidth > availW && naturalTableWidth > 0)
         {
             var sx = availW / naturalTableWidth;
@@ -706,7 +710,6 @@ public static class GriddoValuePainter
                 colWidths[c] *= sx;
             }
 
-            tableWidth = availW;
         }
 
         var tableLeft = bounds.X + tableMargin;
@@ -730,6 +733,7 @@ public static class GriddoValuePainter
                         foregroundBrush,
                         1.0);
                 formatted.MaxTextWidth = Math.Max(1, colWidths[col] - cellPadX * 2);
+                formatted.MaxLineCount = noWrap ? 1 : int.MaxValue;
                 maxContentH = Math.Max(maxContentH, formatted.Height);
             }
 
@@ -762,10 +766,6 @@ public static class GriddoValuePainter
             }
         }
 
-        var lineW = Math.Max(0.5, fontSize / 12.0);
-        var innerBorderPen = new Pen(new SolidColorBrush(Color.FromRgb(176, 176, 176)), lineW);
-        var outerBorderPen = new Pen(new SolidColorBrush(Color.FromRgb(90, 90, 90)), Math.Max(1, lineW * 1.25));
-
         var currentY = yStart;
         for (var record = 0; record < records.Count; record++)
         {
@@ -794,6 +794,7 @@ public static class GriddoValuePainter
                     var formatted = BuildHtmlFormattedText(cellText, typeface, cellFont, foregroundBrush);
                     formatted.MaxTextWidth = Math.Max(1, innerRect.Width);
                     formatted.MaxTextHeight = Math.Max(1, innerRect.Height);
+                    formatted.MaxLineCount = noWrap ? 1 : int.MaxValue;
                     formatted.Trimming = TextTrimming.CharacterEllipsis;
                     drawingContext.DrawText(formatted, new Point(innerRect.X, innerRect.Y));
                 }
@@ -809,6 +810,7 @@ public static class GriddoValuePainter
                         1.0);
                     formatted.MaxTextWidth = Math.Max(1, innerRect.Width);
                     formatted.MaxTextHeight = Math.Max(1, innerRect.Height);
+                    formatted.MaxLineCount = noWrap ? 1 : int.MaxValue;
                     formatted.Trimming = TextTrimming.CharacterEllipsis;
                     drawingContext.DrawText(formatted, new Point(innerRect.X, innerRect.Y));
                 }
@@ -817,24 +819,6 @@ public static class GriddoValuePainter
 
             currentY += recordH;
         }
-
-        var tableRect = new Rect(tableLeft, yStart, tableWidth, currentY - yStart);
-
-        var xSep = tableLeft;
-        for (var col = 1; col < fieldCount; col++)
-        {
-            xSep += colWidths[col - 1];
-            drawingContext.DrawLine(innerBorderPen, new Point(xSep, tableRect.Top), new Point(xSep, tableRect.Bottom));
-        }
-
-        var lineY = yStart;
-        for (var record = 1; record < records.Count; record++)
-        {
-            lineY += recordHeights[record - 1];
-            drawingContext.DrawLine(innerBorderPen, new Point(tableLeft, lineY), new Point(tableLeft + tableWidth, lineY));
-        }
-
-        drawingContext.DrawRectangle(null, outerBorderPen, tableRect);
     }
 
     private static List<List<string>> ParseHtmlTable(string html)

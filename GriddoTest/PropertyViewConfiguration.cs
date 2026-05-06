@@ -28,6 +28,7 @@ namespace GriddoModelView
         // Visueel (bestaande)
         public double FontSize { get; set; }
         public string FontStyle { get; set; } = string.Empty;
+        public bool NoWrap { get; set; }
         public string ForegroundColor { get; set; } = string.Empty;
         public string BackgroundColor { get; set; } = string.Empty;
 

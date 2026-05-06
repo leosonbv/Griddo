@@ -8,4 +8,5 @@ public sealed class GriddoCellPropertyView
     public string FontStyleName { get; init; } = string.Empty;
     public string ForegroundColor { get; init; } = string.Empty;
     public string BackgroundColor { get; init; } = string.Empty;
+    public bool NoWrap { get; init; }
 }

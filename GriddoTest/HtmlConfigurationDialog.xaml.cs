@@ -35,7 +35,6 @@ public partial class HtmlConfigurationDialog : Window
     private void SeedFrom(IHtmlFieldLayoutTarget seed, IReadOnlyList<IGriddoFieldView> allFields)
     {
         GeneralGrid.Records.Clear();
-        GeneralGrid.Records.Add(new HtmlGeneralSettingRecord(HtmlGeneralSettingKind.LayoutAsTable, seed.LayoutMode != HtmlLayoutMode.SingleDiv));
         GeneralGrid.Records.Add(new HtmlGeneralSettingRecord(
             HtmlGeneralSettingKind.Font,
             false,
@@ -72,15 +71,11 @@ public partial class HtmlConfigurationDialog : Window
 
     private HtmlFieldConfiguration BuildResult()
     {
-        var layoutAsTable = GeneralGrid.Records
-            .OfType<HtmlGeneralSettingRecord>()
-            .FirstOrDefault(r => r.Setting == HtmlGeneralSettingKind.LayoutAsTable)?.BoolValue ?? true;
         var font = GeneralGrid.Records
             .OfType<HtmlGeneralSettingRecord>()
             .FirstOrDefault(r => r.Setting == HtmlGeneralSettingKind.Font);
         return new HtmlFieldConfiguration
         {
-            LayoutMode = layoutAsTable ? HtmlLayoutMode.Table : HtmlLayoutMode.SingleDiv,
             FontFamilyName = font?.FontFamilyName ?? string.Empty,
             FontSize = Math.Max(0, font?.FontSize ?? 0),
             FontStyleName = font?.FontStyleName ?? string.Empty,
@@ -235,21 +230,34 @@ public partial class HtmlConfigurationDialog : Window
             return null;
         }
 
-        return new GriddoCellPropertyView
+        var hasFontFamily = !string.IsNullOrWhiteSpace(record.FontFamilyName);
+        var hasFontSize = record.FontSize > 0;
+        var hasFontStyle = !string.IsNullOrWhiteSpace(record.FontStyleName);
+        if (!hasFontFamily && !hasFontSize && !hasFontStyle)
         {
-            FontFamilyName = record.FontFamilyName ?? string.Empty,
-            FontSize = Math.Max(0, record.FontSize),
-            FontStyleName = record.FontStyleName ?? string.Empty
-        };
+            return null;
+        }
+
+        return hasFontSize
+            ? new GriddoCellPropertyView
+            {
+                FontFamilyName = hasFontFamily ? record.FontFamilyName : string.Empty,
+                FontStyleName = hasFontStyle ? record.FontStyleName : string.Empty,
+                FontSize = record.FontSize
+            }
+            : new GriddoCellPropertyView
+            {
+                FontFamilyName = hasFontFamily ? record.FontFamilyName : string.Empty,
+                FontStyleName = hasFontStyle ? record.FontStyleName : string.Empty
+            };
     }
 
     private enum HtmlGeneralSettingKind
     {
-        LayoutAsTable,
         Font
     }
 
-    private sealed class HtmlGeneralValueField : IGriddoFieldView, IGriddoCheckboxToggleFieldView
+    private sealed class HtmlGeneralValueField : IGriddoFieldView
     {
         private readonly HtmlConfigurationDialog _owner;
         private readonly FontSummaryDialogCellEditor _editor = new();
@@ -266,9 +274,6 @@ public partial class HtmlConfigurationDialog : Window
         public TextAlignment ContentAlignment => TextAlignment.Left;
         public IGriddoCellEditor Editor => _editor;
 
-        public bool IsCheckboxCell(object recordSource)
-            => recordSource is HtmlGeneralSettingRecord { Setting: HtmlGeneralSettingKind.LayoutAsTable };
-
         public object? GetValue(object recordSource)
         {
             if (recordSource is not HtmlGeneralSettingRecord record)
@@ -276,26 +281,13 @@ public partial class HtmlConfigurationDialog : Window
                 return null;
             }
 
-            return record.Setting == HtmlGeneralSettingKind.LayoutAsTable
-                ? record.BoolValue
-                : record.GetValueDisplay();
+            return record.GetValueDisplay();
         }
 
         public bool TrySetValue(object recordSource, object? value)
         {
             if (recordSource is not HtmlGeneralSettingRecord record)
             {
-                return false;
-            }
-
-            if (record.Setting == HtmlGeneralSettingKind.LayoutAsTable)
-            {
-                if (value is bool b)
-                {
-                    record.BoolValue = b;
-                    return true;
-                }
-
                 return false;
             }
 
@@ -340,18 +332,12 @@ public partial class HtmlConfigurationDialog : Window
         public string FontStyleName { get; set; } = string.Empty;
         public string DisplayName => Setting switch
         {
-            HtmlGeneralSettingKind.LayoutAsTable => "Layout as table",
             HtmlGeneralSettingKind.Font => "Font",
             _ => Setting.ToString()
         };
 
         public string GetValueDisplay()
         {
-            if (Setting == HtmlGeneralSettingKind.LayoutAsTable)
-            {
-                return BoolValue.ToString();
-            }
-
             var family = string.IsNullOrWhiteSpace(FontFamilyName) ? "(default)" : FontFamilyName;
             var size = FontSize > 0 ? FontSize.ToString("0.#") : "default";
             var style = string.IsNullOrWhiteSpace(FontStyleName) ? "Regular" : FontStyleName;

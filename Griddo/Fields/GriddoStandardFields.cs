@@ -4,7 +4,7 @@ using Griddo.Editing;
 
 namespace Griddo.Fields;
 
-public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView
+public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoFieldWrapView
 {
     private readonly Func<object, object?> _valueGetter;
     private readonly Func<object, object?, bool> _valueSetter;
@@ -40,6 +40,7 @@ public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember
     public string FontStyleName { get; set; } = string.Empty;
     public string ForegroundColor { get; set; } = string.Empty;
     public string BackgroundColor { get; set; } = string.Empty;
+    public bool NoWrap { get; set; }
 
     /// <inheritdoc cref="IGriddoFieldSourceMember.SourceMemberName"/>
     /// <remarks>Empty when not specified at construction; field chooser may infer from record type.</remarks>
@@ -79,7 +80,7 @@ public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember
     }
 }
 
-public sealed class HtmlGriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView
+public sealed class HtmlGriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoFieldWrapView
 {
     private readonly Func<object, string> _valueGetter;
     private readonly Func<object, string, bool> _valueSetter;
@@ -115,6 +116,7 @@ public sealed class HtmlGriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMe
     public string FontStyleName { get; set; } = string.Empty;
     public string ForegroundColor { get; set; } = string.Empty;
     public string BackgroundColor { get; set; } = string.Empty;
+    public bool NoWrap { get; set; }
 
     public string SourceMemberName { get; }
     public string SourceObjectName { get; }
@@ -151,7 +153,7 @@ public sealed class HtmlGriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMe
 /// Boolean field: centered checkbox rendering, <see cref="GriddoCellEditors.Bool"/> for typed/F2 edits,
 /// Space / second click / double-click toggle in the grid.
 /// </summary>
-public sealed class GriddoBoolFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoCheckboxToggleFieldView
+public sealed class GriddoBoolFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoCheckboxToggleFieldView, IGriddoFieldWrapView
 {
     private readonly Func<object, object?> _valueGetter;
     private readonly Func<object, object?, bool> _valueSetter;
@@ -185,6 +187,7 @@ public sealed class GriddoBoolFieldView : IGriddoFieldView, IGriddoFieldSourceMe
     public string FontStyleName { get; set; } = string.Empty;
     public string ForegroundColor { get; set; } = string.Empty;
     public string BackgroundColor { get; set; } = string.Empty;
+    public bool NoWrap { get; set; }
 
     public string SourceMemberName { get; }
     public string SourceObjectName { get; }

@@ -22,8 +22,6 @@ namespace GriddoModelView
         public bool ShowVerticalScrollBar { get; set; }
         public bool IsTransposed { get; set; }
         public bool ImmediatePlottoEdit { get; set; }
-        public bool HtmlLayoutUseTable { get; set; } = true;
-
         public List<FieldConfiguration> Fields { get; set; } = new();
         public List<PlotFieldConfiguration> PlotFields { get; set; } = new();
         public List<HtmlFieldConfiguration> HtmlFields { get; set; } = new();
