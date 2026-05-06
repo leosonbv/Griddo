@@ -331,6 +331,11 @@ public static class GriddoValuePainter
             return;
         }
 
+        if (TryParseBackgroundColorFromHtml(html, out var backgroundBrush))
+        {
+            drawingContext.DrawRectangle(backgroundBrush, null, bounds);
+        }
+
         formatted.TextAlignment = alignment;
         if (bounds.Width <= 0 || bounds.Height <= 0)
         {
@@ -675,14 +680,16 @@ public static class GriddoValuePainter
             for (var record = 0; record < records.Count; record++)
             {
                 var cellText = col < records[record].Count ? records[record][col] : string.Empty;
-                var ft = new FormattedText(
-                    cellText,
-                    CultureInfo.CurrentCulture,
-                    FlowDirection.LeftToRight,
-                    typeface,
-                    cellFont,
-                    foregroundBrush,
-                    1.0);
+                var ft = LooksLikeHtml(cellText)
+                    ? BuildHtmlFormattedText(cellText, typeface, cellFont, foregroundBrush)
+                    : new FormattedText(
+                        cellText,
+                        CultureInfo.CurrentCulture,
+                        FlowDirection.LeftToRight,
+                        typeface,
+                        cellFont,
+                        foregroundBrush,
+                        1.0);
                 maxIntrinsic = Math.Max(maxIntrinsic, ft.WidthIncludingTrailingWhitespace);
             }
 
@@ -712,14 +719,16 @@ public static class GriddoValuePainter
             for (var col = 0; col < fieldCount; col++)
             {
                 var cellText = col < records[record].Count ? records[record][col] : string.Empty;
-                var formatted = new FormattedText(
-                    cellText,
-                    CultureInfo.CurrentCulture,
-                    FlowDirection.LeftToRight,
-                    typeface,
-                    cellFont,
-                    foregroundBrush,
-                    1.0);
+                var formatted = LooksLikeHtml(cellText)
+                    ? BuildHtmlFormattedText(cellText, typeface, cellFont, foregroundBrush)
+                    : new FormattedText(
+                        cellText,
+                        CultureInfo.CurrentCulture,
+                        FlowDirection.LeftToRight,
+                        typeface,
+                        cellFont,
+                        foregroundBrush,
+                        1.0);
                 formatted.MaxTextWidth = Math.Max(1, colWidths[col] - cellPadX * 2);
                 maxContentH = Math.Max(maxContentH, formatted.Height);
             }
@@ -769,19 +778,40 @@ public static class GriddoValuePainter
                 var cellRect = new Rect(cellX, currentY, cw, recordH);
 
                 var cellText = col < records[record].Count ? records[record][col] : string.Empty;
-                var formatted = new FormattedText(
-                    cellText,
-                    CultureInfo.CurrentCulture,
-                    FlowDirection.LeftToRight,
-                    typeface,
-                    cellFont,
-                    foregroundBrush,
-                    1.0);
+                var innerRect = new Rect(
+                    cellRect.X + cellPadX,
+                    cellRect.Y + cellPadY,
+                    Math.Max(1, cw - cellPadX * 2),
+                    Math.Max(1, maxCellTextH));
 
-                formatted.MaxTextWidth = Math.Max(1, cw - cellPadX * 2);
-                formatted.MaxTextHeight = maxCellTextH;
-                formatted.Trimming = TextTrimming.CharacterEllipsis;
-                drawingContext.DrawText(formatted, new Point(cellRect.X + cellPadX, cellRect.Y + cellPadY));
+                if (TryParseBackgroundColorFromHtml(cellText, out var backgroundBrush))
+                {
+                    drawingContext.DrawRectangle(backgroundBrush, null, innerRect);
+                }
+
+                if (LooksLikeHtml(cellText))
+                {
+                    var formatted = BuildHtmlFormattedText(cellText, typeface, cellFont, foregroundBrush);
+                    formatted.MaxTextWidth = Math.Max(1, innerRect.Width);
+                    formatted.MaxTextHeight = Math.Max(1, innerRect.Height);
+                    formatted.Trimming = TextTrimming.CharacterEllipsis;
+                    drawingContext.DrawText(formatted, new Point(innerRect.X, innerRect.Y));
+                }
+                else
+                {
+                    var formatted = new FormattedText(
+                        cellText,
+                        CultureInfo.CurrentCulture,
+                        FlowDirection.LeftToRight,
+                        typeface,
+                        cellFont,
+                        foregroundBrush,
+                        1.0);
+                    formatted.MaxTextWidth = Math.Max(1, innerRect.Width);
+                    formatted.MaxTextHeight = Math.Max(1, innerRect.Height);
+                    formatted.Trimming = TextTrimming.CharacterEllipsis;
+                    drawingContext.DrawText(formatted, new Point(innerRect.X, innerRect.Y));
+                }
                 cellX += cw;
             }
 
@@ -818,8 +848,7 @@ public static class GriddoValuePainter
             while (TryFindTagBlock(recordInner, "td", cellIndex, out var _, out var cellInner, out var cellEnd)
                 || TryFindTagBlock(recordInner, "th", cellIndex, out var _, out cellInner, out cellEnd))
             {
-                var plain = StripTags(cellInner);
-                cells.Add(DecodeHtmlEntities(plain));
+                cells.Add(cellInner.Trim());
                 cellIndex = cellEnd;
             }
 
@@ -865,6 +894,45 @@ public static class GriddoValuePainter
         inner = source[(openEnd + 1)..closeStart];
         endIndex = closeStart + close.Length;
         return true;
+    }
+
+    private static bool TryParseBackgroundColorFromHtml(string html, out Brush brush)
+    {
+        brush = Brushes.Transparent;
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            return false;
+        }
+
+        var marker = "background-color:";
+        var idx = html.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (idx < 0)
+        {
+            return false;
+        }
+
+        var start = idx + marker.Length;
+        var end = html.IndexOfAny([';', '"', '\''], start);
+        var token = (end > start ? html[start..end] : html[start..]).Trim();
+        if (token.Length == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            if (ColorConverter.ConvertFromString(token) is Color color)
+            {
+                brush = new SolidColorBrush(color);
+                return true;
+            }
+        }
+        catch
+        {
+            return false;
+        }
+
+        return false;
     }
 
     private enum ListKind

@@ -14,6 +14,7 @@ public sealed class FieldChooserGeneralOptions
     public bool ShowVerticalScrollBar { get; set; } = true;
     public bool IsTransposed { get; set; }
     public bool ImmediatePlottoEdit { get; set; }
+    public bool HtmlLayoutUseTable { get; set; } = true;
 
     public FieldChooserGeneralOptions Clone() => new()
     {
@@ -28,6 +29,7 @@ public sealed class FieldChooserGeneralOptions
         ShowHorizontalScrollBar = ShowHorizontalScrollBar,
         ShowVerticalScrollBar = ShowVerticalScrollBar,
         IsTransposed = IsTransposed,
-        ImmediatePlottoEdit = ImmediatePlottoEdit
+        ImmediatePlottoEdit = ImmediatePlottoEdit,
+        HtmlLayoutUseTable = HtmlLayoutUseTable
     };
 }

@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.IO;
+using System.Net;
 using Griddo;
 using Griddo.Fields;
 using Griddo.Editing;
@@ -25,6 +26,7 @@ public partial class MainWindow : Window
     private const string PrimarySource = "Primary";
     private const string AnalyticsSource = "Analytics";
     private readonly List<IGriddoFieldView> _allFields = [];
+    private ComposedHtmlFieldView? _htmlField;
     private readonly PropertyViewStore _viewStore = new(
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -97,6 +99,7 @@ public partial class MainWindow : Window
 
         var targetFields = indices.Select(i => targetGrid.Fields[i]).ToList();
         var selectedPlotTargets = targetFields.OfType<IPlotFieldLayoutTarget>().ToList();
+        var selectedHtmlTargets = targetFields.OfType<IHtmlFieldLayoutTarget>().ToList();
         var menu = new ContextMenu
         {
             PlacementTarget = targetGrid,
@@ -181,6 +184,41 @@ public partial class MainWindow : Window
                 PersistLiveLayout();
             };
             menu.Items.Add(plotSettingsItem);
+        }
+        if (selectedHtmlTargets.Count > 0)
+        {
+            var htmlSettingsItem = new MenuItem { Header = "HTML field settings..." };
+            htmlSettingsItem.Click += (_, _) =>
+            {
+                var seed = selectedHtmlTargets[0];
+                var dialog = new HtmlConfigurationDialog(
+                    seed,
+                    _allFields,
+                    previewApply: result =>
+                    {
+                        foreach (var target in selectedHtmlTargets)
+                        {
+                            ApplyHtmlLayout(target, result);
+                        }
+
+                        targetGrid.InvalidateVisual();
+                        PersistLiveLayout();
+                    })
+                { Owner = this };
+                if (dialog.ShowDialog() != true || dialog.Result is null)
+                {
+                    return;
+                }
+
+                foreach (var target in selectedHtmlTargets)
+                {
+                    ApplyHtmlLayout(target, dialog.Result);
+                }
+
+                targetGrid.InvalidateVisual();
+                PersistLiveLayout();
+            };
+            menu.Items.Add(htmlSettingsItem);
         }
         menu.Items.Add(new Separator());
 
@@ -805,17 +843,13 @@ public partial class MainWindow : Window
             sourceMemberName: nameof(PrimaryDemoSource.Active),
             sourceObjectName: PrimarySource));
 
-        RegisterField(new HtmlGriddoFieldView(
+        _htmlField = new ComposedHtmlFieldView(
             header: "Html",
             width: 260,
-            valueGetter: record => GetPrimarySource(record).HtmlSnippet,
-            valueSetter: (record, value) =>
-            {
-                GetPrimarySource(record).HtmlSnippet = value;
-                return true;
-            },
+            sourceObjectName: PrimarySource,
             sourceMemberName: nameof(PrimaryDemoSource.HtmlSnippet),
-            sourceObjectName: PrimarySource));
+            allFieldsAccessor: () => _allFields);
+        RegisterField(_htmlField);
 
         RegisterField(new GriddoFieldView(
             header: "Graphic",
@@ -839,6 +873,21 @@ public partial class MainWindow : Window
             seedGetter: record => GetAnalyticsSource(record).PlottoSeed,
             sourceObjectName: AnalyticsSource,
             sourceMemberName: nameof(AnalyticsDemoSource.PlottoSeed)));
+        if (_htmlField is not null && _htmlField.Segments.Count == 0)
+        {
+            _htmlField.Segments = _allFields
+                .Select((field, index) => (field, index))
+                .Where(x => x.index != _htmlField.SourceFieldIndex && x.field is not IHtmlFieldLayoutTarget)
+                .Select(x => new HtmlFieldSegmentConfiguration
+                {
+                    SourceFieldIndex = x.index,
+                    Enabled = x.index <= 2,
+                    AbbreviatedHeaderOverride = string.Empty,
+                    AddLineBreakAfter = true,
+                    WordWrap = true
+                })
+                .ToList();
+        }
 
         var cellEditItem = new MenuItem
         {
@@ -983,6 +1032,10 @@ public partial class MainWindow : Window
 
     private void RegisterField(IGriddoFieldView field)
     {
+        if (field is ComposedHtmlFieldView htmlField)
+        {
+            htmlField.SourceFieldIndex = _allFields.Count;
+        }
         _allFields.Add(field);
         DemoGrid.Fields.Add(field);
     }
@@ -1265,7 +1318,8 @@ public partial class MainWindow : Window
             ShowHorizontalScrollBar = grid.ShowHorizontalScrollBar,
             ShowVerticalScrollBar = grid.ShowVerticalScrollBar,
             IsTransposed = grid.IsTransposed,
-            ImmediatePlottoEdit = grid.HostedPlotDirectEditOnMouseDown
+            ImmediatePlottoEdit = grid.HostedPlotDirectEditOnMouseDown,
+            HtmlLayoutUseTable = (_htmlField?.LayoutMode ?? HtmlLayoutMode.Table) == HtmlLayoutMode.Table
         };
 
         // Persisted configurator state should not depend on which source grid opened the dialog.
@@ -1279,6 +1333,11 @@ public partial class MainWindow : Window
         dlg.ApplyToSourceGrid = (r, fc, fr, go) =>
         {
             FieldChooserGridApplier.Apply(grid, r, fc, fr, go, fieldRegistry);
+            var generalHtmlLayout = go.HtmlLayoutUseTable ? HtmlLayoutMode.Table : HtmlLayoutMode.SingleDiv;
+            foreach (var htmlTarget in _allFields.OfType<IHtmlFieldLayoutTarget>())
+            {
+                htmlTarget.LayoutMode = generalHtmlLayout;
+            }
             if (shouldPersistPropertyViews)
             {
                 PersistPropertyViews(r);
@@ -1354,7 +1413,8 @@ public partial class MainWindow : Window
             ShowHorizontalScrollBar = layout.ShowHorizontalScrollBar,
             ShowVerticalScrollBar = layout.ShowVerticalScrollBar,
             IsTransposed = layout.IsTransposed,
-            ImmediatePlottoEdit = layout.ImmediatePlottoEdit
+            ImmediatePlottoEdit = layout.ImmediatePlottoEdit,
+            HtmlLayoutUseTable = layout.HtmlLayoutUseTable
         };
 
         FieldChooserGridApplier.Apply(
@@ -1534,6 +1594,41 @@ public partial class MainWindow : Window
             target.XAxisLabelPrecision = Math.Clamp(plot.XAxisLabelPrecision, 0, 10);
             target.YAxisLabelPrecision = Math.Clamp(plot.YAxisLabelPrecision, 0, 10);
         }
+        foreach (var html in layout.HtmlFields)
+        {
+            if (html.SourceFieldIndex < 0 || html.SourceFieldIndex >= _allFields.Count)
+            {
+                continue;
+            }
+
+            if (_allFields[html.SourceFieldIndex] is not IHtmlFieldLayoutTarget target)
+            {
+                continue;
+            }
+
+            target.LayoutMode = html.LayoutMode;
+            target.FontFamilyName = html.FontFamilyName ?? string.Empty;
+            target.FontSize = Math.Max(0, html.FontSize);
+            target.FontStyleName = html.FontStyleName ?? string.Empty;
+            target.Segments = html.Segments
+                .Select(s => new HtmlFieldSegmentConfiguration
+                {
+                    SourceFieldIndex = s.SourceFieldIndex,
+                    Enabled = s.Enabled,
+                    AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
+                    AddLineBreakAfter = s.AddLineBreakAfter,
+                    WordWrap = s.WordWrap
+                })
+                .ToList();
+        }
+        if (layout.HtmlFields.Count == 0)
+        {
+            var fallbackLayoutMode = layout.HtmlLayoutUseTable ? HtmlLayoutMode.Table : HtmlLayoutMode.SingleDiv;
+            foreach (var htmlTarget in _allFields.OfType<IHtmlFieldLayoutTarget>())
+            {
+                htmlTarget.LayoutMode = fallbackLayoutMode;
+            }
+        }
 
         var records = FieldMetadataBuilder.BuildRecordsFromGrid(grid, _allFields);
         ApplyPersistedRecordMetadata(records);
@@ -1566,7 +1661,8 @@ public partial class MainWindow : Window
             ShowHorizontalScrollBar = layout.ShowHorizontalScrollBar,
             ShowVerticalScrollBar = layout.ShowVerticalScrollBar,
             IsTransposed = layout.IsTransposed,
-            ImmediatePlottoEdit = layout.ImmediatePlottoEdit
+            ImmediatePlottoEdit = layout.ImmediatePlottoEdit,
+            HtmlLayoutUseTable = layout.HtmlLayoutUseTable
         };
         FieldChooserGridApplier.Apply(
             grid,
@@ -1603,6 +1699,7 @@ public partial class MainWindow : Window
             ShowVerticalScrollBar = options.ShowVerticalScrollBar,
             IsTransposed = options.IsTransposed,
             ImmediatePlottoEdit = options.ImmediatePlottoEdit,
+            HtmlLayoutUseTable = options.HtmlLayoutUseTable,
             Fields = records.Select(r => new FieldConfiguration
             {
                 SourceFieldIndex = r.SourceFieldIndex,
@@ -1633,6 +1730,32 @@ public partial class MainWindow : Window
                         YAxisUnit = p.YAxisUnit ?? string.Empty,
                         XAxisLabelPrecision = Math.Clamp(p.XAxisLabelPrecision, 0, 10),
                         YAxisLabelPrecision = Math.Clamp(p.YAxisLabelPrecision, 0, 10)
+                    };
+                })
+                .ToList(),
+            HtmlFields = _allFields
+                .Select((field, index) => (field, index))
+                .Where(static x => x.field is IHtmlFieldLayoutTarget)
+                .Select(x =>
+                {
+                    var h = (IHtmlFieldLayoutTarget)x.field;
+                    return new HtmlFieldConfiguration
+                    {
+                        SourceFieldIndex = x.index,
+                        LayoutMode = h.LayoutMode,
+                        FontFamilyName = h.FontFamilyName ?? string.Empty,
+                        FontSize = Math.Max(0, h.FontSize),
+                        FontStyleName = h.FontStyleName ?? string.Empty,
+                        Segments = h.Segments
+                            .Select(s => new HtmlFieldSegmentConfiguration
+                            {
+                                SourceFieldIndex = s.SourceFieldIndex,
+                                Enabled = s.Enabled,
+                                AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
+                                AddLineBreakAfter = s.AddLineBreakAfter,
+                                WordWrap = s.WordWrap
+                            })
+                            .ToList()
                     };
                 })
                 .ToList()
@@ -1678,7 +1801,8 @@ public partial class MainWindow : Window
             ShowHorizontalScrollBar = grid.ShowHorizontalScrollBar,
             ShowVerticalScrollBar = grid.ShowVerticalScrollBar,
             IsTransposed = grid.IsTransposed,
-            ImmediatePlottoEdit = grid.HostedPlotDirectEditOnMouseDown
+            ImmediatePlottoEdit = grid.HostedPlotDirectEditOnMouseDown,
+            HtmlLayoutUseTable = (_htmlField?.LayoutMode ?? HtmlLayoutMode.Table) == HtmlLayoutMode.Table
         };
         if (IsConfiguratorInternalLayoutKey(gridKey))
         {
@@ -1852,7 +1976,296 @@ public partial class MainWindow : Window
         return string.Empty;
     }
 
-    private sealed class HierarchicalMergeTextFieldView : IGriddoFieldView, IGriddoFieldDescriptionView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoRecordMergeBandView, IGriddoFieldSortValueView
+    private sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescriptionView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldFontView, IHtmlFieldLayoutTarget
+    {
+        private readonly Func<IReadOnlyList<IGriddoFieldView>> _allFieldsAccessor;
+
+        public ComposedHtmlFieldView(
+            string header,
+            double width,
+            string sourceObjectName,
+            string sourceMemberName,
+            Func<IReadOnlyList<IGriddoFieldView>> allFieldsAccessor)
+        {
+            Header = header;
+            Width = width;
+            SourceObjectName = sourceObjectName;
+            SourceMemberName = sourceMemberName;
+            _allFieldsAccessor = allFieldsAccessor;
+        }
+
+        public int SourceFieldIndex { get; set; } = -1;
+        public string Header { get; set; }
+        public string AbbreviatedHeader { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string FontFamilyName { get; set; } = string.Empty;
+        public double Width { get; }
+        public string ForegroundColor { get; set; } = string.Empty;
+        public string BackgroundColor { get; set; } = string.Empty;
+        public bool Fill { get; set; }
+        public bool IsHtml => true;
+        public TextAlignment ContentAlignment => TextAlignment.Left;
+        public IGriddoCellEditor Editor => GriddoCellEditors.Text;
+        public string SourceMemberName { get; }
+        public string SourceObjectName { get; }
+        public HtmlLayoutMode LayoutMode { get; set; } = HtmlLayoutMode.Table;
+        public double FontSize { get; set; }
+        public string FontStyleName { get; set; } = string.Empty;
+        public List<HtmlFieldSegmentConfiguration> Segments { get; set; } = [];
+
+        public object? GetValue(object recordSource)
+        {
+            var allFields = _allFieldsAccessor();
+            if (allFields.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            var enabledSegments = Segments
+                .Where(s => s.Enabled)
+                .OrderBy(s => s.SourceFieldIndex)
+                .ToList();
+            if (enabledSegments.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            if (LayoutMode == HtmlLayoutMode.Table)
+            {
+                var rows = BuildTableRowsHtml(enabledSegments, allFields, recordSource);
+                if (rows.Count == 0)
+                {
+                    return string.Empty;
+                }
+
+                return $"<table>{string.Concat(rows)}</table>";
+            }
+
+            var divs = enabledSegments
+                .Select((segment, index) => BuildDivHtml(
+                    segment,
+                    allFields,
+                    recordSource,
+                    appendPairSeparator: !segment.AddLineBreakAfter && index < enabledSegments.Count - 1))
+                .Where(text => !string.IsNullOrWhiteSpace(text))
+                .ToList();
+            if (divs.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            return $"<div>{string.Concat(divs)}</div>";
+        }
+
+        public bool TrySetValue(object recordSource, object? value)
+        {
+            _ = recordSource;
+            _ = value;
+            return false;
+        }
+
+        public string FormatValue(object? value) => value?.ToString() ?? string.Empty;
+
+        private string BuildRowHtml(HtmlFieldSegmentConfiguration segment, IReadOnlyList<IGriddoFieldView> allFields, object recordSource)
+        {
+            if (!TryResolveField(segment.SourceFieldIndex, allFields, out var sourceField))
+            {
+                return string.Empty;
+            }
+
+            var label = ResolveLabel(sourceField, segment.AbbreviatedHeaderOverride);
+            var rawValue = sourceField.GetValue(recordSource);
+            var renderedValue = sourceField.FormatValue(rawValue);
+            const string labelNoWrapStyle = " style=\"white-space:nowrap;\"";
+            var valueWrapStyle = segment.WordWrap ? string.Empty : " style=\"white-space:nowrap;\"";
+            var valueHtml = sourceField.IsHtml
+                ? BuildStyledHtml(rawValue?.ToString() ?? string.Empty, sourceField, forceVisibleTextColor: true)
+                : BuildStyledText(WebUtility.HtmlEncode(renderedValue), sourceField, forceVisibleTextColor: true);
+            return $"<td{labelNoWrapStyle}>{WebUtility.HtmlEncode(label)}</td><td{valueWrapStyle}>{valueHtml}</td>";
+        }
+
+        private string BuildDivHtml(
+            HtmlFieldSegmentConfiguration segment,
+            IReadOnlyList<IGriddoFieldView> allFields,
+            object recordSource,
+            bool appendPairSeparator)
+        {
+            if (!TryResolveField(segment.SourceFieldIndex, allFields, out var sourceField))
+            {
+                return string.Empty;
+            }
+
+            var label = ResolveLabel(sourceField, segment.AbbreviatedHeaderOverride);
+            var renderedValue = sourceField.FormatValue(sourceField.GetValue(recordSource));
+            var encodedLabel = WebUtility.HtmlEncode(label);
+            var encodedValue = WebUtility.HtmlEncode(renderedValue);
+            var breakPrefix = segment.AddLineBreakAfter ? "<br/>" : string.Empty;
+            var pairSeparator = appendPairSeparator ? " \u00B7 " : string.Empty;
+            const string labelNoWrapStyle = " style=\"white-space:nowrap;\"";
+            var valueWrapStyle = segment.WordWrap ? string.Empty : " style=\"white-space:nowrap;\"";
+            var valueHtml = sourceField.IsHtml
+                ? BuildStyledHtml(sourceField.GetValue(recordSource)?.ToString() ?? string.Empty, sourceField, forceVisibleTextColor: true)
+                : BuildStyledText(encodedValue, sourceField, forceVisibleTextColor: true);
+            return $"{breakPrefix}<span{labelNoWrapStyle}><b>{encodedLabel}</b></span>: <span{valueWrapStyle}>{valueHtml}</span>{pairSeparator}";
+        }
+
+        private bool TryResolveField(int index, IReadOnlyList<IGriddoFieldView> allFields, out IGriddoFieldView field)
+        {
+            field = null!;
+            if (index < 0 || index >= allFields.Count || index == SourceFieldIndex)
+            {
+                return false;
+            }
+
+            field = allFields[index];
+            return true;
+        }
+
+        private static string ResolveLabel(IGriddoFieldView sourceField, string abbreviatedHeaderOverride)
+        {
+            if (!string.IsNullOrWhiteSpace(abbreviatedHeaderOverride))
+            {
+                return abbreviatedHeaderOverride;
+            }
+
+            return sourceField.Header;
+        }
+
+        private static string BuildStyledText(string encodedValue, IGriddoFieldView sourceField, bool forceVisibleTextColor)
+        {
+            var fallbackFg = (sourceField as IGriddoFieldColorView)?.ForegroundColor ?? string.Empty;
+            var fallbackBg = (sourceField as IGriddoFieldColorView)?.BackgroundColor ?? string.Empty;
+            var fgColor = fallbackFg;
+            var bgColor = fallbackBg;
+            if (sourceField is IGriddoFieldFontView fontView)
+            {
+                encodedValue = ApplyFontStyleMarkup(encodedValue, fontView.FontStyleName);
+            }
+            if (forceVisibleTextColor && string.IsNullOrWhiteSpace(fgColor) && !string.IsNullOrWhiteSpace(bgColor))
+            {
+                fgColor = ResolveContrastTextColor(bgColor);
+            }
+            var fg = string.IsNullOrWhiteSpace(fgColor) ? string.Empty : $" color=\"{WebUtility.HtmlEncode(fgColor)}\"";
+            var bg = string.IsNullOrWhiteSpace(bgColor) ? string.Empty : $" style=\"background-color:{WebUtility.HtmlEncode(bgColor)};\"";
+            if (fg.Length == 0 && bg.Length == 0)
+            {
+                return encodedValue;
+            }
+
+            if (fg.Length > 0)
+            {
+                return $"<font{fg}><span{bg}>{encodedValue}</span></font>";
+            }
+
+            return $"<span{bg}>{encodedValue}</span>";
+        }
+
+        private static string BuildStyledHtml(string rawHtml, IGriddoFieldView sourceField, bool forceVisibleTextColor)
+        {
+            var fallbackFg = (sourceField as IGriddoFieldColorView)?.ForegroundColor ?? string.Empty;
+            var fallbackBg = (sourceField as IGriddoFieldColorView)?.BackgroundColor ?? string.Empty;
+            var fgColor = fallbackFg;
+            var bgColor = fallbackBg;
+            if (forceVisibleTextColor && string.IsNullOrWhiteSpace(fgColor) && !string.IsNullOrWhiteSpace(bgColor))
+            {
+                fgColor = ResolveContrastTextColor(bgColor);
+            }
+
+            var styleParts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(fgColor))
+            {
+                styleParts.Add($"color:{WebUtility.HtmlEncode(fgColor)}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(bgColor))
+            {
+                styleParts.Add($"background-color:{WebUtility.HtmlEncode(bgColor)}");
+            }
+
+            if (styleParts.Count == 0)
+            {
+                return rawHtml;
+            }
+
+            return $"<span style=\"{string.Join(";", styleParts)}\">{rawHtml}</span>";
+        }
+
+        private static string ApplyFontStyleMarkup(string encodedValue, string styleName)
+        {
+            if (string.IsNullOrWhiteSpace(styleName))
+            {
+                return encodedValue;
+            }
+
+            var styled = encodedValue;
+            if (styleName.Contains("Italic", StringComparison.OrdinalIgnoreCase))
+            {
+                styled = $"<i>{styled}</i>";
+            }
+
+            if (styleName.Contains("Bold", StringComparison.OrdinalIgnoreCase))
+            {
+                styled = $"<b>{styled}</b>";
+            }
+
+            return styled;
+        }
+
+        private static string ResolveContrastTextColor(string backgroundColor)
+        {
+            if (string.IsNullOrWhiteSpace(backgroundColor))
+            {
+                return "Black";
+            }
+
+            try
+            {
+                if (ColorConverter.ConvertFromString(backgroundColor) is Color color)
+                {
+                    var luminance = (0.299 * color.R) + (0.587 * color.G) + (0.114 * color.B);
+                    return luminance < 140 ? "White" : "Black";
+                }
+            }
+            catch
+            {
+                return "Black";
+            }
+
+            return "Black";
+        }
+
+        private List<string> BuildTableRowsHtml(
+            IReadOnlyList<HtmlFieldSegmentConfiguration> enabledSegments,
+            IReadOnlyList<IGriddoFieldView> allFields,
+            object recordSource)
+        {
+            var rows = new List<string>();
+            var currentCells = new List<string>();
+            foreach (var segment in enabledSegments)
+            {
+                if (segment.AddLineBreakAfter && currentCells.Count > 0)
+                {
+                    rows.Add($"<tr>{string.Concat(currentCells)}</tr>");
+                    currentCells.Clear();
+                }
+
+                var cells = BuildRowHtml(segment, allFields, recordSource);
+                if (!string.IsNullOrWhiteSpace(cells))
+                {
+                    currentCells.Add(cells);
+                }
+            }
+
+            if (currentCells.Count > 0)
+            {
+                rows.Add($"<tr>{string.Concat(currentCells)}</tr>");
+            }
+
+            return rows;
+        }
+    }
+
+    private sealed class HierarchicalMergeTextFieldView : IGriddoFieldView, IGriddoFieldDescriptionView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldColorView, IGriddoRecordMergeBandView, IGriddoFieldSortValueView
     {
         private readonly Func<System.Collections.IList> _recordsAccessor;
         private readonly Func<object, string> _displayGetter;
@@ -1881,6 +2294,8 @@ public partial class MainWindow : Window
 
         public string Header { get; set; }
         public string Description { get; set; } = string.Empty;
+        public string ForegroundColor { get; set; } = string.Empty;
+        public string BackgroundColor { get; set; } = string.Empty;
         public double Width { get; }
         public bool Fill { get; set; }
         public bool IsHtml => false;
@@ -1956,6 +2371,24 @@ public partial class MainWindow : Window
         target.YAxisUnit = settings.YAxisUnit ?? string.Empty;
         target.XAxisLabelPrecision = Math.Clamp(settings.XAxisLabelPrecision, 0, 10);
         target.YAxisLabelPrecision = Math.Clamp(settings.YAxisLabelPrecision, 0, 10);
+    }
+
+    private static void ApplyHtmlLayout(IHtmlFieldLayoutTarget target, HtmlFieldConfiguration settings)
+    {
+        target.LayoutMode = settings.LayoutMode;
+        target.FontFamilyName = settings.FontFamilyName ?? string.Empty;
+        target.FontSize = Math.Max(0, settings.FontSize);
+        target.FontStyleName = settings.FontStyleName ?? string.Empty;
+        target.Segments = settings.Segments
+            .Select(s => new HtmlFieldSegmentConfiguration
+            {
+                SourceFieldIndex = s.SourceFieldIndex,
+                Enabled = s.Enabled,
+                AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
+                AddLineBreakAfter = s.AddLineBreakAfter,
+                WordWrap = s.WordWrap
+            })
+            .ToList();
     }
 
     /// <summary>WPF path markup samples—triangle, circle, diamond, rect, hexagon, heart-ish, wave, etc.</summary>
