@@ -38,7 +38,7 @@
                 </StackPanel>
             </DockPanel>
         </Border>
-        <TabControl Margin="8">
+        <TabControl x:Name="MainTabs" Margin="8" SelectionChanged="MainTabs_SelectionChanged">
             <TabItem Header="Fields">
                 <grid:Griddo
                     x:Name="SegmentsGrid"

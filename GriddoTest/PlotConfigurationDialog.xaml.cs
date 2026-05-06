@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
 using Griddo.Fields;
 using Griddo.Editing;
 using GriddoModelView;
@@ -28,7 +29,26 @@ public partial class PlotConfigurationDialog : Window
         BuildTitleFieldGridFields();
         BuildGeneralGridFields();
         BuildSpecificGridFields();
-        Loaded += (_, _) => LoadFromChart();
+        Loaded += (_, _) =>
+        {
+            LoadFromChart();
+            UpdateMoveButtonsVisibility();
+        };
+    }
+
+    private void MainTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        UpdateMoveButtonsVisibility();
+    }
+
+    private void UpdateMoveButtonsVisibility()
+    {
+        var show = MainTabs.SelectedIndex == 0;
+        var visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        MoveUpButton.Visibility = visibility;
+        MoveDownButton.Visibility = visibility;
     }
 
     private void LoadFromChart()
@@ -153,8 +173,6 @@ public partial class PlotConfigurationDialog : Window
             ShowYAxisTitle: GetSpecificBool(PlotSpecificSettingKind.ShowYAxisTitle),
             XAxisTitle: GetSpecificText(PlotSpecificSettingKind.XAxisTitle),
             YAxisTitle: GetSpecificText(PlotSpecificSettingKind.YAxisTitle),
-            XAxisUnit: GetSpecificText(PlotSpecificSettingKind.XAxisUnit),
-            YAxisUnit: GetSpecificText(PlotSpecificSettingKind.YAxisUnit),
             XAxisLabelPrecision: Math.Clamp(_initial.XAxisLabelPrecision, 0, 10),
             YAxisLabelPrecision: Math.Clamp(_initial.YAxisLabelPrecision, 0, 10),
             XAxisLabelFormat: GetSpecificText(PlotSpecificSettingKind.XAxisFormat),
@@ -333,8 +351,6 @@ public partial class PlotConfigurationDialog : Window
         SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
             PlotSpecificSettingKind.XAxisTitle, "X axis", "Title", textValue: _initial.XAxisTitle));
         SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
-            PlotSpecificSettingKind.XAxisUnit, "X axis", "Unit", textValue: _initial.XAxisUnit));
-        SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
             PlotSpecificSettingKind.XAxisFormat, "X axis", "Format", textValue: _initial.XAxisLabelFormat));
 
         SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
@@ -343,8 +359,6 @@ public partial class PlotConfigurationDialog : Window
             PlotSpecificSettingKind.ShowYAxisTitle, "Y axis", "Show title", boolValue: _initial.ShowYAxisTitle));
         SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
             PlotSpecificSettingKind.YAxisTitle, "Y axis", "Title", textValue: _initial.YAxisTitle));
-        SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
-            PlotSpecificSettingKind.YAxisUnit, "Y axis", "Unit", textValue: _initial.YAxisUnit));
         SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
             PlotSpecificSettingKind.YAxisFormat, "Y axis", "Format", textValue: _initial.YAxisLabelFormat));
         SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
@@ -368,8 +382,6 @@ public partial class PlotConfigurationDialog : Window
         ShowYAxisTitle,
         XAxisTitle,
         YAxisTitle,
-        XAxisUnit,
-        YAxisUnit,
         XAxisFormat,
         YAxisFormat,
         AxisFontSize,
@@ -552,8 +564,6 @@ public sealed record PlotFieldDialogResult(
     bool ShowYAxisTitle,
     string XAxisTitle,
     string YAxisTitle,
-    string XAxisUnit,
-    string YAxisUnit,
     int XAxisLabelPrecision,
     int YAxisLabelPrecision,
     string XAxisLabelFormat,

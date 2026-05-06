@@ -23,8 +23,6 @@ namespace GriddoModelView
         public string XAxisTitle { get; set; } = string.Empty;
         public string YAxisTitle { get; set; } = string.Empty;
         public string Label { get; set; } = string.Empty;
-        public string XAxisUnit { get; set; } = string.Empty;
-        public string YAxisUnit { get; set; } = string.Empty;
         public int XAxisLabelPrecision { get; set; }
         public int YAxisLabelPrecision { get; set; }
         public string XAxisLabelFormat { get; set; } = string.Empty;

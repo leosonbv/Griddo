@@ -52,8 +52,6 @@ public sealed class HostedCalibrationPlottoFieldView : IGriddoHostedFieldView, I
     public string XAxisTitle { get; set; } = "Concentration";
     public string YAxisTitle { get; set; } = "Response";
     public string Label { get; set; } = string.Empty;
-    public string XAxisUnit { get; set; } = string.Empty;
-    public string YAxisUnit { get; set; } = string.Empty;
     public int XAxisLabelPrecision { get; set; } = 2;
     public int YAxisLabelPrecision { get; set; } = 2;
     public string XAxisLabelFormat { get; set; } = string.Empty;
@@ -197,8 +195,6 @@ public sealed class HostedCalibrationPlottoFieldView : IGriddoHostedFieldView, I
         chart.AxisLabelX = ShowXAxisTitle ? XAxisTitle : string.Empty;
         chart.AxisLabelY = ShowYAxisTitle ? YAxisTitle : string.Empty;
         chart.ChartLabel = Label;
-        chart.AxisUnitX = XAxisUnit;
-        chart.AxisUnitY = YAxisUnit;
         chart.AxisLabelPrecisionX = Math.Clamp(XAxisLabelPrecision, 0, 10);
         chart.AxisLabelPrecisionY = Math.Clamp(YAxisLabelPrecision, 0, 10);
         chart.AxisLabelFormatX = XAxisLabelFormat ?? string.Empty;

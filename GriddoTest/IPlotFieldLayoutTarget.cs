@@ -18,8 +18,6 @@ public interface IPlotFieldLayoutTarget
     string XAxisTitle { get; set; }
     string YAxisTitle { get; set; }
     string Label { get; set; }
-    string XAxisUnit { get; set; }
-    string YAxisUnit { get; set; }
     int XAxisLabelPrecision { get; set; }
     int YAxisLabelPrecision { get; set; }
     string XAxisLabelFormat { get; set; }

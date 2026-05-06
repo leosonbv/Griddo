@@ -1624,8 +1624,6 @@ public partial class MainWindow : Window
             target.XAxisTitle = plot.XAxisTitle ?? string.Empty;
             target.YAxisTitle = plot.YAxisTitle ?? string.Empty;
             target.Label = plot.Label ?? string.Empty;
-            target.XAxisUnit = plot.XAxisUnit ?? string.Empty;
-            target.YAxisUnit = plot.YAxisUnit ?? string.Empty;
             target.XAxisLabelPrecision = Math.Clamp(plot.XAxisLabelPrecision, 0, 10);
             target.YAxisLabelPrecision = Math.Clamp(plot.YAxisLabelPrecision, 0, 10);
             target.XAxisLabelFormat = plot.XAxisLabelFormat ?? string.Empty;
@@ -1770,8 +1768,6 @@ public partial class MainWindow : Window
                         XAxisTitle = p.XAxisTitle ?? string.Empty,
                         YAxisTitle = p.YAxisTitle ?? string.Empty,
                         Label = p.Label ?? string.Empty,
-                        XAxisUnit = p.XAxisUnit ?? string.Empty,
-                        YAxisUnit = p.YAxisUnit ?? string.Empty,
                         XAxisLabelPrecision = Math.Clamp(p.XAxisLabelPrecision, 0, 10),
                         YAxisLabelPrecision = Math.Clamp(p.YAxisLabelPrecision, 0, 10),
                         XAxisLabelFormat = p.XAxisLabelFormat ?? string.Empty,
@@ -2482,8 +2478,6 @@ public partial class MainWindow : Window
         target.ShowYAxisTitle = settings.ShowYAxisTitle;
         target.XAxisTitle = settings.XAxisTitle ?? string.Empty;
         target.YAxisTitle = settings.YAxisTitle ?? string.Empty;
-        target.XAxisUnit = settings.XAxisUnit ?? string.Empty;
-        target.YAxisUnit = settings.YAxisUnit ?? string.Empty;
         target.XAxisLabelPrecision = Math.Clamp(settings.XAxisLabelPrecision, 0, 10);
         target.YAxisLabelPrecision = Math.Clamp(settings.YAxisLabelPrecision, 0, 10);
         target.XAxisLabelFormat = settings.XAxisLabelFormat ?? string.Empty;

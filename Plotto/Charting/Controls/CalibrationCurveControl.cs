@@ -298,7 +298,6 @@ public class CalibrationCurveControl : SkiaChartBaseControl
             return;
         }
 
-        const double z = 0d;
         const double eps = 1e-12;
         // x=0 lies left of the plot: show y-axis spine. y=0 lies below the plot bottom: show x-axis spine.
         var showYAxisLine = ShowYAxis && Viewport.XMin > eps;
@@ -313,51 +312,149 @@ public class CalibrationCurveControl : SkiaChartBaseControl
             canvas.DrawLine(plotRect.Left, plotRect.Bottom, plotRect.Right, plotRect.Bottom, AxisStrokePaint);
         }
 
-        var x0InView = Viewport is { XMin: <= z, XMax: >= z };
-        var y0InView = Viewport is { YMin: <= z, YMax: >= z };
-
         var zs = PlotUiScale;
         var axOff = ChartPlotLayout.AxisLabelInsetFromPlotLeft(zs);
         var axisMetrics = AxisFont.Metrics;
         var axisFontHeight = Math.Max(1f, -axisMetrics.Ascent + axisMetrics.Descent);
         var xTickTop = plotRect.Bottom + (axisFontHeight * 0.2f);
         var xTickBaseline = xTickTop - axisMetrics.Ascent;
+        var xTickLength = Math.Max(3f * zs, axisFontHeight * 0.35f);
         var xAxisReserveY = ShowXAxis
             ? ChartPlotLayout.ComputeXAxisReserveY(zs, AxisFontSize, !string.IsNullOrWhiteSpace(AxisLabelX))
             : 0f;
         var yTickRight = plotRect.Left - Math.Max(axOff, axisFontHeight * 0.5f);
-        var yTopBaseline = (plotRect.Top + (axisFontHeight * 0.5f)) - axisMetrics.Ascent;
-        var yBottomBaseline = plotRect.Bottom - axisMetrics.Descent;
+        var yTickLength = Math.Max(3f * zs, axisFontHeight * 0.35f);
 
-        // Plot edges are always XMin/XMax and YMin/YMax — not 0 when the origin sits outside the viewport.
-        if (ShowXAxis && ChartAxisLabels.ShouldDrawTickLabel(Viewport.XMin))
+        if (ShowXAxis)
         {
-            canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.XMin, AxisLabelPrecisionX, AxisUnitX, AxisLabelFormatX), plotRect.Left, xTickBaseline, SKTextAlign.Left, AxisFont, AxisLabelPaint);
+            var minGap = 0f;
+            var maxXTickCount = Math.Clamp((int)(plotRect.Width / Math.Max(10f * zs, axisFontHeight * 0.9f)), 2, 120);
+            var bestXTickRequest = 2;
+            var xTicks = ChartAxisLabels.GetRoundedTicks(Viewport.XMin, Viewport.XMax, bestXTickRequest);
+            for (var candidateTickCount = 3; candidateTickCount <= maxXTickCount; candidateTickCount++)
+            {
+                var candidateTicks = ChartAxisLabels.GetRoundedTicks(Viewport.XMin, Viewport.XMax, candidateTickCount, out var candStep);
+                var lastRight = float.NegativeInfinity;
+                var overlaps = false;
+                foreach (var candidateTick in candidateTicks)
+                {
+                    if (!ChartAxisLabels.ShouldDrawTickLabel(candidateTick))
+                    {
+                        continue;
+                    }
+
+                    var x = ToPixelX(candidateTick, plotRect);
+                    var label = ChartAxisLabels.FormatRoundedTick(candidateTick, candStep, AxisLabelPrecisionX, null, AxisLabelFormatX);
+                    var width = AxisFont.MeasureText(label);
+                    var left = x - (width * 0.5f);
+                    left = Math.Clamp(left, plotRect.Left, plotRect.Right - width);
+                    if (left < lastRight + minGap)
+                    {
+                        overlaps = true;
+                        break;
+                    }
+
+                    lastRight = left + width;
+                }
+
+                if (overlaps)
+                {
+                    break;
+                }
+
+                xTicks = candidateTicks;
+                bestXTickRequest = candidateTickCount;
+            }
+
+            xTicks = ChartAxisLabels.GetRoundedTicks(Viewport.XMin, Viewport.XMax, bestXTickRequest, out var xStep);
+            var lastLabelRight = float.NegativeInfinity;
+            foreach (var tick in xTicks)
+            {
+                if (!ChartAxisLabels.ShouldDrawTickLabel(tick))
+                {
+                    continue;
+                }
+
+                var x = ToPixelX(tick, plotRect);
+                canvas.DrawLine(x, plotRect.Bottom, x, plotRect.Bottom + xTickLength, AxisStrokePaint);
+                var label = ChartAxisLabels.FormatRoundedTick(tick, xStep, AxisLabelPrecisionX, null, AxisLabelFormatX);
+                var width = AxisFont.MeasureText(label);
+                var left = x - (width * 0.5f);
+                left = Math.Clamp(left, plotRect.Left, plotRect.Right - width);
+                var right = left + width;
+                if (left < lastLabelRight + minGap)
+                {
+                    continue;
+                }
+
+                canvas.DrawText(label, left, xTickBaseline, SKTextAlign.Left, AxisFont, AxisLabelPaint);
+                lastLabelRight = right;
+            }
         }
 
-        if (ShowXAxis && ChartAxisLabels.ShouldDrawTickLabel(Viewport.XMax))
+        if (ShowYAxis)
         {
-            canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.XMax, AxisLabelPrecisionX, AxisUnitX, AxisLabelFormatX), plotRect.Right, xTickBaseline, SKTextAlign.Right, AxisFont, AxisLabelPaint);
-        }
+            var yMinGap = 3f * zs;
+            var maxYTickCount = Math.Clamp((int)(plotRect.Height / Math.Max(10f * zs, axisFontHeight * 0.9f)), 2, 120);
+            var bestYTickRequest = 2;
+            var yTicks = ChartAxisLabels.GetRoundedTicks(Viewport.YMin, Viewport.YMax, bestYTickRequest);
+            for (var candidateTickCount = 3; candidateTickCount <= maxYTickCount; candidateTickCount++)
+            {
+                var candidateTicks = ChartAxisLabels.GetRoundedTicks(Viewport.YMin, Viewport.YMax, candidateTickCount, out _);
+                var lastTopProbe = float.PositiveInfinity;
+                var overlaps = false;
+                foreach (var candidateTick in candidateTicks)
+                {
+                    if (!ChartAxisLabels.ShouldDrawTickLabel(candidateTick))
+                    {
+                        continue;
+                    }
 
-        if (ShowYAxis && ChartAxisLabels.ShouldDrawTickLabel(Viewport.YMax))
-        {
-            canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.YMax, AxisLabelPrecisionY, AxisUnitY, AxisLabelFormatY), yTickRight, yTopBaseline, SKTextAlign.Right, AxisFont, AxisLabelPaint);
-        }
+                    var py = ToPixelY(candidateTick, plotRect);
+                    var baselineProbe = py - (axisMetrics.Ascent + axisMetrics.Descent) * 0.5f;
+                    var topProbe = baselineProbe + axisMetrics.Ascent;
+                    var bottomProbe = baselineProbe + axisMetrics.Descent;
+                    if (bottomProbe >= lastTopProbe - yMinGap)
+                    {
+                        overlaps = true;
+                        break;
+                    }
 
-        if (ShowYAxis && ChartAxisLabels.ShouldDrawTickLabel(Viewport.YMin))
-        {
-            canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.YMin, AxisLabelPrecisionY, AxisUnitY, AxisLabelFormatY), yTickRight, yBottomBaseline, SKTextAlign.Right, AxisFont, AxisLabelPaint);
-        }
+                    lastTopProbe = topProbe;
+                }
 
-        if (ShowXAxis && x0InView && Viewport.XMin + eps < z && z < Viewport.XMax - eps)
-        {
-            canvas.DrawText(ChartAxisLabels.FormatTick(z, AxisLabelPrecisionX, AxisUnitX, AxisLabelFormatX), ToPixelX(z, plotRect), xTickBaseline, SKTextAlign.Center, AxisFont, AxisLabelPaint);
-        }
+                if (overlaps)
+                {
+                    break;
+                }
 
-        if (ShowYAxis && y0InView && Viewport.YMin + eps < z && z < Viewport.YMax - eps)
-        {
-            canvas.DrawText(ChartAxisLabels.FormatTick(z, AxisLabelPrecisionY, AxisUnitY, AxisLabelFormatY), yTickRight, ToPixelY(z, plotRect) - axisMetrics.Descent, SKTextAlign.Right, AxisFont, AxisLabelPaint);
+                yTicks = candidateTicks;
+                bestYTickRequest = candidateTickCount;
+            }
+
+            yTicks = ChartAxisLabels.GetRoundedTicks(Viewport.YMin, Viewport.YMax, bestYTickRequest, out var yStep);
+            var lastLabelTop = float.PositiveInfinity;
+            foreach (var tick in yTicks)
+            {
+                if (!ChartAxisLabels.ShouldDrawTickLabel(tick))
+                {
+                    continue;
+                }
+
+                var y = ToPixelY(tick, plotRect);
+                canvas.DrawLine(plotRect.Left - yTickLength, y, plotRect.Left, y, AxisStrokePaint);
+                var baseline = y - (axisMetrics.Ascent + axisMetrics.Descent) * 0.5f;
+                var top = baseline + axisMetrics.Ascent;
+                var bottom = baseline + axisMetrics.Descent;
+                if (bottom >= lastLabelTop - yMinGap)
+                {
+                    continue;
+                }
+
+                var label = ChartAxisLabels.FormatRoundedTick(tick, yStep, AxisLabelPrecisionY, null, AxisLabelFormatY);
+                canvas.DrawText(label, yTickRight, baseline, SKTextAlign.Right, AxisFont, AxisLabelPaint);
+                lastLabelTop = top;
+            }
         }
 
         if (ShowXAxis && !string.IsNullOrWhiteSpace(AxisLabelX))
@@ -370,9 +467,7 @@ public class CalibrationCurveControl : SkiaChartBaseControl
 
         if (ShowYAxis && !string.IsNullOrWhiteSpace(AxisLabelY))
         {
-            var yCaption = string.IsNullOrWhiteSpace(AxisUnitY)
-                ? AxisLabelY
-                : $"{AxisLabelY} ({AxisUnitY})";
+            var yCaption = AxisLabelY;
             var yTitleLeftInset = (ChartPlotLayout.CellPadding * zs) + (2f * zs);
             var yTitleCenterX = yTitleLeftInset + Math.Max(0f, -axisMetrics.Ascent) - (axisFontHeight * 0.5f);
             canvas.Save();

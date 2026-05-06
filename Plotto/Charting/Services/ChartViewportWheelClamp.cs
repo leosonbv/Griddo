@@ -45,6 +45,13 @@ public sealed class ChartViewportWheelClamp
         viewport.XMax = xmax + xMargin;
         viewport.YMin = ymin - yMargin;
         viewport.YMax = ymax + yMargin;
+        // Keep Y viewport non-negative when the series never goes below zero (e.g. intensity),
+        // so axis ticks are not mostly filtered out by non-negative label policy.
+        if (ymin >= -1e-12)
+        {
+            viewport.YMin = Math.Max(0d, viewport.YMin);
+        }
+
         viewport.EnsureMinimumSize();
     }
 

@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using Griddo.Fields;
 using Griddo.Editing;
@@ -26,6 +27,22 @@ public partial class HtmlConfigurationDialog : Window
         BuildGeneralGridFields();
         GeneralGrid.CellPropertyViewResolver = ResolveGeneralCellPropertyView;
         SeedFrom(seed, allFields);
+        UpdateMoveButtonsVisibility();
+    }
+
+    private void MainTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        UpdateMoveButtonsVisibility();
+    }
+
+    private void UpdateMoveButtonsVisibility()
+    {
+        var show = MainTabs.SelectedIndex == 0;
+        var visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        MoveUpButton.Visibility = visibility;
+        MoveDownButton.Visibility = visibility;
     }
 
     private Action<HtmlFieldConfiguration>? PreviewApply { get; }
