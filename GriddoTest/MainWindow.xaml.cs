@@ -849,6 +849,7 @@ public partial class MainWindow : Window
             sourceObjectName: PrimarySource,
             sourceMemberName: nameof(PrimaryDemoSource.HtmlSnippet),
             allFieldsAccessor: () => _allFields);
+        _htmlField.IsCategoryField = true;
         RegisterField(_htmlField);
 
         RegisterField(new GriddoFieldView(
@@ -881,7 +882,7 @@ public partial class MainWindow : Window
                 .Select(x => new HtmlFieldSegmentConfiguration
                 {
                     SourceFieldIndex = x.index,
-                    Enabled = x.index <= 2,
+                    Enabled = x.index is 2 or 3,
                     AbbreviatedHeaderOverride = string.Empty,
                     AddLineBreakAfter = true,
                     WordWrap = true
@@ -1608,6 +1609,7 @@ public partial class MainWindow : Window
             target.FontFamilyName = html.FontFamilyName ?? string.Empty;
             target.FontSize = Math.Max(0, html.FontSize);
             target.FontStyleName = html.FontStyleName ?? string.Empty;
+            target.IsCategoryField = html.IsCategoryField;
             target.Segments = html.Segments
                 .Select(s => new HtmlFieldSegmentConfiguration
                 {
@@ -1729,6 +1731,7 @@ public partial class MainWindow : Window
                     return new HtmlFieldConfiguration
                     {
                         SourceFieldIndex = x.index,
+                        IsCategoryField = h.IsCategoryField,
                         FontFamilyName = h.FontFamilyName ?? string.Empty,
                         FontSize = Math.Max(0, h.FontSize),
                         FontStyleName = h.FontStyleName ?? string.Empty,
@@ -1961,7 +1964,7 @@ public partial class MainWindow : Window
         return string.Empty;
     }
 
-    private sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescriptionView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldFontView, IGriddoFieldWrapView, IHtmlFieldLayoutTarget
+    private sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescriptionView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldFontView, IGriddoFieldWrapView, IGriddoFieldSortValueView, IGriddoRecordMergeBandView, IHtmlFieldLayoutTarget
     {
         private readonly Func<IReadOnlyList<IGriddoFieldView>> _allFieldsAccessor;
 
@@ -1988,6 +1991,7 @@ public partial class MainWindow : Window
         public string ForegroundColor { get; set; } = string.Empty;
         public string BackgroundColor { get; set; } = string.Empty;
         public bool NoWrap { get; set; }
+        public bool IsCategoryField { get; set; }
         public bool Fill { get; set; }
         public bool IsHtml => true;
         public TextAlignment ContentAlignment => TextAlignment.Left;
@@ -2032,6 +2036,37 @@ public partial class MainWindow : Window
         }
 
         public string FormatValue(object? value) => value?.ToString() ?? string.Empty;
+
+        public object? GetSortValue(object recordSource)
+            => BuildCategoryMergeKey(recordSource, _allFieldsAccessor());
+
+        public bool IsMergedWithPreviousRecord(IReadOnlyList<object> records, int recordIndex)
+        {
+            if (!IsCategoryField || recordIndex <= 0 || recordIndex >= records.Count)
+            {
+                return false;
+            }
+
+            var allFields = _allFieldsAccessor();
+            return string.Equals(
+                BuildCategoryMergeKey(records[recordIndex], allFields),
+                BuildCategoryMergeKey(records[recordIndex - 1], allFields),
+                StringComparison.Ordinal);
+        }
+
+        public bool IsMergedWithNextRecord(IReadOnlyList<object> records, int recordIndex)
+        {
+            if (!IsCategoryField || recordIndex < 0 || recordIndex >= records.Count - 1)
+            {
+                return false;
+            }
+
+            var allFields = _allFieldsAccessor();
+            return string.Equals(
+                BuildCategoryMergeKey(records[recordIndex], allFields),
+                BuildCategoryMergeKey(records[recordIndex + 1], allFields),
+                StringComparison.Ordinal);
+        }
 
         private string BuildRowHtml(HtmlFieldSegmentConfiguration segment, IReadOnlyList<IGriddoFieldView> allFields, object recordSource)
         {
@@ -2092,6 +2127,37 @@ public partial class MainWindow : Window
 
             field = allFields[index];
             return true;
+        }
+
+        private string BuildCategoryMergeKey(object recordSource, IReadOnlyList<IGriddoFieldView> allFields)
+        {
+            var enabledSegments = Segments
+                .Where(s => s.Enabled)
+                .OrderBy(s => s.SourceFieldIndex)
+                .ToList();
+
+            var categorySegments = enabledSegments
+                .Where(segment =>
+                    TryResolveField(segment.SourceFieldIndex, allFields, out var sourceField)
+                    && (sourceField is IGriddoRecordMergeBandView || sourceField is IGriddoFieldSortValueView))
+                .ToList();
+
+            var keySegments = categorySegments.Count > 0 ? categorySegments : enabledSegments;
+            var parts = new List<string>();
+            foreach (var segment in keySegments)
+            {
+                if (!TryResolveField(segment.SourceFieldIndex, allFields, out var sourceField))
+                {
+                    continue;
+                }
+
+                var value = sourceField is IGriddoFieldSortValueView sortField
+                    ? sortField.GetSortValue(recordSource)?.ToString() ?? string.Empty
+                    : sourceField.FormatValue(sourceField.GetValue(recordSource)) ?? string.Empty;
+                parts.Add($"{segment.SourceFieldIndex}={value}");
+            }
+
+            return string.Join("|", parts);
         }
 
         private static string ResolveLabel(IGriddoFieldView sourceField, string abbreviatedHeaderOverride)
@@ -2238,7 +2304,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private sealed class HierarchicalMergeTextFieldView : IGriddoFieldView, IGriddoFieldDescriptionView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldColorView, IGriddoRecordMergeBandView, IGriddoFieldSortValueView
+    private sealed class HierarchicalMergeTextFieldView : IGriddoFieldView, IGriddoFieldDescriptionView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoRecordMergeBandView, IGriddoFieldSortValueView
     {
         private readonly Func<System.Collections.IList> _recordsAccessor;
         private readonly Func<object, string> _displayGetter;
@@ -2267,6 +2333,9 @@ public partial class MainWindow : Window
 
         public string Header { get; set; }
         public string Description { get; set; } = string.Empty;
+        public string FontFamilyName { get; set; } = string.Empty;
+        public double FontSize { get; set; }
+        public string FontStyleName { get; set; } = string.Empty;
         public string ForegroundColor { get; set; } = string.Empty;
         public string BackgroundColor { get; set; } = string.Empty;
         public double Width { get; }
@@ -2348,6 +2417,7 @@ public partial class MainWindow : Window
 
     private static void ApplyHtmlLayout(IHtmlFieldLayoutTarget target, HtmlFieldConfiguration settings)
     {
+        target.IsCategoryField = settings.IsCategoryField;
         target.FontFamilyName = settings.FontFamilyName ?? string.Empty;
         target.FontSize = Math.Max(0, settings.FontSize);
         target.FontStyleName = settings.FontStyleName ?? string.Empty;

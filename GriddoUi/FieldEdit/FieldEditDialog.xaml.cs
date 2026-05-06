@@ -15,6 +15,8 @@ public partial class FieldConfigurator : Window
 {
     private readonly List<IGriddoFieldView> _fieldHeaderRegistry = [];
     private readonly List<IGriddoFieldView> _generalFieldHeaderRegistry = [];
+    private int _fontFieldIndex = -1;
+    private int _backColorFieldIndex = -1;
     private int _valueFieldIndex = -1;
 
     /// <summary>Fired when Apply is pressed; argument is an ordered snapshot (clones).</summary>
@@ -204,6 +206,7 @@ public partial class FieldConfigurator : Window
         {
             FormatString = "F0"
         });
+        _fontFieldIndex = FieldGrid.Fields.Count;
         AddField(new GriddoFieldView(
             "Font",
             220,
@@ -220,6 +223,7 @@ public partial class FieldConfigurator : Window
                 return FontSummaryParser.TryApplyFontSummaryText(record, v?.ToString() ?? string.Empty);
             },
             new FontSummaryDialogCellEditor()));
+        _backColorFieldIndex = FieldGrid.Fields.Count;
         AddField(new GriddoFieldView(
             "Back color",
             130,
@@ -246,9 +250,9 @@ public partial class FieldConfigurator : Window
             },
             GriddoCellEditors.FormatStringOptions));
         AddField(new GriddoBoolFieldView(
-            "Nowrap",
+            "Wrap",
             74,
-            r => ((FieldEditRecord)r).NoWrap,
+            r => !((FieldEditRecord)r).NoWrap,
             (r, v) =>
             {
                 if (v is not bool b)
@@ -256,7 +260,7 @@ public partial class FieldConfigurator : Window
                     return false;
                 }
 
-                ((FieldEditRecord)r).NoWrap = b;
+                ((FieldEditRecord)r).NoWrap = !b;
                 return true;
             }));
         AddField(new GriddoFieldView(
@@ -330,7 +334,31 @@ public partial class FieldConfigurator : Window
 
     private GriddoCellPropertyView? ResolveCellPropertyViewForConfigurator(object recordSource, int fieldIndex)
     {
-        if (fieldIndex != _valueFieldIndex || recordSource is not FieldEditRecord record)
+        if (recordSource is not FieldEditRecord record)
+        {
+            return null;
+        }
+
+        if (fieldIndex == _fontFieldIndex)
+        {
+            return new GriddoCellPropertyView
+            {
+                FontFamilyName = record.FontFamilyName ?? string.Empty,
+                FontSize = record.FontSize,
+                FontStyleName = record.FontStyleName ?? string.Empty,
+                ForegroundColor = record.ForegroundColor ?? string.Empty
+            };
+        }
+
+        if (fieldIndex == _backColorFieldIndex)
+        {
+            return new GriddoCellPropertyView
+            {
+                BackgroundColor = record.BackgroundColor ?? string.Empty
+            };
+        }
+
+        if (fieldIndex != _valueFieldIndex)
         {
             return null;
         }

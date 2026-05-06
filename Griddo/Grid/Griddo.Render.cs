@@ -46,6 +46,7 @@ public sealed partial class Griddo
             Brushes.Black,
             1.0);
         headerText.SetFontWeight(FontWeights.Bold);
+        headerText.TextAlignment = TextAlignment.Center;
         headerText.MaxTextWidth = Math.Max(1, rect.Width - 8);
         headerText.MaxTextHeight = Math.Max(1, rect.Height - 4);
         headerText.Trimming = TextTrimming.CharacterEllipsis;
@@ -123,29 +124,41 @@ public sealed partial class Griddo
         var rect = new Rect(x, y, cellW, cellH);
         var address = new GriddoCellAddress(record, col);
         var mergedRenderRect = GetMergedRecordCellRect(record, col, rect);
+        var mergedWithPrevEarly = !IsBodyTransposed
+            && Fields[col] is IGriddoRecordMergeBandView earlyMergeBand
+            && earlyMergeBand.IsMergedWithPreviousRecord(Records, record);
+        var mergedWithNextEarly = !IsBodyTransposed
+            && Fields[col] is IGriddoRecordMergeBandView earlyMergeBandNext
+            && earlyMergeBandNext.IsMergedWithNextRecord(Records, record);
+        var isMergedBandCellEarly = mergedWithPrevEarly || mergedWithNextEarly;
+        var mergedPaintRectEarly = isMergedBandCellEarly ? mergedRenderRect : rect;
+        var isMergedRenderCarrier = true;
+        if (isMergedBandCellEarly)
+        {
+            var visibleMergedRect = Rect.Intersect(mergedRenderRect, bodyViewport);
+            var midY = visibleMergedRect.Y + (visibleMergedRect.Height / 2.0);
+            isMergedRenderCarrier = !visibleMergedRect.IsEmpty
+                && midY >= rect.Top
+                && midY < rect.Bottom;
+        }
 
         var cellView = ResolveCellPropertyView(recordData, col);
         var isHostedCellEditing = IsHostedCellInEditMode(address);
-        if (TryGetFieldBackgroundBrush(col, cellView, out var fieldBackgroundBrush))
+        if ((!isMergedBandCellEarly || isMergedRenderCarrier) && TryGetFieldBackgroundBrush(col, cellView, out var fieldBackgroundBrush))
         {
-            dc.DrawRectangle(fieldBackgroundBrush, null, rect);
+            dc.DrawRectangle(fieldBackgroundBrush, null, mergedPaintRectEarly);
         }
 
-        if (_findMatchedCells.Contains(address))
+        if ((!isMergedBandCellEarly || isMergedRenderCarrier) && _findMatchedCells.Contains(address))
         {
-            dc.DrawRectangle(FindMatchBackground, null, rect);
+            dc.DrawRectangle(FindMatchBackground, null, mergedPaintRectEarly);
         }
 
-        if (!isHostedCellEditing && ShowCellSelectionColoring)
+        var isSelectedVisual = false;
+        if ((!isMergedBandCellEarly || isMergedRenderCarrier) && !isHostedCellEditing && ShowCellSelectionColoring)
         {
             var drawSelection = _selectedCells.Contains(address);
-            if (!IsBodyTransposed
-                && Fields[col] is IGriddoRecordMergeBandView mergeBandSelection
-                && mergeBandSelection.IsMergedWithPreviousRecord(Records, record))
-            {
-                drawSelection = false;
-            }
-            else if (!IsBodyTransposed && Fields[col] is IGriddoRecordMergeBandView)
+            if (!IsBodyTransposed && Fields[col] is IGriddoRecordMergeBandView)
             {
                 drawSelection = false;
                 var top = record;
@@ -173,6 +186,7 @@ public sealed partial class Griddo
             if (drawSelection)
             {
                 dc.DrawRectangle(SelectionBackground, null, mergedRenderRect);
+                isSelectedVisual = true;
             }
         }
 
@@ -214,6 +228,13 @@ public sealed partial class Griddo
                 new Pen(FixedFieldRightBorderBrush, GridPenThickness),
                 new Point(rect.Left, rect.Bottom),
                 new Point(rect.Right, rect.Bottom));
+        }
+
+        // For vertically merged bands, render content only in the record that
+        // contains the vertical center of the visible merged area.
+        if (isMergedBandCellEarly && !isMergedRenderCarrier)
+        {
+            return;
         }
 
         if (Fields[col] is IGriddoHostedFieldView)
@@ -261,7 +282,8 @@ public sealed partial class Griddo
                 true,
                 Fields[col].ContentAlignment,
                 isGraphic ? VerticalAlignment.Top : VerticalAlignment.Center,
-                noWrap);
+                noWrap,
+                renderHtmlBackground: !isSelectedVisual);
         }
     }
 
@@ -683,6 +705,7 @@ public sealed partial class Griddo
                 Brushes.Black,
                 1.0);
             headerText.SetFontWeight(FontWeights.Bold);
+            headerText.TextAlignment = TextAlignment.Center;
             headerText.MaxTextWidth = Math.Max(1, rr.Width - 8);
             headerText.MaxTextHeight = Math.Max(1, rr.Height - 8);
             headerText.Trimming = TextTrimming.CharacterEllipsis;

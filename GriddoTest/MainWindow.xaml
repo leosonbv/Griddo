@@ -10,11 +10,6 @@
     Width="1100"
     Height="720">
     <DockPanel Margin="12">
-        <Menu DockPanel.Dock="Top">
-            <MenuItem Header="_View">
-                <MenuItem Click="OpenFieldConfigurator_Click" Header="_Grid configurator…" />
-            </MenuItem>
-        </Menu>
         <grid:Griddo x:Name="DemoGrid" Visibility="Collapsed" />
     </DockPanel>
 </Window>

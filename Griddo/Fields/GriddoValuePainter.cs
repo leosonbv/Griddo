@@ -21,7 +21,8 @@ public static class GriddoValuePainter
         bool autoDetectHtml = true,
         TextAlignment alignment = TextAlignment.Left,
         VerticalAlignment verticalAlignment = VerticalAlignment.Top,
-        bool noWrap = false)
+        bool noWrap = false,
+        bool renderHtmlBackground = true)
     {
         if (value is IGriddoSizedImageValue sizedImageValue)
         {
@@ -50,11 +51,11 @@ public static class GriddoValuePainter
         {
             if (LooksLikeHtmlTable(text))
             {
-                DrawHtmlTable(drawingContext, text, bounds, typeface, fontSize, foregroundBrush, verticalAlignment, noWrap);
+                DrawHtmlTable(drawingContext, text, bounds, typeface, fontSize, foregroundBrush, verticalAlignment, noWrap, renderHtmlBackground);
                 return;
             }
 
-            DrawHtmlText(drawingContext, text, bounds, typeface, fontSize, foregroundBrush, alignment, verticalAlignment, noWrap);
+            DrawHtmlText(drawingContext, text, bounds, typeface, fontSize, foregroundBrush, alignment, verticalAlignment, noWrap, renderHtmlBackground);
             return;
         }
 
@@ -326,7 +327,8 @@ public static class GriddoValuePainter
         Brush foregroundBrush,
         TextAlignment alignment,
         VerticalAlignment verticalAlignment = VerticalAlignment.Center,
-        bool noWrap = false)
+        bool noWrap = false,
+        bool renderBackground = true)
     {
         var formatted = BuildHtmlFormattedText(html, typeface, fontSize, foregroundBrush);
         if (formatted.Text.Length == 0)
@@ -334,7 +336,7 @@ public static class GriddoValuePainter
             return;
         }
 
-        if (TryParseBackgroundColorFromHtml(html, out var backgroundBrush))
+        if (renderBackground && TryParseBackgroundColorFromHtml(html, out var backgroundBrush))
         {
             drawingContext.DrawRectangle(backgroundBrush, null, bounds);
         }
@@ -654,7 +656,8 @@ public static class GriddoValuePainter
         double fontSize,
         Brush foregroundBrush,
         VerticalAlignment verticalAlignment,
-        bool noWrap = false)
+        bool noWrap = false,
+        bool renderBackground = true)
     {
         var records = ParseHtmlTable(html);
         if (records.Count == 0)
@@ -784,7 +787,7 @@ public static class GriddoValuePainter
                     Math.Max(1, cw - cellPadX * 2),
                     Math.Max(1, maxCellTextH));
 
-                if (TryParseBackgroundColorFromHtml(cellText, out var backgroundBrush))
+                if (renderBackground && TryParseBackgroundColorFromHtml(cellText, out var backgroundBrush))
                 {
                     drawingContext.DrawRectangle(backgroundBrush, null, innerRect);
                 }

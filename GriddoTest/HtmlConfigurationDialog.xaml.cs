@@ -35,6 +35,7 @@ public partial class HtmlConfigurationDialog : Window
     private void SeedFrom(IHtmlFieldLayoutTarget seed, IReadOnlyList<IGriddoFieldView> allFields)
     {
         GeneralGrid.Records.Clear();
+        GeneralGrid.Records.Add(new HtmlGeneralSettingRecord(HtmlGeneralSettingKind.CategoryField, seed.IsCategoryField));
         GeneralGrid.Records.Add(new HtmlGeneralSettingRecord(
             HtmlGeneralSettingKind.Font,
             false,
@@ -71,11 +72,15 @@ public partial class HtmlConfigurationDialog : Window
 
     private HtmlFieldConfiguration BuildResult()
     {
+        var isCategoryField = GeneralGrid.Records
+            .OfType<HtmlGeneralSettingRecord>()
+            .FirstOrDefault(r => r.Setting == HtmlGeneralSettingKind.CategoryField)?.BoolValue ?? false;
         var font = GeneralGrid.Records
             .OfType<HtmlGeneralSettingRecord>()
             .FirstOrDefault(r => r.Setting == HtmlGeneralSettingKind.Font);
         return new HtmlFieldConfiguration
         {
+            IsCategoryField = isCategoryField,
             FontFamilyName = font?.FontFamilyName ?? string.Empty,
             FontSize = Math.Max(0, font?.FontSize ?? 0),
             FontStyleName = font?.FontStyleName ?? string.Empty,
@@ -254,10 +259,11 @@ public partial class HtmlConfigurationDialog : Window
 
     private enum HtmlGeneralSettingKind
     {
+        CategoryField,
         Font
     }
 
-    private sealed class HtmlGeneralValueField : IGriddoFieldView
+    private sealed class HtmlGeneralValueField : IGriddoFieldView, IGriddoCheckboxToggleFieldView
     {
         private readonly HtmlConfigurationDialog _owner;
         private readonly FontSummaryDialogCellEditor _editor = new();
@@ -274,6 +280,9 @@ public partial class HtmlConfigurationDialog : Window
         public TextAlignment ContentAlignment => TextAlignment.Left;
         public IGriddoCellEditor Editor => _editor;
 
+        public bool IsCheckboxCell(object recordSource)
+            => recordSource is HtmlGeneralSettingRecord { Setting: HtmlGeneralSettingKind.CategoryField };
+
         public object? GetValue(object recordSource)
         {
             if (recordSource is not HtmlGeneralSettingRecord record)
@@ -288,6 +297,17 @@ public partial class HtmlConfigurationDialog : Window
         {
             if (recordSource is not HtmlGeneralSettingRecord record)
             {
+                return false;
+            }
+
+            if (record.Setting == HtmlGeneralSettingKind.CategoryField)
+            {
+                if (value is bool b)
+                {
+                    record.BoolValue = b;
+                    return true;
+                }
+
                 return false;
             }
 
@@ -332,12 +352,18 @@ public partial class HtmlConfigurationDialog : Window
         public string FontStyleName { get; set; } = string.Empty;
         public string DisplayName => Setting switch
         {
+            HtmlGeneralSettingKind.CategoryField => "Category field",
             HtmlGeneralSettingKind.Font => "Font",
             _ => Setting.ToString()
         };
 
         public string GetValueDisplay()
         {
+            if (Setting == HtmlGeneralSettingKind.CategoryField)
+            {
+                return BoolValue ? "True" : "False";
+            }
+
             var family = string.IsNullOrWhiteSpace(FontFamilyName) ? "(default)" : FontFamilyName;
             var size = FontSize > 0 ? FontSize.ToString("0.#") : "default";
             var style = string.IsNullOrWhiteSpace(FontStyleName) ? "Regular" : FontStyleName;
