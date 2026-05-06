@@ -1,4 +1,4 @@
-﻿using System.Windows.Input;
+using System.Windows.Input;
 using Griddo.Primitives;
 
 namespace Griddo.Grid;
@@ -9,12 +9,12 @@ internal static class GriddoCellNavigator
         Key key,
         bool isCtrlPressed,
         GriddoCellAddress currentCell,
-        int rowCount,
-        int columnCount,
+        int recordCount,
+        int fieldCount,
         out GriddoCellAddress target)
     {
         target = currentCell;
-        if (rowCount == 0 || columnCount == 0)
+        if (recordCount == 0 || fieldCount == 0)
         {
             return false;
         }
@@ -23,33 +23,33 @@ internal static class GriddoCellNavigator
         {
             case Key.Left:
                 target = new GriddoCellAddress(
-                    currentCell.RowIndex,
-                    isCtrlPressed ? 0 : Math.Max(0, currentCell.ColumnIndex - 1));
+                    currentCell.RecordIndex,
+                    isCtrlPressed ? 0 : Math.Max(0, currentCell.FieldIndex - 1));
                 return true;
             case Key.Right:
                 target = new GriddoCellAddress(
-                    currentCell.RowIndex,
-                    isCtrlPressed ? columnCount - 1 : Math.Min(columnCount - 1, currentCell.ColumnIndex + 1));
+                    currentCell.RecordIndex,
+                    isCtrlPressed ? fieldCount - 1 : Math.Min(fieldCount - 1, currentCell.FieldIndex + 1));
                 return true;
             case Key.Up:
                 target = new GriddoCellAddress(
-                    isCtrlPressed ? 0 : Math.Max(0, currentCell.RowIndex - 1),
-                    currentCell.ColumnIndex);
+                    isCtrlPressed ? 0 : Math.Max(0, currentCell.RecordIndex - 1),
+                    currentCell.FieldIndex);
                 return true;
             case Key.Down:
                 target = new GriddoCellAddress(
-                    isCtrlPressed ? rowCount - 1 : Math.Min(rowCount - 1, currentCell.RowIndex + 1),
-                    currentCell.ColumnIndex);
+                    isCtrlPressed ? recordCount - 1 : Math.Min(recordCount - 1, currentCell.RecordIndex + 1),
+                    currentCell.FieldIndex);
                 return true;
             case Key.Home:
                 target = isCtrlPressed
                     ? new GriddoCellAddress(0, 0)
-                    : new GriddoCellAddress(currentCell.RowIndex, 0);
+                    : new GriddoCellAddress(currentCell.RecordIndex, 0);
                 return true;
             case Key.End:
                 target = isCtrlPressed
-                    ? new GriddoCellAddress(rowCount - 1, columnCount - 1)
-                    : new GriddoCellAddress(currentCell.RowIndex, columnCount - 1);
+                    ? new GriddoCellAddress(recordCount - 1, fieldCount - 1)
+                    : new GriddoCellAddress(currentCell.RecordIndex, fieldCount - 1);
                 return true;
             default:
                 return false;

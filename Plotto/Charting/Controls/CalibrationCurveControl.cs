@@ -293,7 +293,7 @@ public class CalibrationCurveControl : SkiaChartBaseControl
 
     protected override void DrawAxes(SKCanvas canvas, SKRect plotRect)
     {
-        if (UseSparklineLayout)
+        if (UseSparklineLayout || (!ShowXAxis && !ShowYAxis))
         {
             return;
         }
@@ -301,8 +301,8 @@ public class CalibrationCurveControl : SkiaChartBaseControl
         const double z = 0d;
         const double eps = 1e-12;
         // x=0 lies left of the plot: show y-axis spine. y=0 lies below the plot bottom: show x-axis spine.
-        var showYAxisLine = Viewport.XMin > eps;
-        var showXAxisLine = Viewport.YMin > eps;
+        var showYAxisLine = ShowYAxis && Viewport.XMin > eps;
+        var showXAxisLine = ShowXAxis && Viewport.YMin > eps;
         if (showYAxisLine)
         {
             canvas.DrawLine(plotRect.Left, plotRect.Top, plotRect.Left, plotRect.Bottom, AxisStrokePaint);
@@ -322,32 +322,32 @@ public class CalibrationCurveControl : SkiaChartBaseControl
         var topLab = ChartPlotLayout.AxisLabelOffsetAtPlotTop(zs);
 
         // Plot edges are always XMin/XMax and YMin/YMax — not 0 when the origin sits outside the viewport.
-        if (ChartAxisLabels.ShouldDrawTickLabel(Viewport.XMin))
+        if (ShowXAxis && ChartAxisLabels.ShouldDrawTickLabel(Viewport.XMin))
         {
             canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.XMin, AxisLabelPrecisionX, AxisUnitX), plotRect.Left, plotRect.Bottom + below, SKTextAlign.Left, AxisFont, AxisLabelPaint);
         }
 
-        if (ChartAxisLabels.ShouldDrawTickLabel(Viewport.XMax))
+        if (ShowXAxis && ChartAxisLabels.ShouldDrawTickLabel(Viewport.XMax))
         {
             canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.XMax, AxisLabelPrecisionX, AxisUnitX), plotRect.Right, plotRect.Bottom + below, SKTextAlign.Right, AxisFont, AxisLabelPaint);
         }
 
-        if (ChartAxisLabels.ShouldDrawTickLabel(Viewport.YMax))
+        if (ShowYAxis && ChartAxisLabels.ShouldDrawTickLabel(Viewport.YMax))
         {
             canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.YMax, AxisLabelPrecisionY, AxisUnitY), plotRect.Left - axOff, plotRect.Top + topLab, SKTextAlign.Right, AxisFont, AxisLabelPaint);
         }
 
-        if (ChartAxisLabels.ShouldDrawTickLabel(Viewport.YMin))
+        if (ShowYAxis && ChartAxisLabels.ShouldDrawTickLabel(Viewport.YMin))
         {
             canvas.DrawText(ChartAxisLabels.FormatTick(Viewport.YMin, AxisLabelPrecisionY, AxisUnitY), plotRect.Left - axOff, plotRect.Bottom, SKTextAlign.Right, AxisFont, AxisLabelPaint);
         }
 
-        if (x0InView && Viewport.XMin + eps < z && z < Viewport.XMax - eps)
+        if (ShowXAxis && x0InView && Viewport.XMin + eps < z && z < Viewport.XMax - eps)
         {
             canvas.DrawText(ChartAxisLabels.FormatTick(z, AxisLabelPrecisionX, AxisUnitX), ToPixelX(z, plotRect), plotRect.Bottom + below, SKTextAlign.Center, AxisFont, AxisLabelPaint);
         }
 
-        if (y0InView && Viewport.YMin + eps < z && z < Viewport.YMax - eps)
+        if (ShowYAxis && y0InView && Viewport.YMin + eps < z && z < Viewport.YMax - eps)
         {
             canvas.DrawText(ChartAxisLabels.FormatTick(z, AxisLabelPrecisionY, AxisUnitY), plotRect.Left - axOff, ToPixelY(z, plotRect), SKTextAlign.Right, AxisFont, AxisLabelPaint);
         }

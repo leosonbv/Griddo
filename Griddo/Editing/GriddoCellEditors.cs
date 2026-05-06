@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace Griddo.Editing;
@@ -20,8 +20,8 @@ public interface IGriddoOptionsCellEditor : IGriddoCellEditor
 
 public interface IGriddoContextualOptionsCellEditor : IGriddoOptionsCellEditor
 {
-    IReadOnlyList<string> GetOptions(object? rowSource);
-    bool TryGetOptionExample(object? rowSource, string option, out string example);
+    IReadOnlyList<string> GetOptions(object? recordSource);
+    bool TryGetOptionExample(object? recordSource, string option, out string example);
 }
 
 public interface IGriddoSwatchOptionsCellEditor : IGriddoOptionsCellEditor
@@ -480,11 +480,11 @@ public sealed class GriddoFormatStringCellEditor : IGriddoContextualOptionsCellE
         return true;
     }
 
-    public IReadOnlyList<string> GetOptions(object? rowSource)
+    public IReadOnlyList<string> GetOptions(object? recordSource)
     {
-        var t = rowSource?.GetType();
-        var isNumeric = t?.GetProperty("IsNumericProperty")?.GetValue(rowSource) as bool? == true;
-        var isDateTime = t?.GetProperty("IsDateTimeProperty")?.GetValue(rowSource) as bool? == true;
+        var t = recordSource?.GetType();
+        var isNumeric = t?.GetProperty("IsNumericProperty")?.GetValue(recordSource) as bool? == true;
+        var isDateTime = t?.GetProperty("IsDateTimeProperty")?.GetValue(recordSource) as bool? == true;
         if (isDateTime && !isNumeric)
         {
             return DateTimeFormatOptions;
@@ -498,7 +498,7 @@ public sealed class GriddoFormatStringCellEditor : IGriddoContextualOptionsCellE
         return NumberFormatOptions;
     }
 
-    public bool TryGetOptionExample(object? rowSource, string option, out string example)
+    public bool TryGetOptionExample(object? recordSource, string option, out string example)
     {
         example = string.Empty;
         if (string.IsNullOrWhiteSpace(option) || string.Equals(option, "(none)", StringComparison.OrdinalIgnoreCase))
@@ -506,7 +506,7 @@ public sealed class GriddoFormatStringCellEditor : IGriddoContextualOptionsCellE
             return false;
         }
 
-        var formats = GetOptions(rowSource);
+        var formats = GetOptions(recordSource);
         var isDateMode = formats == DateTimeFormatOptions;
         try
         {

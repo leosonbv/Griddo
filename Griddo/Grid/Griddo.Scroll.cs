@@ -5,37 +5,37 @@ namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
-    private static double FloorToRowStep(double valuePx, double rowHeightPx)
+    private static double FloorToRecordStep(double valuePx, double recordHeightPx)
     {
-        if (rowHeightPx < 1e-9)
+        if (recordHeightPx < 1e-9)
         {
             return valuePx;
         }
 
-        return Math.Floor(valuePx / rowHeightPx + 1e-9) * rowHeightPx;
+        return Math.Floor(valuePx / recordHeightPx + 1e-9) * recordHeightPx;
     }
 
     /// <summary>
-    /// When <see cref="VisibleRowCount"/> is set, row height tracks viewport height; snap scroll extent so the thumb maps to whole-row offsets.
+    /// When <see cref="VisibleRecordCount"/> is set, record height tracks viewport height; snap scroll extent so the thumb maps to whole-record offsets.
     /// </summary>
     private double GetAlignedMaxVerticalScrollForSlider(double rawMaxVertical)
     {
-        if (_visibleRowCount <= 0 || Rows.Count == 0 || _viewportBodyHeight <= 0)
+        if (_visibleRecordCount <= 0 || Records.Count == 0 || _viewportBodyHeight <= 0)
         {
             return rawMaxVertical;
         }
 
-        var h = GetRowHeight(0);
+        var h = GetRecordHeight(0);
         if (h < 1e-6)
         {
             return rawMaxVertical;
         }
 
-        return FloorToRowStep(rawMaxVertical, h);
+        return FloorToRecordStep(rawMaxVertical, h);
     }
 
     /// <summary>
-    /// When <see cref="VisibleRowCount"/> is set, vertical scroll offset must be a multiple of row height so the top visible scroll row aligns with the body band (resize no longer leaves a partial row at the top).
+    /// When <see cref="VisibleRecordCount"/> is set, vertical scroll offset must be a multiple of record height so the top visible scroll record aligns with the body band (resize no longer leaves a partial record at the top).
     /// </summary>
     private double HarmonizeVerticalScrollOffset(double offsetPx)
     {
@@ -44,21 +44,21 @@ public sealed partial class Griddo
             return Math.Clamp(offsetPx, 0, _verticalScrollBar.Maximum);
         }
 
-        if (_visibleRowCount <= 0 || Rows.Count == 0 || _viewportBodyHeight <= 0)
+        if (_visibleRecordCount <= 0 || Records.Count == 0 || _viewportBodyHeight <= 0)
         {
             return Math.Clamp(offsetPx, 0, _verticalScrollBar.Maximum);
         }
 
-        var h = GetRowHeight(0);
+        var h = GetRecordHeight(0);
         if (h < 1e-6)
         {
             return Math.Clamp(offsetPx, 0, _verticalScrollBar.Maximum);
         }
 
-        var rawMax = Math.Max(0, GetScrollableRowsContentHeight() - GetScrollRowsViewportHeight());
+        var rawMax = Math.Max(0, GetScrollableRecordsContentHeight() - GetScrollRecordsViewportHeight());
         var clamped = Math.Clamp(offsetPx, 0, rawMax);
-        var maxAligned = FloorToRowStep(rawMax, h);
-        var snapped = FloorToRowStep(clamped, h);
+        var maxAligned = FloorToRecordStep(rawMax, h);
+        var snapped = FloorToRecordStep(clamped, h);
         return Math.Clamp(snapped, 0, maxAligned);
     }
 
@@ -72,23 +72,23 @@ public sealed partial class Griddo
 
         if (IsBodyTransposed)
         {
-            var fixedRowsW = GetTransposeFixedRowsWidth();
-            var scrollRowsViewport = Math.Max(0, _viewportBodyWidth - fixedRowsW);
-            var h = Rows.Count > 0 ? GetRowHeight(0) : MinRowHeight * ContentScale;
-            var fr = GetEffectiveFixedRowCount();
-            var scrollRowsContent = Math.Max(0, Rows.Count - fr) * h;
-            maxHorizontal = Math.Max(0, scrollRowsContent - scrollRowsViewport);
+            var fixedRecordsW = GetTransposeFixedRecordsWidth();
+            var scrollRecordsViewport = Math.Max(0, _viewportBodyWidth - fixedRecordsW);
+            var h = Records.Count > 0 ? GetRecordHeight(0) : GetMinimumRecordThickness() * ContentScale;
+            var fr = GetEffectiveFixedRecordCount();
+            var scrollRecordsContent = Math.Max(0, Records.Count - fr) * h;
+            maxHorizontal = Math.Max(0, scrollRecordsContent - scrollRecordsViewport);
 
-            var fixedColsH = GetFixedColumnsWidth();
+            var fixedColsH = GetFixedFieldsWidth();
             var scrollColsViewport = Math.Max(0, _viewportBodyHeight - fixedColsH);
             var scrollColsContent = 0.0;
-            for (var c = _fixedColumnCount; c < Columns.Count; c++)
+            for (var c = _fixedFieldCount; c < Fields.Count; c++)
             {
-                scrollColsContent += GetColumnWidth(c);
+                scrollColsContent += GetFieldWidth(c);
             }
 
             maxVertical = Math.Max(0, scrollColsContent - scrollColsViewport);
-            horizontalLargeChange = Math.Max(1, scrollRowsViewport);
+            horizontalLargeChange = Math.Max(1, scrollRecordsViewport);
             verticalLargeChange = Math.Max(1, scrollColsViewport);
             verticalSmallChange = 16;
         }
@@ -96,14 +96,14 @@ public sealed partial class Griddo
         {
             var scrollViewport = GetScrollViewportWidth();
             var scrollContent = GetScrollableContentWidth();
-            var scrollRowsViewport = GetScrollRowsViewportHeight();
-            var scrollRowsContent = GetScrollableRowsContentHeight();
+            var scrollRecordsViewport = GetScrollRecordsViewportHeight();
+            var scrollRecordsContent = GetScrollableRecordsContentHeight();
             maxHorizontal = Math.Max(0, scrollContent - scrollViewport);
-            var rawMaxVertical = Math.Max(0, scrollRowsContent - scrollRowsViewport);
+            var rawMaxVertical = Math.Max(0, scrollRecordsContent - scrollRecordsViewport);
             maxVertical = GetAlignedMaxVerticalScrollForSlider(rawMaxVertical);
             horizontalLargeChange = Math.Max(1, _viewportBodyWidth);
-            verticalLargeChange = Math.Max(1, scrollRowsViewport);
-            verticalSmallChange = Math.Max(1, GetRowHeight(0));
+            verticalLargeChange = Math.Max(1, scrollRecordsViewport);
+            verticalSmallChange = Math.Max(1, GetRecordHeight(0));
         }
 
         _horizontalScrollBar.LargeChange = horizontalLargeChange;
@@ -118,23 +118,23 @@ public sealed partial class Griddo
 
         SetHorizontalOffset(_horizontalOffset);
         SetVerticalOffset(_verticalOffset);
-        SnapVerticalScrollForVisibleRowFitMode();
+        SnapVerticalScrollForVisibleRecordFitMode();
     }
 
-    /// <summary>After viewport/row height changes, re-align scroll offset to whole rows so the scroll band starts on a row boundary.</summary>
-    private void SnapVerticalScrollForVisibleRowFitMode()
+    /// <summary>After viewport/record height changes, re-align scroll offset to whole records so the scroll band starts on a record boundary.</summary>
+    private void SnapVerticalScrollForVisibleRecordFitMode()
     {
         if (_isTransposed)
         {
             return;
         }
 
-        if (_visibleRowCount <= 0 || Rows.Count == 0 || _viewportBodyHeight <= 0)
+        if (_visibleRecordCount <= 0 || Records.Count == 0 || _viewportBodyHeight <= 0)
         {
             return;
         }
 
-        var h = GetRowHeight(0);
+        var h = GetRecordHeight(0);
         if (h < 1e-6)
         {
             return;

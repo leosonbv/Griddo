@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Globalization;
 using System.Windows;
@@ -7,7 +7,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
-using Griddo.Columns;
+using Griddo.Fields;
 using Griddo.Editing;
 using Griddo.Primitives;
 
@@ -19,14 +19,15 @@ public sealed partial class Griddo : FrameworkElement
     {
         None,
         Corner,
-        Column,
-        Row,
+        Field,
+        Record,
     }
 
-    private const double ColumnHeaderHeightBase = 22;
-    private const double DefaultRowHeight = 24;
-    private const double MinColumnWidth = 28;
-    private const double MinRowHeight = 18;
+    private const double FieldHeaderHeightBase = 22;
+    private const double DefaultRecordHeight = 24;
+    private const double MinFieldWidth = 28;
+    private const double MinRecordHeight = 18;
+    private const double MinRecordTextPadding = 4;
     private const double ResizeGripSize = 4;
     private const double ScrollBarSize = 14;
     private const double CurrentCellBorderThickness = 1.0;
@@ -41,22 +42,24 @@ public sealed partial class Griddo : FrameworkElement
         0.25, 0.5, 0.75, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0
     ];
 
+    private static readonly double MinReadableRecordHeight = ComputeDefaultReadableRecordHeight();
+
     private readonly HashSet<GriddoCellAddress> _selectedCells = [];
-    /// <summary>Column indices whose headers stay highlighted after a column-header context gesture cleared body cells.</summary>
-    private readonly HashSet<int> _columnHeaderOnlySelection = [];
+    /// <summary>Field indices whose headers stay highlighted after a field-header context gesture cleared body cells.</summary>
+    private readonly HashSet<int> _fieldHeaderOnlySelection = [];
 
-    /// <summary>Row indices whose headers stay highlighted after a row-header context gesture cleared body cells.</summary>
-    private readonly HashSet<int> _rowHeaderOnlySelection = [];
+    /// <summary>Record indices whose headers stay highlighted after a record-header context gesture cleared body cells.</summary>
+    private readonly HashSet<int> _recordHeaderOnlySelection = [];
 
-    /// <summary>Column headers outlined in red after a column-header right-click (context scope).</summary>
-    private readonly HashSet<int> _columnHeaderRightClickOutline = [];
+    /// <summary>Field headers outlined in red after a field-header right-click (context scope).</summary>
+    private readonly HashSet<int> _fieldHeaderRightClickOutline = [];
 
-    /// <summary>Row headers outlined in red after a row-header right-click (context scope).</summary>
-    private readonly HashSet<int> _rowHeaderRightClickOutline = [];
+    /// <summary>Record headers outlined in red after a record-header right-click (context scope).</summary>
+    private readonly HashSet<int> _recordHeaderRightClickOutline = [];
     private readonly HashSet<GriddoCellAddress> _selectionDragSnapshot = [];
-    private readonly Dictionary<int, double> _columnWidthOverrides = [];
-    /// <summary>Grid column indices that should not receive initial sample auto-width (e.g. width restored from persistence).</summary>
-    private readonly HashSet<int> _suppressInitialAutoWidthColumns = [];
+    private readonly Dictionary<IGriddoFieldView, double> _fieldWidthOverrides = [];
+    /// <summary>Grid field indices that should not receive initial sample auto-width (e.g. width restored from persistence).</summary>
+    private readonly HashSet<IGriddoFieldView> _suppressInitialAutoWidthFields = [];
     private readonly GriddoTextEditSession _editSession = new();
     private ContextMenu? _activeEditOptionsMenu;
     private readonly VisualCollection _children;
@@ -90,7 +93,7 @@ public sealed partial class Griddo : FrameworkElement
         FontWeight = FontWeights.SemiBold
     };
     private readonly DispatcherTimer _scaleFeedbackTimer;
-    private double _uniformRowHeight = DefaultRowHeight;
+    private double _uniformRecordHeight = DefaultRecordHeight;
     private GriddoCellAddress _currentCell = new(0, 0);
     private bool _isEditing;
     private bool _isCommittingEdit;
@@ -103,66 +106,66 @@ public sealed partial class Griddo : FrameworkElement
     private bool _pendingHostedEditActivation;
     private GriddoCellAddress _pendingHostedEditCell;
     private bool _isDraggingEditSelection;
-    private bool _isResizingColumn;
-    private bool _isResizingRow;
-    private int _resizingColumnIndex = -1;
-    private int _resizingRowIndex = -1;
+    private bool _isResizingField;
+    private bool _isResizingRecord;
+    private int _resizingFieldIndex = -1;
+    private int _resizingRecordIndex = -1;
     private Point _resizeStartPoint;
     private double _resizeInitialSize;
-    private double _resizePreserveOldRowHeight;
+    private double _resizePreserveOldRecordHeight;
     private double _resizePreserveOldVerticalOffset;
     private double _resizePreserveOldHorizontalOffset;
-    private bool _isTrackingColumnMove;
-    private bool _isMovingColumn;
-    private bool _isMovingPointerInColumnHeader;
-    private int _movingColumnIndex = -1;
-    private int _columnMoveCueIndex = -1;
-    private Point _columnMoveStartPoint;
-    private bool _columnMoveStartedFromSelectedHeader;
-    private bool _pendingColumnHeaderSelectionOnMouseUp;
-    private int _pendingColumnHeaderIndex = -1;
-    private bool _pendingColumnHeaderSelectionAdditive;
-    private bool _pendingColumnHeaderPreserveSelection;
-    private bool _isDraggingColumnHeaderSelection;
-    private bool _columnHeaderDragIsAdditive;
-    private int _columnHeaderDragAnchorColumn = -1;
-    private int _columnHeaderDragCurrentColumn = -1;
-    private bool _isTrackingRowMove;
-    private bool _isMovingRow;
-    private int _movingRowIndex = -1;
-    private int _rowMoveCueIndex = -1;
-    private Point _rowMoveStartPoint;
-    private bool _pendingRowHeaderSelectionOnMouseUp;
-    private int _pendingRowHeaderIndex = -1;
-    private bool _pendingRowHeaderSelectionAdditive;
-    private bool _pendingRowHeaderPreserveSelection;
-    private bool _isDraggingRowHeaderSelection;
-    private bool _rowHeaderDragIsAdditive;
-    private int _rowHeaderDragAnchorRow = -1;
-    private int _rowHeaderDragCurrentRow = -1;
+    private bool _isTrackingFieldMove;
+    private bool _isMovingField;
+    private bool _isMovingPointerInFieldHeader;
+    private int _movingFieldIndex = -1;
+    private int _fieldMoveCueIndex = -1;
+    private Point _fieldMoveStartPoint;
+    private bool _fieldMoveStartedFromSelectedHeader;
+    private bool _pendingFieldHeaderSelectionOnMouseUp;
+    private int _pendingFieldHeaderIndex = -1;
+    private bool _pendingFieldHeaderSelectionAdditive;
+    private bool _pendingFieldHeaderPreserveSelection;
+    private bool _isDraggingFieldHeaderSelection;
+    private bool _fieldHeaderDragIsAdditive;
+    private int _fieldHeaderDragAnchorField = -1;
+    private int _fieldHeaderDragCurrentField = -1;
+    private bool _isTrackingRecordMove;
+    private bool _isMovingRecord;
+    private int _movingRecordIndex = -1;
+    private int _recordMoveCueIndex = -1;
+    private Point _recordMoveStartPoint;
+    private bool _pendingRecordHeaderSelectionOnMouseUp;
+    private int _pendingRecordHeaderIndex = -1;
+    private bool _pendingRecordHeaderSelectionAdditive;
+    private bool _pendingRecordHeaderPreserveSelection;
+    private bool _isDraggingRecordHeaderSelection;
+    private bool _recordHeaderDragIsAdditive;
+    private int _recordHeaderDragAnchorRecord = -1;
+    private int _recordHeaderDragCurrentRecord = -1;
     private HeaderFocusKind _headerFocusKind;
-    private int _headerFocusColumnIndex;
-    private int _headerFocusRowIndex;
+    private int _headerFocusFieldIndex;
+    private int _headerFocusRecordIndex;
     private double _horizontalOffset;
-    private int _fixedColumnCount;
-    private int _fixedRowCount;
+    private int _fixedFieldCount;
+    private int _fixedRecordCount;
     private double _verticalOffset;
     private double _viewportBodyWidth;
     private double _viewportBodyHeight;
-    private double _rowHeaderWidth = 40;
+    private double _recordHeaderWidth = 40;
     private string _findText = string.Empty;
     private GriddoCellAddress _findMatchCell = new(-1, -1);
     private readonly HashSet<GriddoCellAddress> _findMatchedCells = [];
     private readonly List<string> _findHistory = [];
     private bool _pendingAutoFocus = true;
-    private bool _hasAutoSizedColumns;
+    private bool _hasAutoSizedFields;
     private bool _initialSampleAutoSizeScheduled;
-    private int _visibleRowCount;
+    private int _visibleRecordCount;
     private int _suspendGridCollectionChanged;
-    private readonly ToolTip _columnHeaderToolTip = new();
-    private bool _columnHeaderToolTipNeedsReattach;
-    private bool _priorPointerOnDescribedColumnHeader;
-    private int _columnHeaderToolTipClosedSuppress;
+    private readonly ToolTip _fieldHeaderToolTip = new();
+    private bool _fieldHeaderToolTipNeedsReattach;
+    private bool _priorPointerOnDescribedFieldHeader;
+    private int _fieldHeaderToolTipClosedSuppress;
 
     /// <summary>
     /// Synthetic MouseDown from hosted-plot direct-edit relay bubbles to this element; when non-zero, ignore that re-entrant pass.
@@ -174,8 +177,8 @@ public sealed partial class Griddo : FrameworkElement
         Focusable = true;
         SnapsToDevicePixels = true;
         UseLayoutRounding = true;
-        Rows = new ObservableCollection<object>();
-        Columns = new ObservableCollection<IGriddoColumnView>();
+        Records = new ObservableCollection<object>();
+        Fields = new ObservableCollection<IGriddoFieldView>();
         _children = new VisualCollection(this);
 
         _horizontalScrollBar = new ScrollBar
@@ -215,13 +218,13 @@ public sealed partial class Griddo : FrameworkElement
 
         _children.Add(_scaleFeedbackLayer);
 
-        Rows.CollectionChanged += OnGridCollectionChanged;
-        Columns.CollectionChanged += OnGridCollectionChanged;
-        UpdateRowHeaderWidth();
-        _columnHeaderToolTip.HasDropShadow = false;
-        _columnHeaderToolTip.BorderThickness = new Thickness(0);
-        _columnHeaderToolTip.Closed += ColumnHeaderToolTipOnClosed;
-        ToolTip = _columnHeaderToolTip;
+        Records.CollectionChanged += OnGridCollectionChanged;
+        Fields.CollectionChanged += OnGridCollectionChanged;
+        UpdateRecordHeaderWidth();
+        _fieldHeaderToolTip.HasDropShadow = false;
+        _fieldHeaderToolTip.BorderThickness = new Thickness(0);
+        _fieldHeaderToolTip.Closed += FieldHeaderToolTipOnClosed;
+        ToolTip = _fieldHeaderToolTip;
         ToolTipService.SetBetweenShowDelay(this, 0);
         Loaded += OnLoadedRequestFocus;
         IsVisibleChanged += OnIsVisibleChangedRequestFocus;
@@ -267,20 +270,22 @@ public sealed partial class Griddo : FrameworkElement
         }));
     }
 
-    public ObservableCollection<object> Rows { get; }
-    public ObservableCollection<IGriddoColumnView> Columns { get; }
+    public ObservableCollection<object> Records { get; }
+    public ObservableCollection<IGriddoFieldView> Fields { get; }
 
     public IReadOnlyCollection<GriddoCellAddress> SelectedCells => _selectedCells;
 
     /// <summary>Keyboard/mouse focus cell (not necessarily the only selected cell when a range is selected).</summary>
     public GriddoCellAddress CurrentCell => _currentCell;
 
-    public event EventHandler<GriddoColumnHeaderMouseEventArgs>? ColumnHeaderRightClick;
+    public event EventHandler<GriddoFieldHeaderMouseEventArgs>? FieldHeaderRightClick;
     public event EventHandler? SortDescriptorsChanged;
-    public event EventHandler? UniformRowHeightChanged;
+    public event EventHandler? UniformRecordHeightChanged;
 
-    /// <summary>Fires on row header right-click; see <see cref="GriddoRowHeaderMouseEventArgs.SelectedRowIndices"/> for the full scope.</summary>
-    public event EventHandler<GriddoRowHeaderMouseEventArgs>? RowHeaderRightClick;
+    /// <summary>Fires on record header right-click; see <see cref="GriddoRecordHeaderMouseEventArgs.SelectedRecordIndices"/> for the full scope.</summary>
+    public event EventHandler<GriddoRecordHeaderMouseEventArgs>? RecordHeaderRightClick;
+    /// <summary>Fires on right-click in the top-left corner header cell.</summary>
+    public event EventHandler? CornerHeaderRightClick;
     public IReadOnlyList<GriddoSortDescriptor> SortDescriptors => _sortDescriptors;
 
     /// <summary>Optional context menu for body-cell right-click (after selection rules are applied).</summary>
@@ -290,40 +295,61 @@ public sealed partial class Griddo : FrameworkElement
     /// <summary>Fires before <see cref="CellContextMenu"/> opens; set <see cref="GriddoCellContextMenuEventArgs.Handled"/> to suppress the default menu.</summary>
     public event EventHandler<GriddoCellContextMenuEventArgs>? CellContextMenuOpening;
 
-    /// <summary>Uniform row height for all rows (minimum applies).</summary>
-    public double UniformRowHeight
+    /// <summary>Uniform record height for all records (minimum applies).</summary>
+    public double UniformRecordHeight
     {
-        get => _uniformRowHeight;
+        get => _uniformRecordHeight;
         set
         {
-            var clamped = Math.Max(MinRowHeight, value);
-            if (Math.Abs(_uniformRowHeight - clamped) < double.Epsilon)
+            var clamped = Math.Max(GetMinimumRecordThickness(), value);
+            if (Math.Abs(_uniformRecordHeight - clamped) < double.Epsilon)
             {
                 return;
             }
 
-            _uniformRowHeight = clamped;
-            UniformRowHeightChanged?.Invoke(this, EventArgs.Empty);
+            _uniformRecordHeight = clamped;
+            UniformRecordHeightChanged?.Invoke(this, EventArgs.Empty);
             InvalidateMeasure();
             InvalidateVisual();
         }
     }
 
-    /// <summary>
-    /// 0 (X) = use <see cref="UniformRowHeight"/>. 1..10 = fit exactly this many rows into visible body height.
-    /// </summary>
-    public int VisibleRowCount
+    public static double GetDefaultMinimumRecordThickness() => MinReadableRecordHeight;
+
+    private static double ComputeDefaultReadableRecordHeight()
     {
-        get => _visibleRowCount;
+        var typeface = new Typeface("Segoe UI");
+        var probe = new FormattedText(
+            "Ag",
+            CultureInfo.CurrentCulture,
+            FlowDirection.LeftToRight,
+            typeface,
+            12.0,
+            Brushes.Black,
+            1.0);
+        return Math.Max(MinRecordHeight, Math.Ceiling(probe.Height + MinRecordTextPadding));
+    }
+
+    private static double GetMinimumRecordThickness()
+    {
+        return MinReadableRecordHeight;
+    }
+
+    /// <summary>
+    /// 0 (X) = use <see cref="UniformRecordHeight"/>. 1..10 = fit exactly this many records into visible body height.
+    /// </summary>
+    public int VisibleRecordCount
+    {
+        get => _visibleRecordCount;
         set
         {
             var clamped = Math.Clamp(value, 0, 10);
-            if (_visibleRowCount == clamped)
+            if (_visibleRecordCount == clamped)
             {
                 return;
             }
 
-            _visibleRowCount = clamped;
+            _visibleRecordCount = clamped;
             InvalidateMeasure();
             InvalidateVisual();
         }
@@ -332,8 +358,8 @@ public sealed partial class Griddo : FrameworkElement
     private bool _isTransposed;
 
     /// <summary>
-    /// When true, logical rows extend horizontally and logical columns vertically (row headers on top, column headers on the left).
-    /// Horizontal scroll follows rows; vertical scroll follows columns.
+    /// When true, logical records extend horizontally and logical fields vertically (record headers on top, field headers on the left).
+    /// Horizontal scroll follows records; vertical scroll follows fields.
     /// </summary>
     public bool IsTransposed
     {
@@ -358,8 +384,8 @@ public sealed partial class Griddo : FrameworkElement
     public Brush SelectionBackground { get; set; } = new SolidColorBrush(Color.FromArgb(120, 102, 178, 255));
     public Brush CurrentCellBorderBrush { get; set; } = Brushes.DodgerBlue;
     public Brush FindMatchBackground { get; set; } = new SolidColorBrush(Color.FromArgb(170, 255, 235, 120));
-    private bool _showColumnHeaderSelectionColoring = true;
-    private bool _showRowHeaderSelectionColoring = true;
+    private bool _showFieldHeaderSelectionColoring = true;
+    private bool _showRecordHeaderSelectionColoring = true;
     private bool _showHorizontalScrollBar = true;
     private bool _showVerticalScrollBar = true;
     private bool _immediateCellEditOnSingleClick;
@@ -367,38 +393,38 @@ public sealed partial class Griddo : FrameworkElement
     public bool ShowSortingIndicators { get; set; } = true;
     public bool ShowHeaderSelectionColoring
     {
-        get => ShowColumnHeaderSelectionColoring && ShowRowHeaderSelectionColoring;
+        get => ShowFieldHeaderSelectionColoring && ShowRecordHeaderSelectionColoring;
         set
         {
-            ShowColumnHeaderSelectionColoring = value;
-            ShowRowHeaderSelectionColoring = value;
+            ShowFieldHeaderSelectionColoring = value;
+            ShowRecordHeaderSelectionColoring = value;
         }
     }
-    public bool ShowColumnHeaderSelectionColoring
+    public bool ShowFieldHeaderSelectionColoring
     {
-        get => _showColumnHeaderSelectionColoring;
+        get => _showFieldHeaderSelectionColoring;
         set
         {
-            if (_showColumnHeaderSelectionColoring == value)
+            if (_showFieldHeaderSelectionColoring == value)
             {
                 return;
             }
 
-            _showColumnHeaderSelectionColoring = value;
+            _showFieldHeaderSelectionColoring = value;
             InvalidateVisual();
         }
     }
-    public bool ShowRowHeaderSelectionColoring
+    public bool ShowRecordHeaderSelectionColoring
     {
-        get => _showRowHeaderSelectionColoring;
+        get => _showRecordHeaderSelectionColoring;
         set
         {
-            if (_showRowHeaderSelectionColoring == value)
+            if (_showRecordHeaderSelectionColoring == value)
             {
                 return;
             }
 
-            _showRowHeaderSelectionColoring = value;
+            _showRecordHeaderSelectionColoring = value;
             InvalidateVisual();
         }
     }
@@ -444,44 +470,44 @@ public sealed partial class Griddo : FrameworkElement
         set => _immediateCellEditOnSingleClick = value;
     }
 
-    /// <summary>Pen stroke for the right edge of the last fixed column only (freeze boundary before scrollable columns).</summary>
-    public Brush FixedColumnRightBorderBrush { get; set; } = new SolidColorBrush(Color.FromRgb(118, 118, 118));
+    /// <summary>Pen stroke for the right edge of the last fixed field only (freeze boundary before scrollable fields).</summary>
+    public Brush FixedFieldRightBorderBrush { get; set; } = new SolidColorBrush(Color.FromRgb(118, 118, 118));
 
-    /// <summary>Pen stroke for the bottom edge of the last fixed row only (freeze boundary above scrollable rows).</summary>
-    public Brush FixedRowBottomBorderBrush { get; set; } = new SolidColorBrush(Color.FromRgb(118, 118, 118));
+    /// <summary>Pen stroke for the bottom edge of the last fixed record only (freeze boundary above scrollable records).</summary>
+    public Brush FixedRecordBottomBorderBrush { get; set; } = new SolidColorBrush(Color.FromRgb(118, 118, 118));
 
-    /// <summary>Number of leading columns that remain fixed on the left when scrolling horizontally (0 = off).</summary>
-    public int FixedColumnCount
+    /// <summary>Number of leading fields that remain fixed on the left when scrolling horizontally (0 = off).</summary>
+    public int FixedFieldCount
     {
-        get => _fixedColumnCount;
+        get => _fixedFieldCount;
         set
         {
-            var v = Math.Clamp(value, 0, Math.Max(0, Columns.Count));
-            if (v == _fixedColumnCount)
+            var v = Math.Clamp(value, 0, Math.Max(0, Fields.Count));
+            if (v == _fixedFieldCount)
             {
                 return;
             }
 
-            _fixedColumnCount = v;
+            _fixedFieldCount = v;
             UpdateScrollBars();
             UpdateHostCanvasClips();
             InvalidateVisual();
         }
     }
 
-    /// <summary>Number of leading rows that stay fixed at the top when scrolling vertically (0 = off).</summary>
-    public int FixedRowCount
+    /// <summary>Number of leading records that stay fixed at the top when scrolling vertically (0 = off).</summary>
+    public int FixedRecordCount
     {
-        get => _fixedRowCount;
+        get => _fixedRecordCount;
         set
         {
-            var v = Math.Clamp(value, 0, Math.Max(0, Rows.Count));
-            if (v == _fixedRowCount)
+            var v = Math.Clamp(value, 0, Math.Max(0, Records.Count));
+            if (v == _fixedRecordCount)
             {
                 return;
             }
 
-            _fixedRowCount = v;
+            _fixedRecordCount = v;
             UpdateScrollBars();
             InvalidateVisual();
         }
@@ -491,7 +517,7 @@ public sealed partial class Griddo : FrameworkElement
     private bool _hostedPlotDirectEditOnMouseDown;
 
     /// <summary>
-    /// When true, a single left click on a hosted Plot column activates chart edit mode on mouse down and forwards that press to the chart.
+    /// When true, a single left click on a hosted Plot field activates chart edit mode on mouse down and forwards that press to the chart.
     /// </summary>
     public bool HostedPlotDirectEditOnMouseDown
     {
@@ -508,7 +534,7 @@ public sealed partial class Griddo : FrameworkElement
         }
     }
 
-    /// <summary>Ctrl+mouse wheel: scales row/column sizes, cell fonts, grid lines, and hosted Plotto stroke widths.</summary>
+    /// <summary>Ctrl+mouse wheel: scales record/field sizes, cell fonts, grid lines, and hosted Plotto stroke widths.</summary>
     public double ContentScale
     {
         get => _contentScale;
@@ -521,7 +547,7 @@ public sealed partial class Griddo : FrameworkElement
             }
 
             _contentScale = v;
-            UpdateRowHeaderWidth();
+            UpdateRecordHeaderWidth();
             InvalidateMeasure();
             InvalidateVisual();
         }
@@ -571,7 +597,7 @@ public sealed partial class Griddo : FrameworkElement
         return stops[0];
     }
 
-    private double ScaledColumnHeaderHeight => ColumnHeaderHeightBase * _contentScale;
+    private double ScaledFieldHeaderHeight => FieldHeaderHeightBase * _contentScale;
 
     private double EffectiveFontSize => 12.0 * _contentScale;
 
@@ -598,21 +624,21 @@ public sealed partial class Griddo : FrameworkElement
             return;
         }
 
-        _fixedColumnCount = Math.Clamp(_fixedColumnCount, 0, Math.Max(0, Columns.Count));
-        _fixedRowCount = Math.Clamp(_fixedRowCount, 0, Math.Max(0, Rows.Count));
-        if (Rows.Count == 0)
+        _fixedFieldCount = Math.Clamp(_fixedFieldCount, 0, Math.Max(0, Fields.Count));
+        _fixedRecordCount = Math.Clamp(_fixedRecordCount, 0, Math.Max(0, Records.Count));
+        if (Records.Count == 0)
         {
-            _hasAutoSizedColumns = false;
+            _hasAutoSizedFields = false;
             _initialSampleAutoSizeScheduled = false;
-            _suppressInitialAutoWidthColumns.Clear();
+            _suppressInitialAutoWidthFields.Clear();
         }
 
-        if (Rows.Count > 0 && Columns.Count > 0 && !_hasAutoSizedColumns)
+        if (Records.Count > 0 && Fields.Count > 0 && !_hasAutoSizedFields)
         {
             ScheduleInitialSampleAutoSize();
         }
 
-        UpdateRowHeaderWidth();
+        UpdateRecordHeaderWidth();
         UpdateScrollBars();
         UpdateHostCanvasClips();
         InvalidateVisual();

@@ -36,14 +36,14 @@ public sealed partial class Griddo
 
     private bool FindNextMatch(bool forward, bool fromCurrentMatch)
     {
-        if (_findMatchedCells.Count == 0 || Rows.Count == 0 || Columns.Count == 0)
+        if (_findMatchedCells.Count == 0 || Records.Count == 0 || Fields.Count == 0)
         {
             _findMatchCell = new GriddoCellAddress(-1, -1);
             return false;
         }
 
         var matchedFlat = _findMatchedCells
-            .Select(a => (a.RowIndex * Columns.Count) + a.ColumnIndex)
+            .Select(a => (a.RecordIndex * Fields.Count) + a.FieldIndex)
             .OrderBy(i => i)
             .ToList();
 
@@ -54,7 +54,7 @@ public sealed partial class Griddo
         }
 
         var selectedFlat = _findMatchCell.IsValid
-            ? (_findMatchCell.RowIndex * Columns.Count) + _findMatchCell.ColumnIndex
+            ? (_findMatchCell.RecordIndex * Fields.Count) + _findMatchCell.FieldIndex
             : -1;
 
         var pickedFlat = matchedFlat[0];
@@ -82,7 +82,7 @@ public sealed partial class Griddo
             }
         }
 
-        _findMatchCell = new GriddoCellAddress(pickedFlat / Columns.Count, pickedFlat % Columns.Count);
+        _findMatchCell = new GriddoCellAddress(pickedFlat / Fields.Count, pickedFlat % Fields.Count);
         _currentCell = _findMatchCell;
         CenterCellInViewport(_findMatchCell);
         return true;
@@ -91,21 +91,21 @@ public sealed partial class Griddo
     private void RebuildFindMatches()
     {
         _findMatchedCells.Clear();
-        if (Rows.Count == 0 || Columns.Count == 0 || string.IsNullOrWhiteSpace(_findText))
+        if (Records.Count == 0 || Fields.Count == 0 || string.IsNullOrWhiteSpace(_findText))
         {
             _findMatchCell = new GriddoCellAddress(-1, -1);
             return;
         }
 
         var normalizedNeedle = _findText.Trim();
-        for (var row = 0; row < Rows.Count; row++)
+        for (var record = 0; record < Records.Count; record++)
         {
-            for (var col = 0; col < Columns.Count; col++)
+            for (var col = 0; col < Fields.Count; col++)
             {
-                var text = GetCellFindText(row, col);
+                var text = GetCellFindText(record, col);
                 if (text.IndexOf(normalizedNeedle, StringComparison.CurrentCultureIgnoreCase) >= 0)
                 {
-                    _findMatchedCells.Add(new GriddoCellAddress(row, col));
+                    _findMatchedCells.Add(new GriddoCellAddress(record, col));
                 }
             }
         }
@@ -138,52 +138,52 @@ public sealed partial class Griddo
         }
     }
 
-    private string GetCellFindText(int row, int col)
+    private string GetCellFindText(int record, int col)
     {
-        if (row < 0 || row >= Rows.Count || col < 0 || col >= Columns.Count)
+        if (record < 0 || record >= Records.Count || col < 0 || col >= Fields.Count)
         {
             return string.Empty;
         }
 
-        var column = Columns[col];
-        var value = column.GetValue(Rows[row]);
-        return column.FormatValue(value) ?? string.Empty;
+        var field = Fields[col];
+        var value = field.GetValue(Records[record]);
+        return field.FormatValue(value) ?? string.Empty;
     }
 
     private void CenterCellInViewport(GriddoCellAddress cell)
     {
-        if (!cell.IsValid || Rows.Count == 0 || Columns.Count == 0 || _viewportBodyWidth <= 0 || _viewportBodyHeight <= 0)
+        if (!cell.IsValid || Records.Count == 0 || Fields.Count == 0 || _viewportBodyWidth <= 0 || _viewportBodyHeight <= 0)
         {
             return;
         }
 
-        var rect = GetCellRect(cell.RowIndex, cell.ColumnIndex);
+        var rect = GetCellRect(cell.RecordIndex, cell.FieldIndex);
         if (rect.IsEmpty)
         {
             return;
         }
 
-        // Center within the vertically scrollable band (below frozen rows), not the full body height.
-        var fRows = GetEffectiveFixedRowCount();
-        if (cell.RowIndex >= fRows)
+        // Center within the vertically scrollable band (below frozen records), not the full body height.
+        var fRecords = GetEffectiveFixedRecordCount();
+        if (cell.RecordIndex >= fRecords)
         {
-            var vh = GetScrollRowsViewportHeight();
+            var vh = GetScrollRecordsViewportHeight();
             if (vh > 1e-6)
             {
-                var targetCenterY = ScaledColumnHeaderHeight + GetFixedRowsHeight() + vh / 2.0;
+                var targetCenterY = ScaledFieldHeaderHeight + GetFixedRecordsHeight() + vh / 2.0;
                 var deltaY = rect.Y + (rect.Height / 2.0) - targetCenterY;
                 SetVerticalOffset(_verticalOffset + deltaY);
             }
         }
 
-        // Center within the horizontally scrollable band (to the right of frozen columns).
-        if (cell.ColumnIndex >= _fixedColumnCount)
+        // Center within the horizontally scrollable band (to the right of frozen fields).
+        if (cell.FieldIndex >= _fixedFieldCount)
         {
-            var fixedW = GetFixedColumnsWidth();
+            var fixedW = GetFixedFieldsWidth();
             var scrollVp = GetScrollViewportWidth();
             if (scrollVp > 1e-6)
             {
-                var targetCenterX = _rowHeaderWidth + fixedW + scrollVp / 2.0;
+                var targetCenterX = _recordHeaderWidth + fixedW + scrollVp / 2.0;
                 var deltaX = rect.X + (rect.Width / 2.0) - targetCenterX;
                 SetHorizontalOffset(_horizontalOffset + deltaX);
             }

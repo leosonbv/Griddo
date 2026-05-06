@@ -3,7 +3,7 @@ using System.Linq;
 namespace Griddo.Editing;
 
 /// <summary>
-/// Grid configurator "Font" column: dropdown for default / font dialog, accepts pasted summary lines.
+/// Grid configurator "Font" field: dropdown for default / font dialog, accepts pasted summary lines.
 /// </summary>
 public sealed class GriddoConfiguratorFontSummaryCellEditor : IGriddoOptionsCellEditor
 {

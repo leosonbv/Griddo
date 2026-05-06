@@ -2,7 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
-using Griddo.Columns;
+using Griddo.Fields;
 using Griddo.Editing;
 using Griddo.Primitives;
 
@@ -33,42 +33,42 @@ public sealed partial class Griddo
 
     private bool IsCurrentHostedCellInEditMode()
     {
-        if (_currentCell.RowIndex < 0 || _currentCell.RowIndex >= Rows.Count || _currentCell.ColumnIndex < 0 || _currentCell.ColumnIndex >= Columns.Count)
+        if (_currentCell.RecordIndex < 0 || _currentCell.RecordIndex >= Records.Count || _currentCell.FieldIndex < 0 || _currentCell.FieldIndex >= Fields.Count)
         {
             return false;
         }
 
-        if (Columns[_currentCell.ColumnIndex] is not IGriddoHostedColumnView hostedColumn)
+        if (Fields[_currentCell.FieldIndex] is not IGriddoHostedFieldView hostedField)
         {
             return false;
         }
 
-        return TryGetHostedElement(_currentCell) is { } host && hostedColumn.IsHostInEditMode(host);
+        return TryGetHostedElement(_currentCell) is { } host && hostedField.IsHostInEditMode(host);
     }
 
     private bool IsHostedCellInEditMode(GriddoCellAddress cell)
     {
-        if (cell.RowIndex < 0 || cell.RowIndex >= Rows.Count || cell.ColumnIndex < 0 || cell.ColumnIndex >= Columns.Count)
+        if (cell.RecordIndex < 0 || cell.RecordIndex >= Records.Count || cell.FieldIndex < 0 || cell.FieldIndex >= Fields.Count)
         {
             return false;
         }
 
-        if (Columns[cell.ColumnIndex] is not IGriddoHostedColumnView hostedColumn)
+        if (Fields[cell.FieldIndex] is not IGriddoHostedFieldView hostedField)
         {
             return false;
         }
 
-        return TryGetHostedElement(cell) is { } host && hostedColumn.IsHostInEditMode(host);
+        return TryGetHostedElement(cell) is { } host && hostedField.IsHostInEditMode(host);
     }
 
     private void SetCurrentHostedCellEditMode(bool isEditing)
     {
-        if (_currentCell.RowIndex < 0 || _currentCell.RowIndex >= Rows.Count || _currentCell.ColumnIndex < 0 || _currentCell.ColumnIndex >= Columns.Count)
+        if (_currentCell.RecordIndex < 0 || _currentCell.RecordIndex >= Records.Count || _currentCell.FieldIndex < 0 || _currentCell.FieldIndex >= Fields.Count)
         {
             return;
         }
 
-        if (Columns[_currentCell.ColumnIndex] is not IGriddoHostedColumnView hostedColumn)
+        if (Fields[_currentCell.FieldIndex] is not IGriddoHostedFieldView hostedField)
         {
             return;
         }
@@ -78,18 +78,18 @@ public sealed partial class Griddo
             return;
         }
 
-        hostedColumn.SetHostEditMode(host, isEditing);
+        hostedField.SetHostEditMode(host, isEditing);
         InvalidateVisual();
     }
 
     private void BeginCurrentCellEdit()
     {
-        if (_currentCell.RowIndex < 0 || _currentCell.RowIndex >= Rows.Count || _currentCell.ColumnIndex < 0 || _currentCell.ColumnIndex >= Columns.Count)
+        if (_currentCell.RecordIndex < 0 || _currentCell.RecordIndex >= Records.Count || _currentCell.FieldIndex < 0 || _currentCell.FieldIndex >= Fields.Count)
         {
             return;
         }
 
-        if (Columns[_currentCell.ColumnIndex] is IGriddoHostedColumnView)
+        if (Fields[_currentCell.FieldIndex] is IGriddoHostedFieldView)
         {
             SetCurrentHostedCellEditMode(true);
             return;
@@ -99,44 +99,44 @@ public sealed partial class Griddo
     }
 
 
-    private bool TryGetCurrentColumn(out IGriddoColumnView column)
+    private bool TryGetCurrentField(out IGriddoFieldView field)
     {
-        if (_currentCell.ColumnIndex < 0 || _currentCell.ColumnIndex >= Columns.Count)
+        if (_currentCell.FieldIndex < 0 || _currentCell.FieldIndex >= Fields.Count)
         {
-            column = default!;
+            field = default!;
             return false;
         }
 
-        column = Columns[_currentCell.ColumnIndex];
+        field = Fields[_currentCell.FieldIndex];
         return true;
     }
 
     private object? GetCurrentValue()
     {
-        if (_currentCell.RowIndex < 0 || _currentCell.RowIndex >= Rows.Count || !TryGetCurrentColumn(out var column))
+        if (_currentCell.RecordIndex < 0 || _currentCell.RecordIndex >= Records.Count || !TryGetCurrentField(out var field))
         {
             return null;
         }
 
-        return column.GetValue(Rows[_currentCell.RowIndex]);
+        return field.GetValue(Records[_currentCell.RecordIndex]);
     }
 
     private void BeginEditWithoutReplacing()
     {
         CloseActiveEditOptionsMenu();
-        if (!TryGetCurrentColumn(out var column))
+        if (!TryGetCurrentField(out var field))
         {
             return;
         }
 
-        if (column is IGriddoHostedColumnView)
+        if (field is IGriddoHostedFieldView)
         {
             return;
         }
 
-        _editSession.Start(column.Editor.BeginEdit(GetCurrentValue()));
+        _editSession.Start(field.Editor.BeginEdit(GetCurrentValue()));
         _isEditing = true;
-        if (column.Editor is IGriddoOptionsCellEditor optionsEditor)
+        if (field.Editor is IGriddoOptionsCellEditor optionsEditor)
         {
             OpenEditOptionsMenu(optionsEditor);
         }
@@ -152,12 +152,12 @@ public sealed partial class Griddo
         }
 
         CloseActiveEditOptionsMenu();
-        if (!_isEditing || !TryGetCurrentColumn(out var column))
+        if (!_isEditing || !TryGetCurrentField(out var field))
         {
             return;
         }
 
-        if (_currentCell.RowIndex < 0 || _currentCell.RowIndex >= Rows.Count)
+        if (_currentCell.RecordIndex < 0 || _currentCell.RecordIndex >= Records.Count)
         {
             return;
         }
@@ -165,9 +165,9 @@ public sealed partial class Griddo
         _isCommittingEdit = true;
         try
         {
-            if (column.Editor.TryCommit(_editSession.Buffer, out var newValue))
+            if (field.Editor.TryCommit(_editSession.Buffer, out var newValue))
             {
-                column.TrySetValue(Rows[_currentCell.RowIndex], newValue);
+                field.TrySetValue(Records[_currentCell.RecordIndex], newValue);
             }
         }
         finally
@@ -187,7 +187,7 @@ public sealed partial class Griddo
             return;
         }
 
-        var cellRect = GetCellRect(_currentCell.RowIndex, _currentCell.ColumnIndex);
+        var cellRect = GetCellRect(_currentCell.RecordIndex, _currentCell.FieldIndex);
         if (cellRect.IsEmpty)
         {
             return;
@@ -197,11 +197,11 @@ public sealed partial class Griddo
 
         var selectedValues = optionsEditor.ParseValues(_editSession.Buffer)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var rowSource = _currentCell.RowIndex >= 0 && _currentCell.RowIndex < Rows.Count
-            ? Rows[_currentCell.RowIndex]
+        var recordSource = _currentCell.RecordIndex >= 0 && _currentCell.RecordIndex < Records.Count
+            ? Records[_currentCell.RecordIndex]
             : null;
         var options = optionsEditor is IGriddoContextualOptionsCellEditor contextualEditor
-            ? contextualEditor.GetOptions(rowSource)
+            ? contextualEditor.GetOptions(recordSource)
             : optionsEditor.Options;
         var menu = new ContextMenu
         {
@@ -216,7 +216,7 @@ public sealed partial class Griddo
             var localOption = option;
             var item = new MenuItem
             {
-                Header = BuildOptionsMenuHeader(optionsEditor, rowSource, localOption),
+                Header = BuildOptionsMenuHeader(optionsEditor, recordSource, localOption),
                 IsCheckable = true,
                 IsChecked = selectedValues.Contains(localOption),
                 StaysOpenOnClick = optionsEditor.AllowMultiple
@@ -252,7 +252,7 @@ public sealed partial class Griddo
             if (ReferenceEquals(_activeEditOptionsMenu, menu))
             {
                 _activeEditOptionsMenu = null;
-                if (_isEditing && TryGetCurrentColumn(out var currentCol) && ReferenceEquals(currentCol.Editor, optionsEditor))
+                if (_isEditing && TryGetCurrentField(out var currentCol) && ReferenceEquals(currentCol.Editor, optionsEditor))
                 {
                     CommitEdit();
                 }
@@ -273,13 +273,13 @@ public sealed partial class Griddo
         _activeEditOptionsMenu = null;
     }
 
-    private static object BuildOptionsMenuHeader(IGriddoOptionsCellEditor optionsEditor, object? rowSource, string option)
+    private static object BuildOptionsMenuHeader(IGriddoOptionsCellEditor optionsEditor, object? recordSource, string option)
     {
         if (optionsEditor is not IGriddoSwatchOptionsCellEditor swatchEditor
             || !swatchEditor.TryGetSwatchBrush(option, out var swatchBrush))
         {
             if (optionsEditor is IGriddoContextualOptionsCellEditor contextualEditor
-                && contextualEditor.TryGetOptionExample(rowSource, option, out var example))
+                && contextualEditor.TryGetOptionExample(recordSource, option, out var example))
             {
                 var grid = new System.Windows.Controls.Grid();
                 grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -363,12 +363,12 @@ public sealed partial class Griddo
         editContentRect = Rect.Empty;
         textOrigin = default;
 
-        if (!_isEditing || !_currentCell.IsValid || !TryGetCurrentColumn(out var column))
+        if (!_isEditing || !_currentCell.IsValid || !TryGetCurrentField(out var field))
         {
             return false;
         }
 
-        var rect = GetCellRect(_currentCell.RowIndex, _currentCell.ColumnIndex);
+        var rect = GetCellRect(_currentCell.RecordIndex, _currentCell.FieldIndex);
         if (rect.IsEmpty)
         {
             return false;
@@ -401,7 +401,7 @@ public sealed partial class Griddo
             fontSize,
             Brushes.Black,
             1.0);
-        editText.TextAlignment = column.ContentAlignment;
+        editText.TextAlignment = field.ContentAlignment;
         editText.MaxTextWidth = Math.Max(1, editContentRect.Width - 8);
         editText.MaxTextHeight = Math.Max(1, editContentRect.Height - 4);
         editText.Trimming = TextTrimming.CharacterEllipsis;
@@ -409,11 +409,11 @@ public sealed partial class Griddo
         var contentWidth = Math.Max(1, editContentRect.Width - 8);
         var totalTextWidth = Math.Min(editText.WidthIncludingTrailingWhitespace, contentWidth);
         var textStartX = editContentRect.X + 4;
-        if (column.ContentAlignment == TextAlignment.Right)
+        if (field.ContentAlignment == TextAlignment.Right)
         {
             textStartX += Math.Max(0, contentWidth - totalTextWidth);
         }
-        else if (column.ContentAlignment == TextAlignment.Center)
+        else if (field.ContentAlignment == TextAlignment.Center)
         {
             textStartX += Math.Max(0, (contentWidth - totalTextWidth) / 2);
         }
@@ -428,8 +428,8 @@ public sealed partial class Griddo
 
     private bool IsCurrentEditorDialogButton()
         => _isEditing
-            && TryGetCurrentColumn(out var column)
-            && column.Editor is IGriddoDialogButtonCellEditor;
+            && TryGetCurrentField(out var field)
+            && field.Editor is IGriddoDialogButtonCellEditor;
 
     private Rect GetInlineEditTextRect(Rect fullEditRect)
     {
@@ -472,7 +472,7 @@ public sealed partial class Griddo
             return false;
         }
 
-        var rect = GetCellRect(_currentCell.RowIndex, _currentCell.ColumnIndex);
+        var rect = GetCellRect(_currentCell.RecordIndex, _currentCell.FieldIndex);
         if (rect.IsEmpty)
         {
             return false;
@@ -489,8 +489,8 @@ public sealed partial class Griddo
 
     private bool TriggerInlineDialogButton()
     {
-        if (!TryGetCurrentColumn(out var column)
-            || column.Editor is not IGriddoDialogButtonCellEditor dialogEditor)
+        if (!TryGetCurrentField(out var field)
+            || field.Editor is not IGriddoDialogButtonCellEditor dialogEditor)
         {
             return false;
         }

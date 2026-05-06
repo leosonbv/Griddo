@@ -1,7 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
-using Griddo.Columns;
+using Griddo.Fields;
 using Griddo.Primitives;
 
 namespace Griddo.Grid;
@@ -14,22 +14,22 @@ public sealed partial class Griddo
 
     protected override void OnTextInput(TextCompositionEventArgs e)
     {
-        if (!TryGetCurrentColumn(out var column))
+        if (!TryGetCurrentField(out var field))
         {
             return;
         }
 
         if (!_isEditing)
         {
-            if (column is IGriddoHostedColumnView)
+            if (field is IGriddoHostedFieldView)
             {
                 return;
             }
 
             var ch = e.Text.FirstOrDefault();
-            if (ch != default && column.Editor.CanStartWith(ch))
+            if (ch != default && field.Editor.CanStartWith(ch))
             {
-                _editSession.Start(column.Editor.BeginEdit(GetCurrentValue(), ch));
+                _editSession.Start(field.Editor.BeginEdit(GetCurrentValue(), ch));
                 _isEditing = true;
                 InvalidateVisual();
             }
@@ -417,7 +417,7 @@ public sealed partial class Griddo
         SelectAllCells();
         _hasKeyboardSelectionAnchor = false;
         _isEditing = false;
-        if (Rows.Count > 0 && Columns.Count > 0)
+        if (Records.Count > 0 && Fields.Count > 0)
         {
             _currentCell = new GriddoCellAddress(0, 0);
         }
@@ -434,8 +434,8 @@ public sealed partial class Griddo
             return false;
         }
 
-        if (!_currentCell.IsValid || _currentCell.RowIndex < 0 || _currentCell.RowIndex >= Rows.Count
-            || _currentCell.ColumnIndex < 0 || _currentCell.ColumnIndex >= Columns.Count)
+        if (!_currentCell.IsValid || _currentCell.RecordIndex < 0 || _currentCell.RecordIndex >= Records.Count
+            || _currentCell.FieldIndex < 0 || _currentCell.FieldIndex >= Fields.Count)
         {
             return false;
         }

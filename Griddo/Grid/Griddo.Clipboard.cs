@@ -3,7 +3,7 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using Griddo.Clipboard;
-using Griddo.Columns;
+using Griddo.Fields;
 using Griddo.Primitives;
 
 namespace Griddo.Grid;
@@ -61,7 +61,7 @@ public sealed partial class Griddo
 
     private void ClearSelectedCells()
     {
-        if (Rows.Count == 0 || Columns.Count == 0)
+        if (Records.Count == 0 || Fields.Count == 0)
         {
             return;
         }
@@ -72,20 +72,20 @@ public sealed partial class Griddo
         var didChange = false;
         foreach (var address in targetCells)
         {
-            if (address.RowIndex < 0 || address.RowIndex >= Rows.Count || address.ColumnIndex < 0 || address.ColumnIndex >= Columns.Count)
+            if (address.RecordIndex < 0 || address.RecordIndex >= Records.Count || address.FieldIndex < 0 || address.FieldIndex >= Fields.Count)
             {
                 continue;
             }
 
-            var column = Columns[address.ColumnIndex];
-            var row = Rows[address.RowIndex];
-            if (column.Editor.TryCommit(string.Empty, out var emptyValue) && column.TrySetValue(row, emptyValue))
+            var field = Fields[address.FieldIndex];
+            var record = Records[address.RecordIndex];
+            if (field.Editor.TryCommit(string.Empty, out var emptyValue) && field.TrySetValue(record, emptyValue))
             {
                 didChange = true;
                 continue;
             }
 
-            if (column.TrySetValue(row, null))
+            if (field.TrySetValue(record, null))
             {
                 didChange = true;
             }
@@ -104,25 +104,25 @@ public sealed partial class Griddo
             return;
         }
 
-        var minRow = _selectedCells.Min(c => c.RowIndex);
-        var maxRow = _selectedCells.Max(c => c.RowIndex);
-        var minCol = _selectedCells.Min(c => c.ColumnIndex);
-        var maxCol = _selectedCells.Max(c => c.ColumnIndex);
+        var minRecord = _selectedCells.Min(c => c.RecordIndex);
+        var maxRecord = _selectedCells.Max(c => c.RecordIndex);
+        var minCol = _selectedCells.Min(c => c.FieldIndex);
+        var maxCol = _selectedCells.Max(c => c.FieldIndex);
 
         var lines = new List<string>();
-        for (var row = minRow; row <= maxRow; row++)
+        for (var record = minRecord; record <= maxRecord; record++)
         {
             var values = new List<string>();
             for (var col = minCol; col <= maxCol; col++)
             {
-                var address = new GriddoCellAddress(row, col);
+                var address = new GriddoCellAddress(record, col);
                 if (!_selectedCells.Contains(address))
                 {
                     values.Add(string.Empty);
                     continue;
                 }
 
-                var value = Columns[col].FormatValue(Columns[col].GetValue(Rows[row]));
+                var value = GetClipboardCellText(Fields[col], Records[record]);
                 values.Add(value.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' '));
             }
 
@@ -135,45 +135,45 @@ public sealed partial class Griddo
             .Append(EffectiveFontSize.ToString(CultureInfo.InvariantCulture))
             .Append("px\">");
 
-        for (var row = minRow; row <= maxRow; row++)
+        for (var record = minRecord; record <= maxRecord; record++)
         {
             tableHtml.Append("<tr>");
             for (var col = minCol; col <= maxCol; col++)
             {
-                var address = new GriddoCellAddress(row, col);
+                var address = new GriddoCellAddress(record, col);
                 if (!_selectedCells.Contains(address))
                 {
                     tableHtml.Append("<td></td>");
                     continue;
                 }
 
-                var column = Columns[col];
-                var cellRect = GetCellRect(row, col);
+                var field = Fields[col];
+                var cellRect = GetCellRect(record, col);
                 var cw = Math.Max(1, (int)Math.Round(cellRect.Width));
                 var ch = Math.Max(1, (int)Math.Round(cellRect.Height));
 
-                var flat = column.FormatValue(column.GetValue(Rows[row]))
+                var flat = GetClipboardCellText(field, Records[record])
                     .Replace('\t', ' ')
                     .Replace('\r', ' ')
                     .Replace('\n', ' ');
 
-                if (column is IGriddoHostedColumnView hosted
+                if (field is IGriddoHostedFieldView hosted
                     && hosted.TryGetClipboardHtmlFragment(
                         TryGetHostedElement(address),
-                        Rows[row],
+                        Records[record],
                         cw,
                         ch,
                         out var fragment))
                 {
                     tableHtml.Append("<td style=\"vertical-align:middle\">").Append(fragment).Append("</td>");
                 }
-                else if (column.IsHtml)
+                else if (field.IsHtml)
                 {
                     var (pngBytes, pw, ph) = GriddoValuePainter.RenderHtmlCellToPng(
-                        column.GetValue(Rows[row]),
+                        field.GetValue(Records[record]),
                         cw,
                         ch,
-                        column.ContentAlignment,
+                        field.ContentAlignment,
                         EffectiveFontSize);
                     var b64 = Convert.ToBase64String(pngBytes);
                     tableHtml.Append("<td style=\"vertical-align:middle\"><img src=\"data:image/png;base64,")
@@ -212,6 +212,23 @@ public sealed partial class Griddo
         System.Windows.Clipboard.SetDataObject(dataObject, copy: true);
     }
 
+    private static string GetClipboardCellText(IGriddoFieldView field, object recordSource)
+    {
+        var raw = field.GetValue(recordSource);
+        var formatted = field.FormatValue(raw);
+        if (!string.IsNullOrEmpty(formatted))
+        {
+            return formatted;
+        }
+
+        if (field is IGriddoFieldSortValueView sortableField)
+        {
+            return field.FormatValue(sortableField.GetSortValue(recordSource));
+        }
+
+        return formatted;
+    }
+
     private void PasteClipboardIntoGrid()
     {
         if (!System.Windows.Clipboard.ContainsText())
@@ -221,38 +238,38 @@ public sealed partial class Griddo
 
         var startCell = _selectedCells.Count > 0
             ? new GriddoCellAddress(
-                _selectedCells.Min(c => c.RowIndex),
-                _selectedCells.Min(c => c.ColumnIndex))
+                _selectedCells.Min(c => c.RecordIndex),
+                _selectedCells.Min(c => c.FieldIndex))
             : _currentCell;
-        if (startCell.RowIndex < 0 || startCell.ColumnIndex < 0)
+        if (startCell.RecordIndex < 0 || startCell.FieldIndex < 0)
         {
             return;
         }
 
         var text = System.Windows.Clipboard.GetText();
-        var rowChunks = text.Replace("\r\n", "\n").Split('\n', StringSplitOptions.None);
+        var recordChunks = text.Replace("\r\n", "\n").Split('\n', StringSplitOptions.None);
 
-        for (var rowOffset = 0; rowOffset < rowChunks.Length; rowOffset++)
+        for (var recordOffset = 0; recordOffset < recordChunks.Length; recordOffset++)
         {
-            var targetRow = startCell.RowIndex + rowOffset;
-            if (targetRow < 0 || targetRow >= Rows.Count)
+            var targetRecord = startCell.RecordIndex + recordOffset;
+            if (targetRecord < 0 || targetRecord >= Records.Count)
             {
                 break;
             }
 
-            var cells = rowChunks[rowOffset].Split('\t');
+            var cells = recordChunks[recordOffset].Split('\t');
             for (var colOffset = 0; colOffset < cells.Length; colOffset++)
             {
-                var targetCol = startCell.ColumnIndex + colOffset;
-                if (targetCol < 0 || targetCol >= Columns.Count)
+                var targetCol = startCell.FieldIndex + colOffset;
+                if (targetCol < 0 || targetCol >= Fields.Count)
                 {
                     break;
                 }
 
-                var column = Columns[targetCol];
-                if (column.Editor.TryCommit(cells[colOffset], out var parsed))
+                var field = Fields[targetCol];
+                if (field.Editor.TryCommit(cells[colOffset], out var parsed))
                 {
-                    column.TrySetValue(Rows[targetRow], parsed);
+                    field.TrySetValue(Records[targetRecord], parsed);
                 }
             }
         }

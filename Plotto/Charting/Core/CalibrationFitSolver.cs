@@ -168,7 +168,7 @@ public static class CalibrationFitSolver
 
         for (var col = 0; col < 3; col++)
         {
-            var pivotRow = col;
+            var pivotRecord = col;
             var best = Math.Abs(work[col * 4 + col]);
             for (var r = col + 1; r < 3; r++)
             {
@@ -176,7 +176,7 @@ public static class CalibrationFitSolver
                 if (v > best)
                 {
                     best = v;
-                    pivotRow = r;
+                    pivotRecord = r;
                 }
             }
 
@@ -185,11 +185,11 @@ public static class CalibrationFitSolver
                 return false;
             }
 
-            if (pivotRow != col)
+            if (pivotRecord != col)
             {
                 for (var j = 0; j < 4; j++)
                 {
-                    (work[col * 4 + j], work[pivotRow * 4 + j]) = (work[pivotRow * 4 + j], work[col * 4 + j]);
+                    (work[col * 4 + j], work[pivotRecord * 4 + j]) = (work[pivotRecord * 4 + j], work[col * 4 + j]);
                 }
             }
 

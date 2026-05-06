@@ -2,7 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
-using Griddo.Columns;
+using Griddo.Fields;
 using Griddo.Primitives;
 
 namespace Griddo.Grid;
@@ -15,7 +15,7 @@ public sealed partial class Griddo
     }
 
     /// <summary>
-    /// Clears hosted cell visuals so the next measure/render recreates and reparents them (e.g. Plotto after column chooser apply).
+    /// Clears hosted cell visuals so the next measure/render recreates and reparents them (e.g. Plotto after field chooser apply).
     /// </summary>
     public void RefreshHostedCells()
     {
@@ -34,7 +34,7 @@ public sealed partial class Griddo
 
     private void SyncHostedCells()
     {
-        if (_viewportBodyWidth <= 0 || _viewportBodyHeight <= 0 || Rows.Count == 0 || Columns.Count == 0)
+        if (_viewportBodyWidth <= 0 || _viewportBodyHeight <= 0 || Records.Count == 0 || Fields.Count == 0)
         {
             ClearHostedCells();
             return;
@@ -42,43 +42,43 @@ public sealed partial class Griddo
 
         var needed = new HashSet<GriddoCellAddress>();
 
-        void AddHostedInColumnRange(int c0, int c1)
+        void AddHostedInFieldRange(int c0, int c1)
         {
             for (var col = c0; col <= c1; col++)
             {
-                if (Columns[col] is not IGriddoHostedColumnView)
+                if (Fields[col] is not IGriddoHostedFieldView)
                 {
                     continue;
                 }
 
-                ForEachVisibleRow(row => needed.Add(new GriddoCellAddress(row, col)));
+                ForEachVisibleRecord(record => needed.Add(new GriddoCellAddress(record, col)));
             }
         }
 
         if (IsBodyTransposed)
         {
-            ForEachVisibleScrollRowForTranspose(row =>
+            ForEachVisibleScrollRecordForTranspose(record =>
             {
-                ForEachVisibleColumnForTranspose(col =>
+                ForEachVisibleFieldForTranspose(col =>
                 {
-                    if (Columns[col] is IGriddoHostedColumnView)
+                    if (Fields[col] is IGriddoHostedFieldView)
                     {
-                        needed.Add(new GriddoCellAddress(row, col));
+                        needed.Add(new GriddoCellAddress(record, col));
                     }
                 });
             });
         }
         else
         {
-            if (_fixedColumnCount > 0 && Columns.Count > 0)
+            if (_fixedFieldCount > 0 && Fields.Count > 0)
             {
-                AddHostedInColumnRange(0, Math.Min(_fixedColumnCount, Columns.Count) - 1);
+                AddHostedInFieldRange(0, Math.Min(_fixedFieldCount, Fields.Count) - 1);
             }
 
-            GetVisibleScrollColumnRange(out var scrollStart, out var scrollEnd, out _);
+            GetVisibleScrollFieldRange(out var scrollStart, out var scrollEnd, out _);
             if (scrollEnd >= scrollStart)
             {
-                AddHostedInColumnRange(scrollStart, scrollEnd);
+                AddHostedInFieldRange(scrollStart, scrollEnd);
             }
         }
 
@@ -102,16 +102,16 @@ public sealed partial class Griddo
 
         foreach (var addr in needed)
         {
-            var column = Columns[addr.ColumnIndex];
-            if (column is not IGriddoHostedColumnView hostedColumn)
+            var field = Fields[addr.FieldIndex];
+            if (field is not IGriddoHostedFieldView hostedField)
             {
                 continue;
             }
 
-            var dest = HostCanvasForColumn(addr.ColumnIndex);
+            var dest = HostCanvasForField(addr.FieldIndex);
             if (!_hostedCells.TryGetValue(addr, out var host))
             {
-                host = hostedColumn.CreateHostElement();
+                host = hostedField.CreateHostElement();
                 _hostedCells[addr] = host;
                 dest.Children.Add(host);
             }
@@ -121,57 +121,57 @@ public sealed partial class Griddo
                 dest.Children.Add(host);
             }
 
-            var rowData = Rows[addr.RowIndex];
+            var recordData = Records[addr.RecordIndex];
             var isSelected = _selectedCells.Contains(addr);
             var isCurrent = _currentCell == addr;
-            hostedColumn.UpdateHostElement(host, rowData, isSelected, isCurrent);
-            hostedColumn.ApplyPlotDirectEditOption(host, HostedPlotDirectEditOnMouseDown);
-            hostedColumn.SyncHostedUiScale(host, ContentScale);
+            hostedField.UpdateHostElement(host, recordData, isSelected, isCurrent);
+            hostedField.ApplyPlotDirectEditOption(host, HostedPlotDirectEditOnMouseDown);
+            hostedField.SyncHostedUiScale(host, ContentScale);
 
-            var rect = GetCellRect(addr.RowIndex, addr.ColumnIndex);
+            var rect = GetCellRect(addr.RecordIndex, addr.FieldIndex);
             if (rect.IsEmpty)
             {
                 continue;
             }
 
-            Canvas.SetLeft(host, rect.X - _rowHeaderWidth + ScaledHostedInsetX);
-            Canvas.SetTop(host, rect.Y - ScaledColumnHeaderHeight + ScaledHostedInsetY);
+            Canvas.SetLeft(host, rect.X - _recordHeaderWidth + ScaledHostedInsetX);
+            Canvas.SetTop(host, rect.Y - ScaledFieldHeaderHeight + ScaledHostedInsetY);
             host.Width = Math.Max(0, rect.Width - (ScaledHostedInsetX * 2));
             host.Height = Math.Max(0, rect.Height - (ScaledHostedInsetY * 2));
         }
     }
 
-    private Canvas HostCanvasForColumn(int columnIndex) =>
-        columnIndex < _fixedColumnCount ? _fixedHostCanvas : _scrollHostCanvas;
+    private Canvas HostCanvasForField(int fieldIndex) =>
+        fieldIndex < _fixedFieldCount ? _fixedHostCanvas : _scrollHostCanvas;
 
     /// <summary>
-    /// Fixed vs scroll body rectangle (below headers). Used to clip current-cell / inline edit visuals so they do not paint over the other band when a cell slides under frozen columns.
+    /// Fixed vs scroll body rectangle (below headers). Used to clip current-cell / inline edit visuals so they do not paint over the other band when a cell slides under frozen fields.
     /// </summary>
-    private Rect GetColumnBodyBandClipRect(int columnIndex)
+    private Rect GetFieldBodyBandClipRect(int fieldIndex)
     {
         if (IsBodyTransposed)
         {
-            var fixedH = Math.Min(GetFixedColumnsWidth(), _viewportBodyHeight);
-            if (columnIndex < _fixedColumnCount)
+            var fixedH = Math.Min(GetFixedFieldsWidth(), _viewportBodyHeight);
+            if (fieldIndex < _fixedFieldCount)
             {
-                return new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, _viewportBodyWidth, fixedH);
+                return new Rect(_recordHeaderWidth, ScaledFieldHeaderHeight, _viewportBodyWidth, fixedH);
             }
 
             var scrollH = Math.Max(0, _viewportBodyHeight - fixedH);
-            return new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight + fixedH, _viewportBodyWidth, scrollH);
+            return new Rect(_recordHeaderWidth, ScaledFieldHeaderHeight + fixedH, _viewportBodyWidth, scrollH);
         }
 
-        var fixedW = GetFixedColumnsWidth();
-        var scrollLeft = _rowHeaderWidth + fixedW;
+        var fixedW = GetFixedFieldsWidth();
+        var scrollLeft = _recordHeaderWidth + fixedW;
 
-        if (columnIndex < _fixedColumnCount)
+        if (fieldIndex < _fixedFieldCount)
         {
             var w = Math.Min(fixedW, _viewportBodyWidth);
-            return new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, w, _viewportBodyHeight);
+            return new Rect(_recordHeaderWidth, ScaledFieldHeaderHeight, w, _viewportBodyHeight);
         }
 
         var scrollW = Math.Max(0, _viewportBodyWidth - fixedW);
-        return new Rect(scrollLeft, ScaledColumnHeaderHeight, scrollW, _viewportBodyHeight);
+        return new Rect(scrollLeft, ScaledFieldHeaderHeight, scrollW, _viewportBodyHeight);
     }
 
     private void UpdateHostCanvasClips()
@@ -180,30 +180,30 @@ public sealed partial class Griddo
         {
             var bodyW = _viewportBodyWidth;
             var bodyH = _viewportBodyHeight;
-            var fixedRowsW = GetTransposeFixedRowsWidth();
-            var fixedColsH = GetFixedColumnsWidth();
+            var fixedRecordsW = GetTransposeFixedRecordsWidth();
+            var fixedColsH = GetFixedFieldsWidth();
             var fh = Math.Min(fixedColsH, bodyH);
-            var fixedRowsClipW = Math.Min(fixedRowsW, bodyW);
-            var scrollW = Math.Max(0, bodyW - fixedRowsW);
+            var fixedRecordsClipW = Math.Min(fixedRecordsW, bodyW);
+            var scrollW = Math.Max(0, bodyW - fixedRecordsW);
             var scrollH = Math.Max(0, bodyH - fh);
             var belowFrozen = Math.Max(0, bodyH - fh);
 
-            // Fixed-column hosts: union of top-left (frozen×frozen) and top-right (scroll rows × frozen cols).
+            // Fixed-field hosts: union of top-left (frozen×frozen) and top-right (scroll records × frozen cols).
             if (fh > 1e-6)
             {
-                if (fixedRowsClipW > 1e-6 && scrollW > 1e-6)
+                if (fixedRecordsClipW > 1e-6 && scrollW > 1e-6)
                 {
-                    var gTopLeft = new RectangleGeometry(new Rect(0, 0, fixedRowsClipW, fh));
-                    var gTopRight = new RectangleGeometry(new Rect(fixedRowsW, 0, scrollW, fh));
+                    var gTopLeft = new RectangleGeometry(new Rect(0, 0, fixedRecordsClipW, fh));
+                    var gTopRight = new RectangleGeometry(new Rect(fixedRecordsW, 0, scrollW, fh));
                     _fixedHostCanvas.Clip = new CombinedGeometry(GeometryCombineMode.Union, gTopLeft, gTopRight);
                 }
-                else if (fixedRowsClipW > 1e-6)
+                else if (fixedRecordsClipW > 1e-6)
                 {
-                    _fixedHostCanvas.Clip = new RectangleGeometry(new Rect(0, 0, fixedRowsClipW, fh));
+                    _fixedHostCanvas.Clip = new RectangleGeometry(new Rect(0, 0, fixedRecordsClipW, fh));
                 }
                 else
                 {
-                    _fixedHostCanvas.Clip = new RectangleGeometry(new Rect(fixedRowsW, 0, scrollW, fh));
+                    _fixedHostCanvas.Clip = new RectangleGeometry(new Rect(fixedRecordsW, 0, scrollW, fh));
                 }
             }
             else
@@ -211,22 +211,22 @@ public sealed partial class Griddo
                 _fixedHostCanvas.Clip = null;
             }
 
-            // Scroll-column hosts: union of left strip (frozen rows × scroll cols) and bottom-right (scroll×scroll).
+            // Scroll-field hosts: union of left strip (frozen records × scroll cols) and bottom-right (scroll×scroll).
             if (belowFrozen > 1e-6)
             {
-                if (fixedRowsClipW > 1e-6 && scrollW > 1e-6 && scrollH > 1e-6)
+                if (fixedRecordsClipW > 1e-6 && scrollW > 1e-6 && scrollH > 1e-6)
                 {
-                    var gLeft = new RectangleGeometry(new Rect(0, fh, fixedRowsClipW, belowFrozen));
-                    var gRight = new RectangleGeometry(new Rect(fixedRowsW, fh, scrollW, scrollH));
+                    var gLeft = new RectangleGeometry(new Rect(0, fh, fixedRecordsClipW, belowFrozen));
+                    var gRight = new RectangleGeometry(new Rect(fixedRecordsW, fh, scrollW, scrollH));
                     _scrollHostCanvas.Clip = new CombinedGeometry(GeometryCombineMode.Union, gLeft, gRight);
                 }
-                else if (fixedRowsClipW > 1e-6)
+                else if (fixedRecordsClipW > 1e-6)
                 {
-                    _scrollHostCanvas.Clip = new RectangleGeometry(new Rect(0, fh, fixedRowsClipW, belowFrozen));
+                    _scrollHostCanvas.Clip = new RectangleGeometry(new Rect(0, fh, fixedRecordsClipW, belowFrozen));
                 }
                 else if (scrollW > 1e-6 && scrollH > 1e-6)
                 {
-                    _scrollHostCanvas.Clip = new RectangleGeometry(new Rect(fixedRowsW, fh, scrollW, scrollH));
+                    _scrollHostCanvas.Clip = new RectangleGeometry(new Rect(fixedRecordsW, fh, scrollW, scrollH));
                 }
                 else
                 {
@@ -241,7 +241,7 @@ public sealed partial class Griddo
             return;
         }
 
-        var fixedW = GetFixedColumnsWidth();
+        var fixedW = GetFixedFieldsWidth();
         var fw = Math.Min(fixedW, _viewportBodyWidth);
         var sw = Math.Max(0, _viewportBodyWidth - fixedW);
         _fixedHostCanvas.Clip = new RectangleGeometry(new Rect(0, 0, fw, _viewportBodyHeight));

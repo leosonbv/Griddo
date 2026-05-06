@@ -4,9 +4,9 @@
 
 ## Features
 
-- Columns backed by view objects (`IGriddoColumnView`)
+- Fields backed by view objects (`IGriddoFieldView`)
 - Virtualized rendering with scrollbars
-- Per-column editor configuration (`IGriddoCellEditor`)
+- Per-field editor configuration (`IGriddoCellEditor`)
 
 ## Example
 
@@ -14,17 +14,17 @@
 using Griddo;
 
 var grid = new Griddo();
-grid.Columns.Add(new GriddoColumnView(
+grid.Fields.Add(new GriddoFieldView(
     "Name",
     120,
-    row => ((Person)row).Name,
-    (row, v) => { ((Person)row).Name = (string)v!; return true; },
+    record => ((Person)record).Name,
+    (record, v) => { ((Person)record).Name = (string)v!; return true; },
     editor: GriddoCellEditors.Text));
 
-grid.Columns.Add(new GriddoColumnView(
+grid.Fields.Add(new GriddoFieldView(
     "Age",
     80,
-    row => ((Person)row).Age,
-    (row, v) => { ((Person)row).Age = (double)v!; return true; },
+    record => ((Person)record).Age,
+    (record, v) => { ((Person)record).Age = (double)v!; return true; },
     editor: GriddoCellEditors.Number));
 ```

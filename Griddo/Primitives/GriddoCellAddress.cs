@@ -1,6 +1,6 @@
-﻿namespace Griddo.Primitives;
+namespace Griddo.Primitives;
 
-public readonly record struct GriddoCellAddress(int RowIndex, int ColumnIndex)
+public readonly record struct GriddoCellAddress(int RecordIndex, int FieldIndex)
 {
-    public bool IsValid => RowIndex >= 0 && ColumnIndex >= 0;
+    public bool IsValid => RecordIndex >= 0 && FieldIndex >= 0;
 }

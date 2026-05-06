@@ -1,35 +1,36 @@
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.IO;
 using Griddo;
-using Griddo.Columns;
+using Griddo.Fields;
 using Griddo.Editing;
 using Griddo.Grid;
 using Plotto.Charting.Controls;
 using Plotto.Charting.Core;
-using GriddoUi.ColumnEdit;
+using GriddoUi.FieldEdit;
 using GriddoModelView;
 
 namespace GriddoTest;
 
 public partial class MainWindow : Window
 {
-    private const string PlottoColumnHeader = "Plotto Cell";
-    private const string CalibrationColumnHeader = "Calibration";
+    private const string ChromatogramFieldHeader = "Chromatogram";
+    private const string CalibrationFieldHeader = "Calibration";
     private const string DemoGridLayoutKey = "GriddoTest.MainWindow.DemoGrid";
-    private const string ConfigColumnsGridLayoutKey = "GriddoTest.MainWindow.Config.Columns";
+    private const string ConfigFieldsGridLayoutKey = "GriddoTest.MainWindow.Config.Fields";
     private const string ConfigGeneralGridLayoutKey = "GriddoTest.MainWindow.Config.General";
     private const string PrimarySource = "Primary";
     private const string AnalyticsSource = "Analytics";
-    private readonly List<IGriddoColumnView> _allColumns = [];
-    private readonly SourcePropertyViewStore _viewStore = new(
+    private readonly List<IGriddoFieldView> _allFields = [];
+    private readonly PropertyViewStore _viewStore = new(
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Griddo",
             "source-property-views.json"));
-    private readonly GridLayoutStore _gridLayoutStore = new(
+    private readonly GridConfigurationStore _gridLayoutStore = new(
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Griddo",
@@ -48,27 +49,44 @@ public partial class MainWindow : Window
         _viewStore.Load();
         _gridLayoutStore.Load();
         ConfigureGrid();
-        DemoGrid.ColumnHeaderRightClick += (_, e) => OnColumnHeaderRightClick(DemoGrid, _allColumns, e);
-        DemoGrid.SortDescriptorsChanged += (_, _) => PersistGridLayoutFromCurrentGrid(DemoGrid, DemoGridLayoutKey, _allColumns);
-        DemoGrid.UniformRowHeightChanged += (_, _) => PersistGridLayoutFromCurrentGrid(DemoGrid, DemoGridLayoutKey, _allColumns);
-        DemoGrid.UniformRowHeight = 132;
-        DemoGrid.FixedColumnCount = 1;
+        DemoGrid.FieldHeaderRightClick += (_, e) => OnFieldHeaderRightClick(DemoGrid, _allFields, e);
+        DemoGrid.RecordHeaderRightClick += (_, e) => OnRecordHeaderRightClick(DemoGrid, _allFields, e);
+        DemoGrid.CornerHeaderRightClick += (_, _) => OnCornerHeaderRightClick(DemoGrid, _allFields);
+        DemoGrid.SortDescriptorsChanged += (_, _) => PersistGridLayoutFromCurrentGrid(DemoGrid, DemoGridLayoutKey, _allFields);
+        DemoGrid.UniformRecordHeightChanged += (_, _) => PersistGridLayoutFromCurrentGrid(DemoGrid, DemoGridLayoutKey, _allFields);
+        DemoGrid.UniformRecordHeight = 132;
+        DemoGrid.FixedFieldCount = 1;
         DemoGrid.ImmediateCellEditOnSingleClick = false;
         DemoGrid.HostedPlotDirectEditOnMouseDown = true;
+        Loaded += (_, _) =>
+        {
+            Dispatcher.BeginInvoke(
+                () =>
+                {
+                    // Let queued startup layout/reformat work complete before first paint.
+                    DemoGrid.UpdateLayout();
+                    DemoGrid.InvalidateMeasure();
+                    DemoGrid.InvalidateVisual();
+                    Dispatcher.BeginInvoke(
+                        () => DemoGrid.Visibility = Visibility.Visible,
+                        System.Windows.Threading.DispatcherPriority.ContextIdle);
+                },
+                System.Windows.Threading.DispatcherPriority.Loaded);
+        };
     }
 
-    private void OnColumnHeaderRightClick(
+    private void OnFieldHeaderRightClick(
         global::Griddo.Grid.Griddo targetGrid,
-        IReadOnlyList<IGriddoColumnView> columnRegistry,
-        GriddoColumnHeaderMouseEventArgs e)
+        IReadOnlyList<IGriddoFieldView> fieldRegistry,
+        GriddoFieldHeaderMouseEventArgs e)
     {
-        if (e.ColumnIndex < 0 || e.ColumnIndex >= targetGrid.Columns.Count)
+        if (e.FieldIndex < 0 || e.FieldIndex >= targetGrid.Fields.Count)
         {
             return;
         }
 
-        var indices = e.SelectedColumnIndices
-            .Where(i => i >= 0 && i < targetGrid.Columns.Count)
+        var indices = e.SelectedFieldIndices
+            .Where(i => i >= 0 && i < targetGrid.Fields.Count)
             .Distinct()
             .OrderBy(i => i)
             .ToList();
@@ -77,36 +95,49 @@ public partial class MainWindow : Window
             return;
         }
 
-        var targetColumns = indices.Select(i => targetGrid.Columns[i]).ToList();
+        var targetFields = indices.Select(i => targetGrid.Fields[i]).ToList();
+        var selectedPlotTargets = targetFields.OfType<IPlotFieldLayoutTarget>().ToList();
         var menu = new ContextMenu
         {
             PlacementTarget = targetGrid,
             Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint
         };
-        var layoutKey = ResolveLayoutKey(targetGrid, columnRegistry);
-        void PersistLiveLayout() => PersistGridLayoutFromCurrentGrid(targetGrid, layoutKey, columnRegistry);
+        var layoutKey = ResolveLayoutKey(targetGrid, fieldRegistry);
+        void PersistLiveLayout() => PersistGridLayoutFromCurrentGrid(targetGrid, layoutKey, fieldRegistry);
 
         var gridConfiguratorItem = new MenuItem { Header = "_Grid configurator…" };
-        gridConfiguratorItem.Click += (_, _) => OpenGridConfigurator(targetGrid, columnRegistry, layoutKey);
+        gridConfiguratorItem.Click += (_, _) => OpenFieldConfigurator(targetGrid, fieldRegistry, layoutKey);
         menu.Items.Add(gridConfiguratorItem);
+        var frozenFieldsItem = new MenuItem
+        {
+            Header = "_Frozen",
+            IsCheckable = true,
+            IsChecked = indices.All(i => i < targetGrid.FixedFieldCount)
+        };
+        frozenFieldsItem.Click += (_, _) =>
+        {
+            ApplyFieldFrozenSelection(targetGrid, indices, frozenFieldsItem.IsChecked);
+            PersistLiveLayout();
+        };
+        menu.Items.Add(frozenFieldsItem);
         var appearanceSubmenu = new MenuItem { Header = "Grid features", StaysOpenOnClick = true };
         menu.Items.Add(appearanceSubmenu);
         menu.Items.Add(new Separator());
-        var autoWidthAllColumnsItem = new MenuItem { Header = "Auto width all columns" };
-        autoWidthAllColumnsItem.Click += (_, _) => targetGrid.AutoSizeAllColumns();
-        menu.Items.Add(autoWidthAllColumnsItem);
-        var autoWidthSelectedColumnsItem = new MenuItem { Header = "Auto width selected column(s)" };
-        autoWidthSelectedColumnsItem.Click += (_, _) => targetGrid.AutoSizeColumns(indices);
-        menu.Items.Add(autoWidthSelectedColumnsItem);
+        var autoWidthAllFieldsItem = new MenuItem { Header = "Auto size all fields" };
+        autoWidthAllFieldsItem.Click += (_, _) => targetGrid.AutoSizeAllFields();
+        menu.Items.Add(autoWidthAllFieldsItem);
+        var autoWidthSelectedFieldsItem = new MenuItem { Header = "Auto size selected field(s)" };
+        autoWidthSelectedFieldsItem.Click += (_, _) => targetGrid.AutoSizeFields(indices);
+        menu.Items.Add(autoWidthSelectedFieldsItem);
         var fillItem = new MenuItem
         {
-            Header = "Fill width for selected column(s)",
+            Header = "Fill size for selected field(s)",
             IsCheckable = true,
-            IsChecked = targetColumns.All(c => c.Fill)
+            IsChecked = targetFields.All(c => c.Fill)
         };
         fillItem.Click += (_, _) =>
         {
-            foreach (var target in targetColumns)
+            foreach (var target in targetFields)
             {
                 target.Fill = fillItem.IsChecked;
             }
@@ -116,14 +147,49 @@ public partial class MainWindow : Window
             PersistLiveLayout();
         };
         menu.Items.Add(fillItem);
+        if (selectedPlotTargets.Count > 0)
+        {
+            var plotSettingsItem = new MenuItem { Header = "Plot field settings..." };
+            plotSettingsItem.Click += (_, _) =>
+            {
+                var seed = selectedPlotTargets[0];
+                var dialog = new PlotConfigurationDialog(
+                    seed,
+                    previewApply: result =>
+                    {
+                        foreach (var target in selectedPlotTargets)
+                        {
+                            ApplyPlotLayout(target, result);
+                        }
+
+                        targetGrid.RefreshHostedCells();
+                        targetGrid.InvalidateVisual();
+                    })
+                { Owner = this };
+                if (dialog.ShowDialog() != true || dialog.Result is null)
+                {
+                    return;
+                }
+
+                foreach (var target in selectedPlotTargets)
+                {
+                    ApplyPlotLayout(target, dialog.Result);
+                }
+
+                targetGrid.RefreshHostedCells();
+                targetGrid.InvalidateVisual();
+                PersistLiveLayout();
+            };
+            menu.Items.Add(plotSettingsItem);
+        }
         menu.Items.Add(new Separator());
 
-        var visibilitySubmenu = new MenuItem { Header = "Column visibility actions" };
-        var hideSelectedColumnsItem = new MenuItem { Header = "Hide selected column(s)" };
-        hideSelectedColumnsItem.Click += (_, _) =>
+        var visibilitySubmenu = new MenuItem { Header = "Field visibility actions" };
+        var hideSelectedFieldsItem = new MenuItem { Header = "Hide selected field(s)" };
+        hideSelectedFieldsItem.Click += (_, _) =>
         {
-            var visibleCount = targetGrid.Columns.Count;
-            var removable = targetColumns.Where(c => targetGrid.Columns.Contains(c)).ToList();
+            var visibleCount = targetGrid.Fields.Count;
+            var removable = targetFields.Where(c => targetGrid.Fields.Contains(c)).ToList();
             if (visibleCount - removable.Count < 1)
             {
                 return;
@@ -131,55 +197,55 @@ public partial class MainWindow : Window
 
             foreach (var target in removable)
             {
-                targetGrid.Columns.Remove(target);
+                targetGrid.Fields.Remove(target);
             }
 
             targetGrid.InvalidateMeasure();
             targetGrid.InvalidateVisual();
             PersistLiveLayout();
         };
-        visibilitySubmenu.Items.Add(hideSelectedColumnsItem);
+        visibilitySubmenu.Items.Add(hideSelectedFieldsItem);
         visibilitySubmenu.Items.Add(new Separator());
 
-        var hideEmptyColsItem = new MenuItem { Header = "Hide _empty columns" };
+        var hideEmptyColsItem = new MenuItem { Header = "Hide _empty fields" };
         hideEmptyColsItem.Click += (_, _) =>
         {
-            HideEmptyColumns(targetGrid, columnRegistry);
+            HideEmptyFields(targetGrid, fieldRegistry);
             PersistLiveLayout();
         };
         visibilitySubmenu.Items.Add(hideEmptyColsItem);
 
-        var showAllColsItem = new MenuItem { Header = "_Show all columns" };
+        var showAllColsItem = new MenuItem { Header = "_Show all fields" };
         showAllColsItem.Click += (_, _) =>
         {
-            ShowAllColumns(targetGrid, columnRegistry);
+            ShowAllFields(targetGrid, fieldRegistry);
             PersistLiveLayout();
         };
         visibilitySubmenu.Items.Add(showAllColsItem);
 
-        var showAllExceptEmptyItem = new MenuItem { Header = "Show all _except empty columns" };
+        var showAllExceptEmptyItem = new MenuItem { Header = "Show all _except empty fields" };
         showAllExceptEmptyItem.Click += (_, _) =>
         {
-            ShowAllColumnsExceptEmpty(targetGrid, columnRegistry);
+            ShowAllFieldsExceptEmpty(targetGrid, fieldRegistry);
             PersistLiveLayout();
         };
         visibilitySubmenu.Items.Add(showAllExceptEmptyItem);
         visibilitySubmenu.Items.Add(new Separator());
 
-        var visibilityListItem = new MenuItem { Header = "Columns" };
-        foreach (var registeredColumn in columnRegistry)
+        var visibilityListItem = new MenuItem { Header = "Fields" };
+        foreach (var registeredField in fieldRegistry)
         {
-            var localColumn = registeredColumn;
+            var localField = registeredField;
             var listItem = new MenuItem
             {
-                Header = GetColumnVisibilityLabel(localColumn),
+                Header = GetFieldVisibilityLabel(localField),
                 IsCheckable = true,
-                IsChecked = targetGrid.Columns.Contains(localColumn),
+                IsChecked = targetGrid.Fields.Contains(localField),
                 StaysOpenOnClick = true
             };
             listItem.Click += (_, _) =>
             {
-                ToggleColumnVisibility(targetGrid, columnRegistry, localColumn, listItem.IsChecked);
+                ToggleFieldVisibility(targetGrid, fieldRegistry, localField, listItem.IsChecked);
                 PersistLiveLayout();
             };
             visibilityListItem.Items.Add(listItem);
@@ -187,10 +253,106 @@ public partial class MainWindow : Window
 
         visibilitySubmenu.Items.Add(visibilityListItem);
         menu.Items.Add(visibilitySubmenu);
+        menu.Items.Add(new Separator());
+
+        var sortSubmenu = new MenuItem { Header = "Sort" };
+        void ApplySortForSelectedFields(bool ascending)
+        {
+            var selectedFieldIndices = indices
+                .Where(i => i >= 0 && i < targetGrid.Fields.Count)
+                .Distinct()
+                .OrderBy(i => i)
+                .ToList();
+            if (selectedFieldIndices.Count == 0)
+            {
+                return;
+            }
+
+            var isCtrlPressed = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+            if (!isCtrlPressed)
+            {
+                var descriptors = selectedFieldIndices
+                    .Select((fieldIndex, level) => new GriddoSortDescriptor(fieldIndex, ascending, level + 1))
+                    .ToList();
+                targetGrid.SetSortDescriptors(descriptors);
+                PersistLiveLayout();
+                return;
+            }
+
+            var existing = targetGrid.SortDescriptors
+                .OrderBy(d => d.Priority)
+                .ToList();
+            var existingFields = existing
+                .Select(d => d.FieldIndex)
+                .ToHashSet();
+            var nextPriority = existing.Count == 0 ? 1 : existing.Max(d => d.Priority) + 1;
+            foreach (var fieldIndex in selectedFieldIndices)
+            {
+                if (!existingFields.Add(fieldIndex))
+                {
+                    continue;
+                }
+
+                existing.Add(new GriddoSortDescriptor(fieldIndex, ascending, nextPriority));
+                nextPriority++;
+            }
+
+            targetGrid.SetSortDescriptors(existing);
+            PersistLiveLayout();
+        }
+
+        var sortAscItem = new MenuItem { Header = "Ascending" };
+        sortAscItem.Click += (_, _) =>
+        {
+            ApplySortForSelectedFields(ascending: true);
+        };
+        sortSubmenu.Items.Add(sortAscItem);
+
+        var sortDescItem = new MenuItem { Header = "Descending" };
+        sortDescItem.Click += (_, _) =>
+        {
+            ApplySortForSelectedFields(ascending: false);
+        };
+        sortSubmenu.Items.Add(sortDescItem);
+
+        var sortClearItem = new MenuItem { Header = "Clear sort" };
+        sortClearItem.Click += (_, _) =>
+        {
+            targetGrid.SetSortDescriptors([]);
+            PersistLiveLayout();
+        };
+        sortSubmenu.Items.Add(sortClearItem);
+        var sortRemoveSelectedItem = new MenuItem { Header = "Remove sort (selected fields)" };
+        sortRemoveSelectedItem.Click += (_, _) =>
+        {
+            var selectedFieldIndices = indices
+                .Where(i => i >= 0 && i < targetGrid.Fields.Count)
+                .Distinct()
+                .ToHashSet();
+            if (selectedFieldIndices.Count == 0)
+            {
+                return;
+            }
+
+            var keptDescriptors = targetGrid.SortDescriptors
+                .OrderBy(d => d.Priority)
+                .Where(d => !selectedFieldIndices.Contains(d.FieldIndex))
+                .ToList();
+            targetGrid.SetSortDescriptors(keptDescriptors);
+            PersistLiveLayout();
+        };
+        sortSubmenu.Items.Add(sortRemoveSelectedItem);
+        sortSubmenu.Items.Add(new Separator());
+        sortSubmenu.Items.Add(new MenuItem
+        {
+            Header = "Tip: Ctrl+click header adds sort level",
+            IsEnabled = false
+        });
+        menu.Items.Add(sortSubmenu);
 
         var immediateEditItem = new MenuItem
         {
-            Header = "Immediate edit (Plotto only)",
+            Header = "Immediate plot edit",
             IsCheckable = true,
             IsChecked = targetGrid.HostedPlotDirectEditOnMouseDown,
             StaysOpenOnClick = true
@@ -277,7 +439,7 @@ public partial class MainWindow : Window
         };
         appearanceSubmenu.Items.Add(showSortIndicatorsItem);
 
-        var visibleRowsSubmenu = new MenuItem { Header = "Fill rows" };
+        var visibleRecordsSubmenu = new MenuItem { Header = "Fill records" };
         for (var mode = 0; mode <= 10; mode++)
         {
             var localMode = mode;
@@ -286,18 +448,18 @@ public partial class MainWindow : Window
             {
                 Header = label,
                 IsCheckable = true,
-                IsChecked = targetGrid.VisibleRowCount == localMode
+                IsChecked = targetGrid.VisibleRecordCount == localMode
             };
             modeItem.Click += (_, _) =>
             {
-                targetGrid.VisibleRowCount = localMode;
+                targetGrid.VisibleRecordCount = localMode;
                 targetGrid.InvalidateMeasure();
                 targetGrid.InvalidateVisual();
                 PersistLiveLayout();
             };
-            visibleRowsSubmenu.Items.Add(modeItem);
+            visibleRecordsSubmenu.Items.Add(modeItem);
         }
-        menu.Items.Add(visibleRowsSubmenu);
+        menu.Items.Add(visibleRecordsSubmenu);
         menu.Items.Add(new Separator());
 
         var findSubmenu = new MenuItem { Header = "Find" };
@@ -321,6 +483,251 @@ public partial class MainWindow : Window
         menu.IsOpen = true;
     }
 
+    private void OnRecordHeaderRightClick(
+        global::Griddo.Grid.Griddo targetGrid,
+        IReadOnlyList<IGriddoFieldView> fieldRegistry,
+        GriddoRecordHeaderMouseEventArgs e)
+    {
+        if (e.RecordIndex < 0 || e.RecordIndex >= targetGrid.Records.Count)
+        {
+            return;
+        }
+
+        var indices = e.SelectedRecordIndices
+            .Where(i => i >= 0 && i < targetGrid.Records.Count)
+            .Distinct()
+            .OrderBy(i => i)
+            .ToList();
+        if (indices.Count == 0)
+        {
+            return;
+        }
+
+        var layoutKey = ResolveLayoutKey(targetGrid, fieldRegistry);
+        var menu = new ContextMenu
+        {
+            PlacementTarget = targetGrid,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint
+        };
+        var gridConfiguratorItem = new MenuItem { Header = "_Grid configurator…" };
+        gridConfiguratorItem.Click += (_, _) => OpenFieldConfigurator(targetGrid, fieldRegistry, layoutKey);
+        menu.Items.Add(gridConfiguratorItem);
+        var frozenRecordsItem = new MenuItem
+        {
+            Header = "_Frozen",
+            IsCheckable = true,
+            IsChecked = indices.All(i => i < targetGrid.FixedRecordCount)
+        };
+        frozenRecordsItem.Click += (_, _) =>
+        {
+            ApplyRecordFrozenSelection(targetGrid, indices, frozenRecordsItem.IsChecked);
+            PersistGridLayoutFromCurrentGrid(targetGrid, layoutKey, fieldRegistry);
+        };
+        menu.Items.Add(frozenRecordsItem);
+        menu.IsOpen = true;
+    }
+
+    private void OnCornerHeaderRightClick(
+        global::Griddo.Grid.Griddo targetGrid,
+        IReadOnlyList<IGriddoFieldView> fieldRegistry)
+    {
+        OpenGridConfiguratorContextMenu(targetGrid, fieldRegistry);
+    }
+
+    private void OpenGridConfiguratorContextMenu(
+        global::Griddo.Grid.Griddo targetGrid,
+        IReadOnlyList<IGriddoFieldView> fieldRegistry)
+    {
+        var layoutKey = ResolveLayoutKey(targetGrid, fieldRegistry);
+        var menu = new ContextMenu
+        {
+            PlacementTarget = targetGrid,
+            Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint
+        };
+        var gridConfiguratorItem = new MenuItem { Header = "_Grid configurator…" };
+        gridConfiguratorItem.Click += (_, _) => OpenFieldConfigurator(targetGrid, fieldRegistry, layoutKey);
+        menu.Items.Add(gridConfiguratorItem);
+        menu.IsOpen = true;
+    }
+
+    private static void ApplyFieldFrozenSelection(global::Griddo.Grid.Griddo grid, IReadOnlyList<int> selectedIndices, bool shouldFreeze)
+    {
+        if (selectedIndices.Count == 0 || grid.Fields.Count == 0)
+        {
+            return;
+        }
+
+        var selected = selectedIndices
+            .Where(i => i >= 0 && i < grid.Fields.Count)
+            .Distinct()
+            .OrderBy(i => i)
+            .Select(i => grid.Fields[i])
+            .Distinct()
+            .ToList();
+        if (selected.Count == 0)
+        {
+            return;
+        }
+
+        var frozenCount = Math.Clamp(grid.FixedFieldCount, 0, grid.Fields.Count);
+        if (shouldFreeze)
+        {
+            foreach (var field in selected)
+            {
+                var currentIndex = grid.Fields.IndexOf(field);
+                if (currentIndex < 0)
+                {
+                    continue;
+                }
+
+                if (currentIndex < frozenCount)
+                {
+                    // Already frozen: move to end of frozen block.
+                    grid.Fields.Move(currentIndex, Math.Max(0, frozenCount - 1));
+                    continue;
+                }
+
+                // Not frozen yet: insert at end of frozen block, then extend block size.
+                grid.Fields.Move(currentIndex, frozenCount);
+                frozenCount++;
+            }
+        }
+        else
+        {
+            foreach (var field in selected)
+            {
+                var currentIndex = grid.Fields.IndexOf(field);
+                if (currentIndex < 0 || currentIndex >= frozenCount)
+                {
+                    continue;
+                }
+
+                // Remove from frozen block and place at start of non-frozen block.
+                frozenCount--;
+                grid.Fields.Move(currentIndex, frozenCount);
+            }
+        }
+
+        RestoreFieldSelection(grid, selected);
+        grid.FixedFieldCount = Math.Clamp(frozenCount, 0, grid.Fields.Count);
+        grid.InvalidateMeasure();
+        grid.InvalidateVisual();
+    }
+
+    private static void RestoreFieldSelection(global::Griddo.Grid.Griddo grid, IReadOnlyList<IGriddoFieldView> selectedFields)
+    {
+        if (selectedFields.Count == 0 || grid.Fields.Count == 0 || grid.Records.Count == 0)
+        {
+            return;
+        }
+
+        var selectedIndices = selectedFields
+            .Select(grid.Fields.IndexOf)
+            .Where(i => i >= 0)
+            .Distinct()
+            .OrderBy(i => i)
+            .ToList();
+        if (selectedIndices.Count == 0)
+        {
+            return;
+        }
+
+        grid.ClearCellSelection();
+        for (var i = 0; i < selectedIndices.Count; i++)
+        {
+            grid.SelectEntireField(selectedIndices[i], additive: i > 0);
+        }
+    }
+
+    private static void ApplyRecordFrozenSelection(global::Griddo.Grid.Griddo grid, IReadOnlyList<int> selectedIndices, bool shouldFreeze)
+    {
+        if (selectedIndices.Count == 0 || grid.Records.Count == 0)
+        {
+            return;
+        }
+
+        var selected = selectedIndices
+            .Where(i => i >= 0 && i < grid.Records.Count)
+            .Distinct()
+            .OrderBy(i => i)
+            .Select(i => grid.Records[i])
+            .Distinct()
+            .ToList();
+        if (selected.Count == 0)
+        {
+            return;
+        }
+
+        var frozenCount = Math.Clamp(grid.FixedRecordCount, 0, grid.Records.Count);
+        if (shouldFreeze)
+        {
+            foreach (var record in selected)
+            {
+                var currentIndex = grid.Records.IndexOf(record);
+                if (currentIndex < 0)
+                {
+                    continue;
+                }
+
+                if (currentIndex < frozenCount)
+                {
+                    // Already frozen: move to the end of the frozen block.
+                    grid.Records.Move(currentIndex, Math.Max(0, frozenCount - 1));
+                    continue;
+                }
+
+                // Not frozen yet: insert at end of frozen block, then extend block size.
+                grid.Records.Move(currentIndex, frozenCount);
+                frozenCount++;
+            }
+        }
+        else
+        {
+            foreach (var record in selected)
+            {
+                var currentIndex = grid.Records.IndexOf(record);
+                if (currentIndex < 0 || currentIndex >= frozenCount)
+                {
+                    continue;
+                }
+
+                // Remove from frozen block and place at start of non-frozen block.
+                frozenCount--;
+                grid.Records.Move(currentIndex, frozenCount);
+            }
+        }
+
+        RestoreRecordSelection(grid, selected);
+        grid.FixedRecordCount = Math.Clamp(frozenCount, 0, grid.Records.Count);
+        grid.InvalidateMeasure();
+        grid.InvalidateVisual();
+    }
+
+    private static void RestoreRecordSelection(global::Griddo.Grid.Griddo grid, IReadOnlyList<object> selectedRecords)
+    {
+        if (selectedRecords.Count == 0 || grid.Fields.Count == 0 || grid.Records.Count == 0)
+        {
+            return;
+        }
+
+        var selectedIndices = selectedRecords
+            .Select(grid.Records.IndexOf)
+            .Where(i => i >= 0)
+            .Distinct()
+            .OrderBy(i => i)
+            .ToList();
+        if (selectedIndices.Count == 0)
+        {
+            return;
+        }
+
+        grid.ClearCellSelection();
+        for (var i = 0; i < selectedIndices.Count; i++)
+        {
+            grid.SelectEntireRecord(selectedIndices[i], additive: i > 0);
+        }
+    }
+
     private ChromatogramControl ResolvePlotConfigurationChart(global::Griddo.Grid.Griddo grid)
     {
         var cell = grid.SelectedCells.FirstOrDefault(c => c.IsValid);
@@ -334,75 +741,102 @@ public partial class MainWindow : Window
 
     private void ConfigureGrid()
     {
-        RegisterColumn(GriddoNamedSourceColumns.Create(
+        RegisterField(GriddoNamedSourceFields.Create(
             sourceObjectName: PrimarySource,
             sourceMemberName: nameof(PrimaryDemoSource.Id),
             header: "ID",
             width: 70,
             editor: GriddoCellEditors.Number));
 
-        RegisterColumn(GriddoNamedSourceColumns.Create(
+        RegisterField(GriddoNamedSourceFields.Create(
             sourceObjectName: PrimarySource,
             sourceMemberName: nameof(PrimaryDemoSource.Name),
             header: "Name",
             width: 180));
 
-        RegisterColumn(GriddoNamedSourceColumns.Create(
+        RegisterField(new HierarchicalMergeTextFieldView(
+            header: "Result flag",
+            width: 120,
+            sourceObjectName: PrimarySource,
+            sourceMemberName: nameof(PrimaryDemoSource.ResultFlagKey),
+            recordsAccessor: () => DemoGrid.Records,
+            displayGetter: record => GetPrimarySource(record).ResultFlagDisplay,
+            sortKeyGetter: record => GetPrimarySource(record).ResultFlagKey,
+            mergeKeyGetters:
+            [
+                record => GetPrimarySource(record).ResultFlagKey
+            ]));
+
+        RegisterField(new HierarchicalMergeTextFieldView(
+            header: "Review status",
+            width: 130,
+            sourceObjectName: PrimarySource,
+            sourceMemberName: nameof(PrimaryDemoSource.ReviewStatusKey),
+            recordsAccessor: () => DemoGrid.Records,
+            displayGetter: record => GetPrimarySource(record).ReviewStatusDisplay,
+            sortKeyGetter: record => GetPrimarySource(record).ReviewStatusKey,
+            mergeKeyGetters:
+            [
+                record => GetPrimarySource(record).ResultFlagKey,
+                record => GetPrimarySource(record).ReviewStatusKey
+            ]));
+
+        RegisterField(GriddoNamedSourceFields.Create(
             sourceObjectName: AnalyticsSource,
             sourceMemberName: nameof(AnalyticsDemoSource.Score),
             header: "Score",
             width: 100,
             editor: GriddoCellEditors.Number));
 
-        RegisterColumn(new GriddoBoolColumnView(
+        RegisterField(new GriddoBoolFieldView(
             header: "Active",
             width: 72,
-            valueGetter: row => GetPrimarySource(row).Active,
-            valueSetter: (row, value) =>
+            valueGetter: record => GetPrimarySource(record).Active,
+            valueSetter: (record, value) =>
             {
                 if (value is not bool b)
                 {
                     return false;
                 }
 
-                GetPrimarySource(row).Active = b;
+                GetPrimarySource(record).Active = b;
                 return true;
             },
             sourceMemberName: nameof(PrimaryDemoSource.Active),
             sourceObjectName: PrimarySource));
 
-        RegisterColumn(new HtmlGriddoColumnView(
+        RegisterField(new HtmlGriddoFieldView(
             header: "Html",
             width: 260,
-            valueGetter: row => GetPrimarySource(row).HtmlSnippet,
-            valueSetter: (row, value) =>
+            valueGetter: record => GetPrimarySource(record).HtmlSnippet,
+            valueSetter: (record, value) =>
             {
-                GetPrimarySource(row).HtmlSnippet = value;
+                GetPrimarySource(record).HtmlSnippet = value;
                 return true;
             },
             sourceMemberName: nameof(PrimaryDemoSource.HtmlSnippet),
             sourceObjectName: PrimarySource));
 
-        RegisterColumn(new GriddoColumnView(
+        RegisterField(new GriddoFieldView(
             header: "Graphic",
             width: 120,
-            valueGetter: row => GetPrimarySource(row).Graphic,
+            valueGetter: record => GetPrimarySource(record).Graphic,
             valueSetter: (_, _) => false,
             editor: GriddoCellEditors.Text,
             sourceMemberName: nameof(PrimaryDemoSource.Graphic),
             sourceObjectName: PrimarySource));
 
-        RegisterColumn(new HostedPlottoColumnView(
-            header: PlottoColumnHeader,
+        RegisterField(new HostedPlottoFieldView(
+            header: ChromatogramFieldHeader,
             width: 220,
-            plottoSeedGetter: row => GetAnalyticsSource(row).PlottoSeed,
+            plottoSeedGetter: record => GetAnalyticsSource(record).PlottoSeed,
             sourceObjectName: AnalyticsSource,
             sourceMemberName: nameof(AnalyticsDemoSource.PlottoSeed)));
 
-        RegisterColumn(new HostedCalibrationPlottoColumnView(
-            header: CalibrationColumnHeader,
+        RegisterField(new HostedCalibrationPlottoFieldView(
+            header: CalibrationFieldHeader,
             width: 240,
-            seedGetter: row => GetAnalyticsSource(row).PlottoSeed,
+            seedGetter: record => GetAnalyticsSource(record).PlottoSeed,
             sourceObjectName: AnalyticsSource,
             sourceMemberName: nameof(AnalyticsDemoSource.PlottoSeed)));
 
@@ -452,17 +886,31 @@ public partial class MainWindow : Window
         {
             Header = "Fill _down",
             InputGestureText = "Ctrl+D",
-            ToolTip = "Copy the top selected cell in each column to the other selected rows in that column."
+            ToolTip = "Copy the top selected cell in each field to the other selected records in that field."
         };
         fillDownItem.Click += (_, _) => DemoGrid.FillSelectionDown();
 
-        var incrementalDownItem = new MenuItem
+        var incrementalDownNoPadItem = new MenuItem
         {
-            Header = "_Incremental down",
+            Header = "Incremental down (no pad)",
             InputGestureText = "Ctrl+I",
-            ToolTip = "Increment the last integer in each column’s top selected cell for each lower selected row (zero-pad widths)."
+            ToolTip = "Increment the last integer in each selected field without zero padding."
         };
-        incrementalDownItem.Click += (_, _) => DemoGrid.FillSelectionIncrementalDown();
+        incrementalDownNoPadItem.Click += (_, _) => DemoGrid.FillSelectionIncrementalDown(zeroPad: false);
+        var incrementalDownPadItem = new MenuItem
+        {
+            Header = "Incremental down (zero pad)",
+            InputGestureText = "Ctrl+Shift+I",
+            ToolTip = "Increment the last integer in each selected field and keep zero padding."
+        };
+        incrementalDownPadItem.Click += (_, _) => DemoGrid.FillSelectionIncrementalDown(zeroPad: true);
+        var incrementalDownKeepPadItem = new MenuItem
+        {
+            Header = "Incremental down (keep pad)",
+            InputGestureText = "Ctrl+Alt+I",
+            ToolTip = "Increment the last integer in each selected field and keep source padding width."
+        };
+        incrementalDownKeepPadItem.Click += (_, _) => DemoGrid.FillSelectionIncrementalDownKeepPadding();
 
         DemoGrid.CellContextMenu = new ContextMenu
         {
@@ -477,22 +925,42 @@ public partial class MainWindow : Window
                 clearItem,
                 new Separator(),
                 fillDownItem,
-                incrementalDownItem,
+                incrementalDownNoPadItem,
+                incrementalDownPadItem,
+                incrementalDownKeepPadItem,
                 new Separator(),
                 new MenuItem { Header = "Second item" },
             },
         };
 
-        for (var i = 1; i <= 50_000; i++)
+        for (var i = 1; i <= 100; i++)
         {
+            var resultIndex = ((i - 1) / 12) % 3;
+            var statusIndex = ((i - 1) / 4) % 3;
+            var (resultKey, resultDisplay) = resultIndex switch
+            {
+                0 => ("H", "High"),
+                1 => ("M", "Medium"),
+                _ => ("L", "Low")
+            };
+            var (statusKey, statusDisplay) = statusIndex switch
+            {
+                0 => ("N", "None"),
+                1 => ("T", "Tentative"),
+                _ => ("A", "Approved")
+            };
             var primary = new PrimaryDemoSource
             {
                 Id = i,
                 Name = $"Item {i:000}",
+                ResultFlagKey = resultKey,
+                ResultFlagDisplay = resultDisplay,
+                ReviewStatusKey = statusKey,
+                ReviewStatusDisplay = statusDisplay,
                 Active = i % 5 == 0,
                 HtmlSnippet = i % 3 == 0
                     ? $"<table><tr><th>R{i}</th><th>Q{i % 4}</th></tr><tr><td>{i * 2}</td><td><b>{Math.Round(i / 3.0, 2)}</b></td></tr></table>"
-                    : $"<b>Row {i}</b> has <i>formatted</i> text",
+                    : $"<b>Record {i}</b> has <i>formatted</i> text",
                 Graphic = CreatePathMarkupDemo(i)
             };
             var analytics = new AnalyticsDemoSource
@@ -501,7 +969,7 @@ public partial class MainWindow : Window
                 PlottoSeed = i
             };
 
-            DemoGrid.Rows.Add(new Dictionary<string, object>
+            DemoGrid.Records.Add(new Dictionary<string, object>
             {
                 [PrimarySource] = primary,
                 [AnalyticsSource] = analytics
@@ -513,23 +981,23 @@ public partial class MainWindow : Window
         DemoGrid.InvalidateVisual();
     }
 
-    private void RegisterColumn(IGriddoColumnView column)
+    private void RegisterField(IGriddoFieldView field)
     {
-        _allColumns.Add(column);
-        DemoGrid.Columns.Add(column);
+        _allFields.Add(field);
+        DemoGrid.Fields.Add(field);
     }
 
-    /// <summary>True when every row’s formatted value for this column is null/whitespace (no rows ⇒ not empty).</summary>
-    private static bool IsColumnEmptyForAllRows(global::Griddo.Grid.Griddo grid, IGriddoColumnView column)
+    /// <summary>True when every record’s formatted value for this field is null/whitespace (no records ⇒ not empty).</summary>
+    private static bool IsFieldEmptyForAllRecords(global::Griddo.Grid.Griddo grid, IGriddoFieldView field)
     {
-        if (grid.Rows.Count == 0)
+        if (grid.Records.Count == 0)
         {
             return false;
         }
 
-        foreach (var row in grid.Rows)
+        foreach (var record in grid.Records)
         {
-            var formatted = column.FormatValue(column.GetValue(row));
+            var formatted = field.FormatValue(field.GetValue(record));
             if (!string.IsNullOrWhiteSpace(formatted))
             {
                 return false;
@@ -539,17 +1007,17 @@ public partial class MainWindow : Window
         return true;
     }
 
-    private static void HideEmptyColumns(global::Griddo.Grid.Griddo grid, IReadOnlyList<IGriddoColumnView> registry)
+    private static void HideEmptyFields(global::Griddo.Grid.Griddo grid, IReadOnlyList<IGriddoFieldView> registry)
     {
-        var toHide = new List<IGriddoColumnView>();
+        var toHide = new List<IGriddoFieldView>();
         foreach (var col in registry)
         {
-            if (!grid.Columns.Contains(col))
+            if (!grid.Fields.Contains(col))
             {
                 continue;
             }
 
-            if (IsColumnEmptyForAllRows(grid, col))
+            if (IsFieldEmptyForAllRecords(grid, col))
             {
                 toHide.Add(col);
             }
@@ -557,14 +1025,14 @@ public partial class MainWindow : Window
 
         foreach (var col in toHide)
         {
-            if (grid.Columns.Count <= 1)
+            if (grid.Fields.Count <= 1)
             {
                 break;
             }
 
-            if (grid.Columns.Contains(col))
+            if (grid.Fields.Contains(col))
             {
-                grid.Columns.Remove(col);
+                grid.Fields.Remove(col);
             }
         }
 
@@ -572,27 +1040,27 @@ public partial class MainWindow : Window
         grid.InvalidateVisual();
     }
 
-    private static void ShowAllColumns(global::Griddo.Grid.Griddo grid, IReadOnlyList<IGriddoColumnView> registry)
+    private static void ShowAllFields(global::Griddo.Grid.Griddo grid, IReadOnlyList<IGriddoFieldView> registry)
     {
         foreach (var col in registry)
         {
-            ToggleColumnVisibility(grid, registry, col, true);
+            ToggleFieldVisibility(grid, registry, col, true);
         }
     }
 
-    private static void ShowAllColumnsExceptEmpty(global::Griddo.Grid.Griddo grid, IReadOnlyList<IGriddoColumnView> registry)
+    private static void ShowAllFieldsExceptEmpty(global::Griddo.Grid.Griddo grid, IReadOnlyList<IGriddoFieldView> registry)
     {
-        ShowAllColumns(grid, registry);
-        HideEmptyColumns(grid, registry);
+        ShowAllFields(grid, registry);
+        HideEmptyFields(grid, registry);
     }
 
-    private static void ToggleColumnVisibility(
+    private static void ToggleFieldVisibility(
         global::Griddo.Grid.Griddo grid,
-        IReadOnlyList<IGriddoColumnView> registry,
-        IGriddoColumnView column,
+        IReadOnlyList<IGriddoFieldView> registry,
+        IGriddoFieldView field,
         bool? shouldShow)
     {
-        var isVisible = grid.Columns.Contains(column);
+        var isVisible = grid.Fields.Contains(field);
         if (shouldShow == isVisible)
         {
             return;
@@ -600,91 +1068,91 @@ public partial class MainWindow : Window
 
         if (shouldShow != true)
         {
-            if (grid.Columns.Count <= 1)
+            if (grid.Fields.Count <= 1)
             {
                 return;
             }
 
-            grid.Columns.Remove(column);
+            grid.Fields.Remove(field);
         }
         else
         {
             var insertIndex = 0;
-            foreach (var orderedColumn in registry)
+            foreach (var orderedField in registry)
             {
-                if (ReferenceEquals(orderedColumn, column))
+                if (ReferenceEquals(orderedField, field))
                 {
                     break;
                 }
 
-                if (grid.Columns.Contains(orderedColumn))
+                if (grid.Fields.Contains(orderedField))
                 {
                     insertIndex++;
                 }
             }
 
-            insertIndex = Math.Clamp(insertIndex, 0, grid.Columns.Count);
-            grid.Columns.Insert(insertIndex, column);
+            insertIndex = Math.Clamp(insertIndex, 0, grid.Fields.Count);
+            grid.Fields.Insert(insertIndex, field);
         }
 
         grid.InvalidateMeasure();
         grid.InvalidateVisual();
     }
 
-    private static List<IGriddoColumnView> GetSelectedVisibleColumns(global::Griddo.Grid.Griddo grid)
+    private static List<IGriddoFieldView> GetSelectedVisibleFields(global::Griddo.Grid.Griddo grid)
     {
         var selectedIndices = grid.SelectedCells
-            .Select(c => c.ColumnIndex)
-            .Where(index => index >= 0 && index < grid.Columns.Count)
+            .Select(c => c.FieldIndex)
+            .Where(index => index >= 0 && index < grid.Fields.Count)
             .Distinct()
             .OrderBy(index => index)
             .ToList();
 
-        var selectedColumns = new List<IGriddoColumnView>(selectedIndices.Count);
+        var selectedFields = new List<IGriddoFieldView>(selectedIndices.Count);
         foreach (var index in selectedIndices)
         {
-            selectedColumns.Add(grid.Columns[index]);
+            selectedFields.Add(grid.Fields[index]);
         }
 
-        return selectedColumns;
+        return selectedFields;
     }
 
-    private static string GetColumnVisibilityLabel(IGriddoColumnView column)
+    private static string GetFieldVisibilityLabel(IGriddoFieldView field)
     {
-        var sourceObjectName = column is IGriddoColumnSourceObject sourceObj ? sourceObj.SourceObjectName : string.Empty;
+        var sourceObjectName = field is IGriddoFieldSourceObject sourceObj ? sourceObj.SourceObjectName : string.Empty;
         if (string.IsNullOrWhiteSpace(sourceObjectName))
         {
-            return column.Header;
+            return field.Header;
         }
 
-        return $"{sourceObjectName}.{column.Header}";
+        return $"{sourceObjectName}.{field.Header}";
     }
 
-    private static PrimaryDemoSource GetPrimarySource(object row)
+    private static PrimaryDemoSource GetPrimarySource(object record)
     {
-        if (row is IReadOnlyDictionary<string, object> map
+        if (record is IReadOnlyDictionary<string, object> map
             && map.TryGetValue(PrimarySource, out var source)
             && source is PrimaryDemoSource primary)
         {
             return primary;
         }
 
-        throw new InvalidOperationException($"Row does not contain source '{PrimarySource}'.");
+        throw new InvalidOperationException($"Record does not contain source '{PrimarySource}'.");
     }
 
-    private static AnalyticsDemoSource GetAnalyticsSource(object row)
+    private static AnalyticsDemoSource GetAnalyticsSource(object record)
     {
-        if (row is IReadOnlyDictionary<string, object> map
+        if (record is IReadOnlyDictionary<string, object> map
             && map.TryGetValue(AnalyticsSource, out var source)
             && source is AnalyticsDemoSource analytics)
         {
             return analytics;
         }
 
-        throw new InvalidOperationException($"Row does not contain source '{AnalyticsSource}'.");
+        throw new InvalidOperationException($"Record does not contain source '{AnalyticsSource}'.");
     }
 
-    /// <summary>Five calibration standards; Y values vary slightly by row seed. Fit mode cycles Linear / LinearThroughOrigin / Quadratic / QuadraticThroughOrigin by seed.</summary>
+    /// <summary>Five calibration standards; Y values vary slightly by record seed. Fit mode cycles Linear / LinearThroughOrigin / Quadratic / QuadraticThroughOrigin by seed.</summary>
     internal static List<CalibrationPoint> CreateCalibrationPoints(int seed)
     {
         var r = new Random(seed);
@@ -735,8 +1203,8 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Row-dependent mini drawings (~60×56 logical coords); scaled into the cell by Griddo.
-    /// Cycles <see cref="PathMarkupVariants"/> so adjacent rows usually differ.
+    /// Record-dependent mini drawings (~60×56 logical coords); scaled into the cell by Griddo.
+    /// Cycles <see cref="PathMarkupVariants"/> so adjacent records usually differ.
     /// </summary>
     private static Geometry CreatePathMarkupDemo(int seed)
     {
@@ -746,52 +1214,52 @@ public partial class MainWindow : Window
         return g;
     }
 
-    private void OpenGridConfigurator_Click(object sender, RoutedEventArgs e)
+    private void OpenFieldConfigurator_Click(object sender, RoutedEventArgs e)
     {
         _ = sender;
         _ = e;
-        OpenGridConfigurator(DemoGrid, _allColumns, DemoGridLayoutKey);
+        OpenFieldConfigurator(DemoGrid, _allFields, DemoGridLayoutKey);
     }
 
-    private void OpenGridConfigurator(
+    private void OpenFieldConfigurator(
         global::Griddo.Grid.Griddo grid,
-        IReadOnlyList<IGriddoColumnView> columnRegistry,
+        IReadOnlyList<IGriddoFieldView> fieldRegistry,
         string layoutKey)
     {
-        var rows = ColumnMetadataBuilder.BuildRowsFromGrid(grid, columnRegistry);
-        for (var sourceIndex = 0; sourceIndex < columnRegistry.Count; sourceIndex++)
+        var records = FieldMetadataBuilder.BuildRecordsFromGrid(grid, fieldRegistry);
+        for (var sourceIndex = 0; sourceIndex < fieldRegistry.Count; sourceIndex++)
         {
-            var registryColumn = columnRegistry[sourceIndex];
-            var visibleGridIndex = grid.Columns.IndexOf(registryColumn);
+            var registryField = fieldRegistry[sourceIndex];
+            var visibleGridIndex = grid.Fields.IndexOf(registryField);
             if (visibleGridIndex < 0)
             {
                 continue;
             }
 
-            var row = rows.FirstOrDefault(r => r.SourceColumnIndex == sourceIndex);
-            if (row is null)
+            var record = records.FirstOrDefault(r => r.SourceFieldIndex == sourceIndex);
+            if (record is null)
             {
                 continue;
             }
 
-            // BuildRowsFromGrid uses column definition width; capture current live grid width overrides too.
-            row.Width = grid.GetLogicalColumnWidth(visibleGridIndex);
+            // BuildRecordsFromGrid uses field definition width; capture current live grid width overrides too.
+            record.Width = grid.GetLogicalFieldWidth(visibleGridIndex);
         }
-        var shouldPersistPropertyViews = ReferenceEquals(columnRegistry, _allColumns);
+        var shouldPersistPropertyViews = ReferenceEquals(fieldRegistry, _allFields);
         if (shouldPersistPropertyViews)
         {
-            ApplyPersistedRowMetadata(rows);
+            ApplyPersistedRecordMetadata(records);
         }
-        var frozenColumns = grid.FixedColumnCount;
-        var frozenRows = grid.FixedRowCount;
-        var initialOptions = new ColumnChooserGeneralOptions
+        var frozenFields = grid.FixedFieldCount;
+        var frozenRecords = grid.FixedRecordCount;
+        var initialOptions = new FieldChooserGeneralOptions
         {
-            RowHeight = (int)Math.Round(grid.UniformRowHeight),
-            VisibleRowCount = grid.VisibleRowCount,
+            RecordThickness = (int)Math.Round(grid.UniformRecordHeight),
+            VisibleRecordCount = grid.VisibleRecordCount,
             ShowSelectionColor = grid.ShowCellSelectionColoring,
             ShowCurrentCellRect = grid.ShowCurrentCellColor,
-            ShowRowSelectionColor = grid.ShowRowHeaderSelectionColoring,
-            ShowColSelectionColor = grid.ShowColumnHeaderSelectionColoring,
+            ShowRecordSelectionColor = grid.ShowRecordHeaderSelectionColoring,
+            ShowColSelectionColor = grid.ShowFieldHeaderSelectionColoring,
             ShowEditCellRect = grid.ShowEditCellColor,
             ShowSortingIndicators = grid.ShowSortingIndicators,
             ShowHorizontalScrollBar = grid.ShowHorizontalScrollBar,
@@ -801,53 +1269,54 @@ public partial class MainWindow : Window
         };
 
         // Persisted configurator state should not depend on which source grid opened the dialog.
-        var dlg = new GridConfigurator(rows, frozenColumns, frozenRows, initialOptions) { Owner = this };
-        if (ReferenceEquals(columnRegistry, _allColumns))
+        var dlg = new FieldConfigurator(records, frozenFields, frozenRecords, initialOptions) { Owner = this };
+        if (ReferenceEquals(fieldRegistry, _allFields))
         {
-            ApplyPersistedGridLayoutForRegistry(dlg.ConfigColumnsGrid, dlg.ColumnHeaderRegistry, ConfigColumnsGridLayoutKey);
-            ApplyPersistedGridLayoutForRegistry(dlg.ConfigGeneralSettingsGrid, dlg.GeneralColumnHeaderRegistry, ConfigGeneralGridLayoutKey);
+            ApplyPersistedGridLayoutForRegistry(dlg.ConfigFieldsGrid, dlg.FieldHeaderRegistry, ConfigFieldsGridLayoutKey);
+            ApplyPersistedGridLayoutForRegistry(dlg.ConfigGeneralSettingsGrid, dlg.GeneralFieldHeaderRegistry, ConfigGeneralGridLayoutKey);
         }
         dlg.TargetSourceGrid = grid;
         dlg.ApplyToSourceGrid = (r, fc, fr, go) =>
         {
-            ColumnChooserGridApplier.Apply(grid, r, fc, fr, go, columnRegistry);
+            FieldChooserGridApplier.Apply(grid, r, fc, fr, go, fieldRegistry);
             if (shouldPersistPropertyViews)
             {
                 PersistPropertyViews(r);
             }
             PersistGridLayout(grid, layoutKey, r, fc, fr, go);
-            PersistGridLayoutFromCurrentGrid(dlg.ConfigColumnsGrid, ConfigColumnsGridLayoutKey, dlg.ColumnHeaderRegistry);
-            PersistGridLayoutFromCurrentGrid(dlg.ConfigGeneralSettingsGrid, ConfigGeneralGridLayoutKey, dlg.GeneralColumnHeaderRegistry);
+            PersistGridLayoutFromCurrentGrid(dlg.ConfigFieldsGrid, ConfigFieldsGridLayoutKey, dlg.FieldHeaderRegistry);
+            PersistGridLayoutFromCurrentGrid(dlg.ConfigGeneralSettingsGrid, ConfigGeneralGridLayoutKey, dlg.GeneralFieldHeaderRegistry);
         };
-        dlg.ColumnHeaderMenuHandler = (g, registry, ev) => OnColumnHeaderRightClick(g, registry, ev);
+        dlg.FieldHeaderMenuHandler = (g, registry, ev) => OnFieldHeaderRightClick(g, registry, ev);
         grid.ClearCellSelection();
         dlg.ShowDialog();
     }
 
-    private static bool IsGeneralConfigRegistry(IReadOnlyList<IGriddoColumnView> columnRegistry)
+    private static bool IsGeneralConfigRegistry(IReadOnlyList<IGriddoFieldView> fieldRegistry)
     {
-        if (columnRegistry.Count != 2)
+        if (fieldRegistry.Count != 3)
         {
             return false;
         }
 
-        return string.Equals(columnRegistry[0].Header, "Setting", StringComparison.OrdinalIgnoreCase)
-            && string.Equals(columnRegistry[1].Header, "Value", StringComparison.OrdinalIgnoreCase);
+        return string.Equals(fieldRegistry[0].Header, "Category", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(fieldRegistry[1].Header, "Setting", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(fieldRegistry[2].Header, "Value", StringComparison.OrdinalIgnoreCase);
     }
 
-    private string ResolveLayoutKey(global::Griddo.Grid.Griddo targetGrid, IReadOnlyList<IGriddoColumnView> columnRegistry)
+    private string ResolveLayoutKey(global::Griddo.Grid.Griddo targetGrid, IReadOnlyList<IGriddoFieldView> fieldRegistry)
     {
         if (ReferenceEquals(targetGrid, DemoGrid))
         {
             return DemoGridLayoutKey;
         }
 
-        return IsGeneralConfigRegistry(columnRegistry) ? ConfigGeneralGridLayoutKey : ConfigColumnsGridLayoutKey;
+        return IsGeneralConfigRegistry(fieldRegistry) ? ConfigGeneralGridLayoutKey : ConfigFieldsGridLayoutKey;
     }
 
     private void ApplyPersistedGridLayoutForRegistry(
         global::Griddo.Grid.Griddo grid,
-        IReadOnlyList<IGriddoColumnView> registry,
+        IReadOnlyList<IGriddoFieldView> registry,
         string layoutKey)
     {
         if (!_gridLayoutStore.TryGet(layoutKey, out var layout))
@@ -855,29 +1324,30 @@ public partial class MainWindow : Window
             return;
         }
 
-        var rows = ColumnMetadataBuilder.BuildRowsFromGrid(grid, registry);
-        var byIndex = layout.Columns.ToDictionary(c => c.SourceColumnIndex);
-        foreach (var row in rows)
+        var records = FieldMetadataBuilder.BuildRecordsFromGrid(grid, registry);
+        var byIndex = layout.Fields.ToDictionary(c => c.SourceFieldIndex);
+        foreach (var record in records)
         {
-            if (!byIndex.TryGetValue(row.SourceColumnIndex, out var state))
+            if (!byIndex.TryGetValue(record.SourceFieldIndex, out var state))
             {
                 continue;
             }
 
-            row.Fill = state.Fill;
-            row.Visible = state.Visible;
-            row.Width = Math.Max(28, state.Width);
-            row.SortPriority = Math.Max(0, state.SortPriority);
-            row.SortAscending = state.SortAscending;
+            record.Fill = state.Fill;
+            record.Visible = state.Visible;
+            record.Width = Math.Max(28, state.Width);
+            record.SortPriority = Math.Max(0, state.SortPriority);
+            record.SortAscending = state.SortAscending;
         }
+        records = ReorderRecordsByPersistedLayout(records, layout.Fields);
 
-        var options = new ColumnChooserGeneralOptions
+        var options = new FieldChooserGeneralOptions
         {
-            RowHeight = layout.RowHeight,
-            VisibleRowCount = layout.VisibleRowCount,
+            RecordThickness = layout.RecordThickness,
+            VisibleRecordCount = layout.VisibleRecordCount,
             ShowSelectionColor = layout.ShowSelectionColor,
             ShowCurrentCellRect = layout.ShowCurrentCellRect,
-            ShowRowSelectionColor = layout.ShowRowSelectionColor,
+            ShowRecordSelectionColor = layout.ShowRecordSelectionColor,
             ShowColSelectionColor = layout.ShowColSelectionColor,
             ShowEditCellRect = layout.ShowEditCellRect,
             ShowSortingIndicators = layout.ShowSortingIndicators,
@@ -887,70 +1357,73 @@ public partial class MainWindow : Window
             ImmediatePlottoEdit = layout.ImmediatePlottoEdit
         };
 
-        ColumnChooserGridApplier.Apply(
+        FieldChooserGridApplier.Apply(
             grid,
-            rows,
-            layout.FrozenColumns,
-            layout.FrozenRows,
+            records,
+            layout.FrozenFields,
+            layout.FrozenRecords,
             options,
             registry,
             new HashSet<int>(byIndex.Keys));
 
         if (IsConfiguratorInternalLayoutKey(layoutKey))
         {
-            grid.ShowColumnHeaderSelectionColoring = false;
-            grid.ShowRowHeaderSelectionColoring = false;
+            grid.ShowFieldHeaderSelectionColoring = false;
+            grid.ShowRecordHeaderSelectionColoring = false;
         }
     }
 
     private void ApplyPersistedPropertyViews()
     {
-        foreach (var column in _allColumns)
+        for (var sourceFieldIndex = 0; sourceFieldIndex < _allFields.Count; sourceFieldIndex++)
         {
-            if (column is not IGriddoColumnSourceMember sourceMember
+            var field = _allFields[sourceFieldIndex];
+            if (field is not IGriddoFieldSourceMember sourceMember
                 || string.IsNullOrWhiteSpace(sourceMember.SourceMemberName))
             {
                 continue;
             }
 
-            var sourceClassName = ResolveSourceClassName(column);
+            var sourceClassName = ResolveSourceClassName(field);
             if (string.IsNullOrWhiteSpace(sourceClassName))
             {
                 continue;
             }
 
-            if (!_viewStore.TryGet(sourceClassName, sourceMember.SourceMemberName, out var definition))
+            var propertyKey = ResolvePropertyViewKeyForSourceField(sourceFieldIndex, sourceMember.SourceMemberName);
+            if (!_viewStore.TryGet(sourceClassName, propertyKey, out var definition)
+                && !_viewStore.TryGet(sourceClassName, sourceMember.SourceMemberName, out definition))
             {
                 continue;
             }
 
-            if (column is IGriddoColumnFormatView formatView)
+            if (field is IGriddoFieldFormatView formatView)
             {
                 formatView.FormatString = definition.StringFormat ?? string.Empty;
             }
 
             if (!string.IsNullOrWhiteSpace(definition.Header))
             {
-                column.Header = definition.Header;
+                field.Header = definition.Header;
             }
 
-            if (column is IGriddoColumnTitleView titleView)
+            if (field is IGriddoFieldTitleView titleView)
             {
                 titleView.AbbreviatedHeader = definition.AbbreviatedHeader ?? string.Empty;
             }
 
-            if (column is IGriddoColumnDescriptionView descriptionView)
+            if (field is IGriddoFieldDescriptionView descriptionView)
             {
                 descriptionView.Description = definition.Description ?? string.Empty;
             }
 
-            if (column is IGriddoColumnFontView fontView)
+            if (field is IGriddoFieldFontView fontView)
             {
                 fontView.FontSize = Math.Max(0, definition.FontSize);
                 fontView.FontStyleName = definition.FontStyle ?? string.Empty;
             }
 
-            if (column is IGriddoColumnColorView colorView)
+            if (field is IGriddoFieldColorView colorView)
             {
                 colorView.ForegroundColor = definition.ForegroundColor ?? string.Empty;
                 colorView.BackgroundColor = definition.BackgroundColor ?? string.Empty;
@@ -958,29 +1431,29 @@ public partial class MainWindow : Window
         }
     }
 
-    private void PersistPropertyViews(IReadOnlyList<ColumnEditRow> rows)
+    private void PersistPropertyViews(IReadOnlyList<FieldEditRecord> records)
     {
-        foreach (var row in rows)
+        foreach (var record in records)
         {
-            var sourceClassName = ResolveSourceClassName(row.SourceObjectName);
-            var propertyName = ResolveSourcePropertyName(row);
+            var sourceClassName = ResolveSourceClassName(record.SourceObjectName);
+            var propertyName = ResolvePropertyViewKeyForRecord(record);
             if (string.IsNullOrWhiteSpace(sourceClassName) || string.IsNullOrWhiteSpace(propertyName))
             {
                 continue;
             }
 
-            var definition = new SourcePropertyViewDefinition
+            var definition = new PropertyViewConfiguration
             {
                 SourceClassName = sourceClassName,
                 PropertyName = propertyName,
-                Header = row.Title ?? string.Empty,
-                AbbreviatedHeader = row.AbbreviatedTitle ?? string.Empty,
-                Description = row.Description ?? string.Empty,
-                StringFormat = row.FormatString ?? string.Empty,
-                FontSize = Math.Max(0, row.FontSize),
-                FontStyle = row.FontStyleName ?? string.Empty,
-                ForegroundColor = row.ForegroundColor ?? string.Empty,
-                BackgroundColor = row.BackgroundColor ?? string.Empty
+                Header = record.Title ?? string.Empty,
+                AbbreviatedHeader = record.AbbreviatedTitle ?? string.Empty,
+                Description = record.Description ?? string.Empty,
+                StringFormat = record.FormatString ?? string.Empty,
+                FontSize = Math.Max(0, record.FontSize),
+                FontStyle = record.FontStyleName ?? string.Empty,
+                ForegroundColor = record.ForegroundColor ?? string.Empty,
+                BackgroundColor = record.BackgroundColor ?? string.Empty
             };
             _viewStore.Set(definition);
         }
@@ -988,42 +1461,44 @@ public partial class MainWindow : Window
         _viewStore.Save();
     }
 
-    private void ApplyPersistedRowMetadata(IReadOnlyList<ColumnEditRow> rows)
+    private void ApplyPersistedRecordMetadata(IReadOnlyList<FieldEditRecord> records)
     {
-        foreach (var row in rows)
+        foreach (var record in records)
         {
-            var sourceClassName = ResolveSourceClassName(row.SourceObjectName);
-            var propertyName = ResolveSourcePropertyName(row);
+            var sourceClassName = ResolveSourceClassName(record.SourceObjectName);
+            var propertyName = ResolvePropertyViewKeyForRecord(record);
             if (string.IsNullOrWhiteSpace(sourceClassName) || string.IsNullOrWhiteSpace(propertyName))
             {
                 continue;
             }
 
-            if (!_viewStore.TryGet(sourceClassName, propertyName, out var definition))
+            var fallbackPropertyName = ResolveSourcePropertyName(record);
+            if (!_viewStore.TryGet(sourceClassName, propertyName, out var definition)
+                && !_viewStore.TryGet(sourceClassName, fallbackPropertyName, out definition))
             {
                 continue;
             }
 
             if (!string.IsNullOrWhiteSpace(definition.Header))
             {
-                row.Title = definition.Header;
+                record.Title = definition.Header;
             }
 
             if (!string.IsNullOrWhiteSpace(definition.AbbreviatedHeader))
             {
-                row.AbbreviatedTitle = definition.AbbreviatedHeader;
+                record.AbbreviatedTitle = definition.AbbreviatedHeader;
             }
 
             if (!string.IsNullOrWhiteSpace(definition.Description))
             {
-                row.Description = definition.Description;
+                record.Description = definition.Description;
             }
 
-            row.FormatString = definition.StringFormat ?? string.Empty;
-            row.FontSize = Math.Max(0, definition.FontSize);
-            row.FontStyleName = definition.FontStyle ?? string.Empty;
-            row.ForegroundColor = definition.ForegroundColor ?? string.Empty;
-            row.BackgroundColor = definition.BackgroundColor ?? string.Empty;
+            record.FormatString = definition.StringFormat ?? string.Empty;
+            record.FontSize = Math.Max(0, definition.FontSize);
+            record.FontStyleName = definition.FontStyle ?? string.Empty;
+            record.ForegroundColor = definition.ForegroundColor ?? string.Empty;
+            record.BackgroundColor = definition.BackgroundColor ?? string.Empty;
         }
     }
 
@@ -1034,19 +1509,21 @@ public partial class MainWindow : Window
             return;
         }
 
-        foreach (var plot in layout.PlotColumns)
+        foreach (var plot in layout.PlotFields)
         {
-            if (plot.SourceColumnIndex < 0 || plot.SourceColumnIndex >= _allColumns.Count)
+            if (plot.SourceFieldIndex < 0 || plot.SourceFieldIndex >= _allFields.Count)
             {
                 continue;
             }
 
-            if (_allColumns[plot.SourceColumnIndex] is not IPlotColumnLayoutTarget target)
+            if (_allFields[plot.SourceFieldIndex] is not IPlotFieldLayoutTarget target)
             {
                 continue;
             }
 
             target.TitleSelection = plot.TitleSelection ?? string.Empty;
+            target.ShowXAxis = plot.ShowXAxis;
+            target.ShowYAxis = plot.ShowYAxis;
             target.XAxis = plot.XAxis ?? string.Empty;
             target.YAxis = plot.YAxis ?? string.Empty;
             target.XAxisTitle = plot.XAxisTitle ?? string.Empty;
@@ -1058,30 +1535,31 @@ public partial class MainWindow : Window
             target.YAxisLabelPrecision = Math.Clamp(plot.YAxisLabelPrecision, 0, 10);
         }
 
-        var rows = ColumnMetadataBuilder.BuildRowsFromGrid(grid, _allColumns);
-        ApplyPersistedRowMetadata(rows);
-        var byIndex = layout.Columns.ToDictionary(c => c.SourceColumnIndex);
-        foreach (var row in rows)
+        var records = FieldMetadataBuilder.BuildRecordsFromGrid(grid, _allFields);
+        ApplyPersistedRecordMetadata(records);
+        var byIndex = layout.Fields.ToDictionary(c => c.SourceFieldIndex);
+        foreach (var record in records)
         {
-            if (!byIndex.TryGetValue(row.SourceColumnIndex, out var state))
+            if (!byIndex.TryGetValue(record.SourceFieldIndex, out var state))
             {
                 continue;
             }
 
-            row.Fill = state.Fill;
-            row.Visible = state.Visible;
-            row.Width = Math.Max(28, state.Width);
-            row.SortPriority = Math.Max(0, state.SortPriority);
-            row.SortAscending = state.SortAscending;
+            record.Fill = state.Fill;
+            record.Visible = state.Visible;
+            record.Width = Math.Max(28, state.Width);
+            record.SortPriority = Math.Max(0, state.SortPriority);
+            record.SortAscending = state.SortAscending;
         }
+        records = ReorderRecordsByPersistedLayout(records, layout.Fields);
 
-        var options = new ColumnChooserGeneralOptions
+        var options = new FieldChooserGeneralOptions
         {
-            RowHeight = layout.RowHeight,
-            VisibleRowCount = layout.VisibleRowCount,
+            RecordThickness = layout.RecordThickness,
+            VisibleRecordCount = layout.VisibleRecordCount,
             ShowSelectionColor = layout.ShowSelectionColor,
             ShowCurrentCellRect = layout.ShowCurrentCellRect,
-            ShowRowSelectionColor = layout.ShowRowSelectionColor,
+            ShowRecordSelectionColor = layout.ShowRecordSelectionColor,
             ShowColSelectionColor = layout.ShowColSelectionColor,
             ShowEditCellRect = layout.ShowEditCellRect,
             ShowSortingIndicators = layout.ShowSortingIndicators,
@@ -1090,34 +1568,34 @@ public partial class MainWindow : Window
             IsTransposed = layout.IsTransposed,
             ImmediatePlottoEdit = layout.ImmediatePlottoEdit
         };
-        ColumnChooserGridApplier.Apply(
+        FieldChooserGridApplier.Apply(
             grid,
-            rows,
-            layout.FrozenColumns,
-            layout.FrozenRows,
+            records,
+            layout.FrozenFields,
+            layout.FrozenRecords,
             options,
-            _allColumns,
+            _allFields,
             new HashSet<int>(byIndex.Keys));
     }
 
     private void PersistGridLayout(
         global::Griddo.Grid.Griddo grid,
         string gridKey,
-        IReadOnlyList<ColumnEditRow> rows,
-        int frozenColumns,
-        int frozenRows,
-        ColumnChooserGeneralOptions options)
+        IReadOnlyList<FieldEditRecord> records,
+        int frozenFields,
+        int frozenRecords,
+        FieldChooserGeneralOptions options)
     {
-        var definition = new GridLayoutDefinition
+        var definition = new GridConfiguration
         {
-            GridKey = gridKey,
-            RowHeight = options.RowHeight,
-            VisibleRowCount = options.VisibleRowCount,
-            FrozenColumns = frozenColumns,
-            FrozenRows = frozenRows,
+            Key = gridKey,
+            RecordThickness = options.RecordThickness,
+            VisibleRecordCount = options.VisibleRecordCount,
+            FrozenFields = frozenFields,
+            FrozenRecords = frozenRecords,
             ShowSelectionColor = options.ShowSelectionColor,
             ShowCurrentCellRect = options.ShowCurrentCellRect,
-            ShowRowSelectionColor = options.ShowRowSelectionColor,
+            ShowRecordSelectionColor = options.ShowRecordSelectionColor,
             ShowColSelectionColor = options.ShowColSelectionColor,
             ShowEditCellRect = options.ShowEditCellRect,
             ShowSortingIndicators = options.ShowSortingIndicators,
@@ -1125,25 +1603,27 @@ public partial class MainWindow : Window
             ShowVerticalScrollBar = options.ShowVerticalScrollBar,
             IsTransposed = options.IsTransposed,
             ImmediatePlottoEdit = options.ImmediatePlottoEdit,
-            Columns = rows.Select(r => new GridColumnLayoutDefinition
+            Fields = records.Select(r => new FieldConfiguration
             {
-                SourceColumnIndex = r.SourceColumnIndex,
+                SourceFieldIndex = r.SourceFieldIndex,
                 Fill = r.Fill,
                 Visible = r.Visible,
                 Width = r.Width,
                 SortPriority = r.SortPriority,
                 SortAscending = r.SortAscending
             }).ToList(),
-            PlotColumns = _allColumns
-                .Select((column, index) => (column, index))
-                .Where(static x => x.column is IPlotColumnLayoutTarget)
+            PlotFields = _allFields
+                .Select((field, index) => (field, index))
+                .Where(static x => x.field is IPlotFieldLayoutTarget)
                 .Select(x =>
                 {
-                    var p = (IPlotColumnLayoutTarget)x.column;
-                    return new GridPlotColumnLayoutDefinition
+                    var p = (IPlotFieldLayoutTarget)x.field;
+                    return new PlotFieldConfiguration
                     {
-                        SourceColumnIndex = x.index,
+                        SourceFieldIndex = x.index,
                         TitleSelection = p.TitleSelection ?? string.Empty,
+                        ShowXAxis = p.ShowXAxis,
+                        ShowYAxis = p.ShowYAxis,
                         XAxis = p.XAxis ?? string.Empty,
                         YAxis = p.YAxis ?? string.Empty,
                         XAxisTitle = p.XAxisTitle ?? string.Empty,
@@ -1165,34 +1645,34 @@ public partial class MainWindow : Window
     private void PersistGridLayoutFromCurrentGrid(
         global::Griddo.Grid.Griddo grid,
         string gridKey,
-        IReadOnlyList<IGriddoColumnView> registry)
+        IReadOnlyList<IGriddoFieldView> registry)
     {
-        var rows = ColumnMetadataBuilder.BuildRowsFromGrid(grid, registry);
+        var records = BuildPersistedOrderRecordsFromCurrentGrid(grid, registry);
         for (var sourceIndex = 0; sourceIndex < registry.Count; sourceIndex++)
         {
-            var registryColumn = registry[sourceIndex];
-            var visibleGridIndex = grid.Columns.IndexOf(registryColumn);
+            var registryField = registry[sourceIndex];
+            var visibleGridIndex = grid.Fields.IndexOf(registryField);
             if (visibleGridIndex < 0)
             {
                 continue;
             }
 
-            var row = rows.FirstOrDefault(r => r.SourceColumnIndex == sourceIndex);
-            if (row is null)
+            var record = records.FirstOrDefault(r => r.SourceFieldIndex == sourceIndex);
+            if (record is null)
             {
                 continue;
             }
 
-            row.Width = grid.GetLogicalColumnWidth(visibleGridIndex);
+            record.Width = grid.GetLogicalFieldWidth(visibleGridIndex);
         }
-        var options = new ColumnChooserGeneralOptions
+        var options = new FieldChooserGeneralOptions
         {
-            RowHeight = (int)Math.Round(grid.UniformRowHeight),
-            VisibleRowCount = grid.VisibleRowCount,
+            RecordThickness = (int)Math.Round(grid.UniformRecordHeight),
+            VisibleRecordCount = grid.VisibleRecordCount,
             ShowSelectionColor = grid.ShowCellSelectionColoring,
             ShowCurrentCellRect = grid.ShowCurrentCellColor,
-            ShowRowSelectionColor = grid.ShowRowHeaderSelectionColoring,
-            ShowColSelectionColor = grid.ShowColumnHeaderSelectionColoring,
+            ShowRecordSelectionColor = grid.ShowRecordHeaderSelectionColoring,
+            ShowColSelectionColor = grid.ShowFieldHeaderSelectionColoring,
             ShowEditCellRect = grid.ShowEditCellColor,
             ShowSortingIndicators = grid.ShowSortingIndicators,
             ShowHorizontalScrollBar = grid.ShowHorizontalScrollBar,
@@ -1202,33 +1682,154 @@ public partial class MainWindow : Window
         };
         if (IsConfiguratorInternalLayoutKey(gridKey))
         {
-            options.ShowRowSelectionColor = false;
+            options.ShowRecordSelectionColor = false;
             options.ShowColSelectionColor = false;
         }
 
-        PersistGridLayout(grid, gridKey, rows, grid.FixedColumnCount, grid.FixedRowCount, options);
+        PersistGridLayout(grid, gridKey, records, grid.FixedFieldCount, grid.FixedRecordCount, options);
+    }
+
+    private static List<FieldEditRecord> BuildPersistedOrderRecordsFromCurrentGrid(
+        global::Griddo.Grid.Griddo grid,
+        IReadOnlyList<IGriddoFieldView> registry)
+    {
+        var records = FieldMetadataBuilder.BuildRecordsFromGrid(grid, registry);
+        if (records.Count == 0 || registry.Count == 0)
+        {
+            return records;
+        }
+
+        var bySourceIndex = records.ToDictionary(r => r.SourceFieldIndex);
+        var ordered = new List<FieldEditRecord>(records.Count);
+        var added = new HashSet<int>();
+
+        foreach (var visibleField in grid.Fields)
+        {
+            var sourceIndex = -1;
+            for (var i = 0; i < registry.Count; i++)
+            {
+                if (ReferenceEquals(registry[i], visibleField))
+                {
+                    sourceIndex = i;
+                    break;
+                }
+            }
+
+            if (sourceIndex < 0
+                || !bySourceIndex.TryGetValue(sourceIndex, out var record)
+                || !added.Add(sourceIndex))
+            {
+                continue;
+            }
+
+            ordered.Add(record);
+        }
+
+        for (var i = 0; i < registry.Count; i++)
+        {
+            if (!bySourceIndex.TryGetValue(i, out var record) || !added.Add(i))
+            {
+                continue;
+            }
+
+            ordered.Add(record);
+        }
+
+        return ordered;
+    }
+
+    private static List<FieldEditRecord> ReorderRecordsByPersistedLayout(
+        List<FieldEditRecord> records,
+        IReadOnlyList<FieldConfiguration> persistedFields)
+    {
+        if (records.Count == 0 || persistedFields.Count == 0)
+        {
+            return records;
+        }
+
+        var bySourceIndex = records.ToDictionary(r => r.SourceFieldIndex);
+        var ordered = new List<FieldEditRecord>(records.Count);
+        var added = new HashSet<int>();
+
+        foreach (var persisted in persistedFields)
+        {
+            if (!bySourceIndex.TryGetValue(persisted.SourceFieldIndex, out var record)
+                || !added.Add(persisted.SourceFieldIndex))
+            {
+                continue;
+            }
+
+            ordered.Add(record);
+        }
+
+        foreach (var record in records)
+        {
+            if (added.Add(record.SourceFieldIndex))
+            {
+                ordered.Add(record);
+            }
+        }
+
+        return ordered;
     }
 
     private bool IsConfiguratorInternalLayoutKey(string layoutKey) =>
-        string.Equals(layoutKey, ConfigColumnsGridLayoutKey, StringComparison.Ordinal)
+        string.Equals(layoutKey, ConfigFieldsGridLayoutKey, StringComparison.Ordinal)
         || string.Equals(layoutKey, ConfigGeneralGridLayoutKey, StringComparison.Ordinal);
 
-    private string ResolveSourcePropertyName(ColumnEditRow row)
+    private string ResolveSourcePropertyName(FieldEditRecord record)
     {
-        if (row.SourceColumnIndex >= 0
-            && row.SourceColumnIndex < _allColumns.Count
-            && _allColumns[row.SourceColumnIndex] is IGriddoColumnSourceMember sourceMember
+        if (record.SourceFieldIndex >= 0
+            && record.SourceFieldIndex < _allFields.Count
+            && _allFields[record.SourceFieldIndex] is IGriddoFieldSourceMember sourceMember
             && !string.IsNullOrWhiteSpace(sourceMember.SourceMemberName))
         {
             return sourceMember.SourceMemberName;
         }
 
-        return row.PropertyName;
+        return record.PropertyName;
     }
 
-    private static string ResolveSourceClassName(IGriddoColumnView column)
+    private string ResolvePropertyViewKeyForRecord(FieldEditRecord record)
     {
-        if (column is not IGriddoColumnSourceObject sourceObject)
+        if (record.SourceFieldIndex >= 0 && record.SourceFieldIndex < _allFields.Count)
+        {
+            var sourceMember = (_allFields[record.SourceFieldIndex] as IGriddoFieldSourceMember)?.SourceMemberName ?? string.Empty;
+            return ResolvePropertyViewKeyForSourceField(record.SourceFieldIndex, sourceMember);
+        }
+
+        return ResolveSourcePropertyName(record);
+    }
+
+    private string ResolvePropertyViewKeyForSourceField(int sourceFieldIndex, string sourceMemberName)
+    {
+        if (sourceFieldIndex < 0 || sourceFieldIndex >= _allFields.Count)
+        {
+            return sourceMemberName;
+        }
+
+        if (string.IsNullOrWhiteSpace(sourceMemberName))
+        {
+            return sourceMemberName;
+        }
+
+        var sourceObjectName = (_allFields[sourceFieldIndex] as IGriddoFieldSourceObject)?.SourceObjectName ?? string.Empty;
+        var hasDuplicateMember = _allFields
+            .Select((field, index) => (field, index))
+            .Any(x =>
+                x.index != sourceFieldIndex
+                && x.field is IGriddoFieldSourceMember otherMember
+                && string.Equals(otherMember.SourceMemberName, sourceMemberName, StringComparison.Ordinal)
+                && string.Equals(
+                    (x.field as IGriddoFieldSourceObject)?.SourceObjectName ?? string.Empty,
+                    sourceObjectName,
+                    StringComparison.Ordinal));
+        return hasDuplicateMember ? $"{sourceMemberName}#{sourceFieldIndex}" : sourceMemberName;
+    }
+
+    private static string ResolveSourceClassName(IGriddoFieldView field)
+    {
+        if (field is not IGriddoFieldSourceObject sourceObject)
         {
             return string.Empty;
         }
@@ -1249,6 +1850,112 @@ public partial class MainWindow : Window
         }
 
         return string.Empty;
+    }
+
+    private sealed class HierarchicalMergeTextFieldView : IGriddoFieldView, IGriddoFieldDescriptionView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoRecordMergeBandView, IGriddoFieldSortValueView
+    {
+        private readonly Func<System.Collections.IList> _recordsAccessor;
+        private readonly Func<object, string> _displayGetter;
+        private readonly Func<object, string> _sortKeyGetter;
+        private readonly IReadOnlyList<Func<object, string>> _mergeKeyGetters;
+
+        public HierarchicalMergeTextFieldView(
+            string header,
+            double width,
+            string sourceObjectName,
+            string sourceMemberName,
+            Func<System.Collections.IList> recordsAccessor,
+            Func<object, string> displayGetter,
+            Func<object, string> sortKeyGetter,
+            IReadOnlyList<Func<object, string>> mergeKeyGetters)
+        {
+            Header = header;
+            Width = width;
+            SourceObjectName = sourceObjectName;
+            SourceMemberName = sourceMemberName;
+            _recordsAccessor = recordsAccessor;
+            _displayGetter = displayGetter;
+            _sortKeyGetter = sortKeyGetter;
+            _mergeKeyGetters = mergeKeyGetters;
+        }
+
+        public string Header { get; set; }
+        public string Description { get; set; } = string.Empty;
+        public double Width { get; }
+        public bool Fill { get; set; }
+        public bool IsHtml => false;
+        public TextAlignment ContentAlignment { get; } = TextAlignment.Left;
+        public IGriddoCellEditor Editor => GriddoCellEditors.Text;
+        public string SourceMemberName { get; }
+        public string SourceObjectName { get; }
+
+        public object? GetValue(object recordSource)
+        {
+            return _displayGetter(recordSource);
+        }
+
+        public bool TrySetValue(object recordSource, object? value)
+        {
+            _ = recordSource;
+            _ = value;
+            return false;
+        }
+
+        public string FormatValue(object? value) => value?.ToString() ?? string.Empty;
+
+        public object? GetSortValue(object recordSource) => _sortKeyGetter(recordSource);
+
+        public bool IsMergedWithPreviousRecord(IReadOnlyList<object> records, int recordIndex)
+        {
+            if (recordIndex <= 0 || recordIndex >= records.Count)
+            {
+                return false;
+            }
+
+            return AreInSameMergeGroup(records[recordIndex], records[recordIndex - 1]);
+        }
+
+        public bool IsMergedWithNextRecord(IReadOnlyList<object> records, int recordIndex)
+        {
+            if (recordIndex < 0 || recordIndex >= records.Count - 1)
+            {
+                return false;
+            }
+
+            return AreInSameMergeGroup(records[recordIndex], records[recordIndex + 1]);
+        }
+
+        private bool AreInSameMergeGroup(object? leftRecord, object? rightRecord)
+        {
+            if (leftRecord is null || rightRecord is null)
+            {
+                return false;
+            }
+
+            foreach (var getter in _mergeKeyGetters)
+            {
+                if (!string.Equals(getter(leftRecord), getter(rightRecord), StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
+
+    private static void ApplyPlotLayout(IPlotFieldLayoutTarget target, PlotFieldDialogResult settings)
+    {
+        target.TitleSelection = settings.TitleSelection ?? string.Empty;
+        target.Label = settings.Label ?? string.Empty;
+        target.ShowXAxis = settings.ShowXAxis;
+        target.ShowYAxis = settings.ShowYAxis;
+        target.XAxisTitle = settings.XAxisTitle ?? string.Empty;
+        target.YAxisTitle = settings.YAxisTitle ?? string.Empty;
+        target.XAxisUnit = settings.XAxisUnit ?? string.Empty;
+        target.YAxisUnit = settings.YAxisUnit ?? string.Empty;
+        target.XAxisLabelPrecision = Math.Clamp(settings.XAxisLabelPrecision, 0, 10);
+        target.YAxisLabelPrecision = Math.Clamp(settings.YAxisLabelPrecision, 0, 10);
     }
 
     /// <summary>WPF path markup samples—triangle, circle, diamond, rect, hexagon, heart-ish, wave, etc.</summary>
@@ -1285,6 +1992,10 @@ public sealed class PrimaryDemoSource
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string ResultFlagKey { get; set; } = string.Empty;
+    public string ResultFlagDisplay { get; set; } = string.Empty;
+    public string ReviewStatusKey { get; set; } = string.Empty;
+    public string ReviewStatusDisplay { get; set; } = string.Empty;
     public bool Active { get; set; }
     public string HtmlSnippet { get; set; } = string.Empty;
     public Geometry Graphic { get; set; } = Geometry.Empty;

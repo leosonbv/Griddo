@@ -320,6 +320,32 @@ public abstract partial class SkiaChartBaseControl : SKElement
             typeof(SkiaChartBaseControl),
             new FrameworkPropertyMetadata(2, FrameworkPropertyMetadataOptions.AffectsRender));
 
+    public bool ShowXAxis
+    {
+        get => (bool)GetValue(ShowXAxisProperty);
+        set => SetValue(ShowXAxisProperty, value);
+    }
+
+    public static readonly DependencyProperty ShowXAxisProperty =
+        DependencyProperty.Register(
+            nameof(ShowXAxis),
+            typeof(bool),
+            typeof(SkiaChartBaseControl),
+            new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public bool ShowYAxis
+    {
+        get => (bool)GetValue(ShowYAxisProperty);
+        set => SetValue(ShowYAxisProperty, value);
+    }
+
+    public static readonly DependencyProperty ShowYAxisProperty =
+        DependencyProperty.Register(
+            nameof(ShowYAxis),
+            typeof(bool),
+            typeof(SkiaChartBaseControl),
+            new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));
+
     /// <summary>Multiplier from host grid zoom (Ctrl+wheel); scales strokes and axis typography.</summary>
     public double UiScale
     {

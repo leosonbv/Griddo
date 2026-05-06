@@ -7,30 +7,30 @@ public sealed partial class Griddo
 {
     private void ClearHeaderAuxiliarySelectionState()
     {
-        _columnHeaderOnlySelection.Clear();
-        _rowHeaderOnlySelection.Clear();
-        _columnHeaderRightClickOutline.Clear();
-        _rowHeaderRightClickOutline.Clear();
+        _fieldHeaderOnlySelection.Clear();
+        _recordHeaderOnlySelection.Clear();
+        _fieldHeaderRightClickOutline.Clear();
+        _recordHeaderRightClickOutline.Clear();
     }
 
-    private bool IsColumnHeaderMarkedSelected(int columnIndex) =>
-        IsColumnSelected(columnIndex) || _columnHeaderOnlySelection.Contains(columnIndex);
+    private bool IsFieldHeaderMarkedSelected(int fieldIndex) =>
+        IsFieldSelected(fieldIndex) || _fieldHeaderOnlySelection.Contains(fieldIndex);
 
-    private bool IsRowHeaderMarkedSelected(int rowIndex) =>
-        IsRowSelected(rowIndex) || _rowHeaderOnlySelection.Contains(rowIndex);
+    private bool IsRecordHeaderMarkedSelected(int recordIndex) =>
+        IsRecordSelected(recordIndex) || _recordHeaderOnlySelection.Contains(recordIndex);
 
-    private void MoveCurrentCell(int rowDelta, int colDelta)
+    private void MoveCurrentCell(int recordDelta, int colDelta)
     {
-        if (Rows.Count == 0 || Columns.Count == 0)
+        if (Records.Count == 0 || Fields.Count == 0)
         {
             return;
         }
 
         ClearHeaderFocus();
         ClearHeaderAuxiliarySelectionState();
-        var row = Math.Clamp(_currentCell.RowIndex + rowDelta, 0, Rows.Count - 1);
-        var col = Math.Clamp(_currentCell.ColumnIndex + colDelta, 0, Columns.Count - 1);
-        _currentCell = new GriddoCellAddress(row, col);
+        var record = Math.Clamp(_currentCell.RecordIndex + recordDelta, 0, Records.Count - 1);
+        var col = Math.Clamp(_currentCell.FieldIndex + colDelta, 0, Fields.Count - 1);
+        _currentCell = new GriddoCellAddress(record, col);
         _selectedCells.Clear();
         _selectedCells.Add(_currentCell);
         InvalidateVisual();
@@ -38,7 +38,7 @@ public sealed partial class Griddo
 
     private bool HandleCellKeyboardNavigation(Key key, bool isCtrlPressed, bool isShiftPressed)
     {
-        if (!GriddoCellNavigator.TryGetTarget(key, isCtrlPressed, _currentCell, Rows.Count, Columns.Count, out var target))
+        if (!GriddoCellNavigator.TryGetTarget(key, isCtrlPressed, _currentCell, Records.Count, Fields.Count, out var target))
         {
             return false;
         }
@@ -78,16 +78,16 @@ public sealed partial class Griddo
             _selectedCells.UnionWith(_selectionDragSnapshot);
         }
 
-        var minRow = Math.Min(_dragAnchorCell.RowIndex, _dragCurrentCell.RowIndex);
-        var maxRow = Math.Max(_dragAnchorCell.RowIndex, _dragCurrentCell.RowIndex);
-        var minCol = Math.Min(_dragAnchorCell.ColumnIndex, _dragCurrentCell.ColumnIndex);
-        var maxCol = Math.Max(_dragAnchorCell.ColumnIndex, _dragCurrentCell.ColumnIndex);
+        var minRecord = Math.Min(_dragAnchorCell.RecordIndex, _dragCurrentCell.RecordIndex);
+        var maxRecord = Math.Max(_dragAnchorCell.RecordIndex, _dragCurrentCell.RecordIndex);
+        var minCol = Math.Min(_dragAnchorCell.FieldIndex, _dragCurrentCell.FieldIndex);
+        var maxCol = Math.Max(_dragAnchorCell.FieldIndex, _dragCurrentCell.FieldIndex);
 
-        for (var row = minRow; row <= maxRow; row++)
+        for (var record = minRecord; record <= maxRecord; record++)
         {
             for (var col = minCol; col <= maxCol; col++)
             {
-                _selectedCells.Add(new GriddoCellAddress(row, col));
+                _selectedCells.Add(new GriddoCellAddress(record, col));
             }
         }
     }
@@ -100,25 +100,25 @@ public sealed partial class Griddo
             _selectedCells.Clear();
         }
 
-        var minRow = Math.Min(from.RowIndex, to.RowIndex);
-        var maxRow = Math.Max(from.RowIndex, to.RowIndex);
-        var minCol = Math.Min(from.ColumnIndex, to.ColumnIndex);
-        var maxCol = Math.Max(from.ColumnIndex, to.ColumnIndex);
-        for (var row = minRow; row <= maxRow; row++)
+        var minRecord = Math.Min(from.RecordIndex, to.RecordIndex);
+        var maxRecord = Math.Max(from.RecordIndex, to.RecordIndex);
+        var minCol = Math.Min(from.FieldIndex, to.FieldIndex);
+        var maxCol = Math.Max(from.FieldIndex, to.FieldIndex);
+        for (var record = minRecord; record <= maxRecord; record++)
         {
             for (var col = minCol; col <= maxCol; col++)
             {
-                if (row >= 0 && row < Rows.Count && col >= 0 && col < Columns.Count)
+                if (record >= 0 && record < Records.Count && col >= 0 && col < Fields.Count)
                 {
-                    _selectedCells.Add(new GriddoCellAddress(row, col));
+                    _selectedCells.Add(new GriddoCellAddress(record, col));
                 }
             }
         }
     }
 
-    private void SelectColumn(int columnIndex, bool additive)
+    private void SelectField(int fieldIndex, bool additive)
     {
-        if (columnIndex < 0 || columnIndex >= Columns.Count)
+        if (fieldIndex < 0 || fieldIndex >= Fields.Count)
         {
             return;
         }
@@ -129,9 +129,9 @@ public sealed partial class Griddo
             _selectedCells.Clear();
         }
 
-        for (var row = 0; row < Rows.Count; row++)
+        for (var record = 0; record < Records.Count; record++)
         {
-            _selectedCells.Add(new GriddoCellAddress(row, columnIndex));
+            _selectedCells.Add(new GriddoCellAddress(record, fieldIndex));
         }
     }
 
@@ -140,16 +140,16 @@ public sealed partial class Griddo
         ClearHeaderFocus();
         ClearHeaderAuxiliarySelectionState();
         _selectedCells.Clear();
-        if (Rows.Count == 0 || Columns.Count == 0)
+        if (Records.Count == 0 || Fields.Count == 0)
         {
             return;
         }
 
-        for (var row = 0; row < Rows.Count; row++)
+        for (var record = 0; record < Records.Count; record++)
         {
-            for (var col = 0; col < Columns.Count; col++)
+            for (var col = 0; col < Fields.Count; col++)
             {
-                _selectedCells.Add(new GriddoCellAddress(row, col));
+                _selectedCells.Add(new GriddoCellAddress(record, col));
             }
         }
     }
@@ -159,176 +159,176 @@ public sealed partial class Griddo
         _headerFocusKind = HeaderFocusKind.None;
     }
 
-    private void StopColumnMoveTracking()
+    private void StopFieldMoveTracking()
     {
-        _isTrackingColumnMove = false;
-        _isMovingColumn = false;
-        _isMovingPointerInColumnHeader = false;
-        _columnMoveStartedFromSelectedHeader = false;
-        _pendingColumnHeaderSelectionOnMouseUp = false;
-        _pendingColumnHeaderIndex = -1;
-        _pendingColumnHeaderPreserveSelection = false;
-        _movingColumnIndex = -1;
-        _columnMoveCueIndex = -1;
+        _isTrackingFieldMove = false;
+        _isMovingField = false;
+        _isMovingPointerInFieldHeader = false;
+        _fieldMoveStartedFromSelectedHeader = false;
+        _pendingFieldHeaderSelectionOnMouseUp = false;
+        _pendingFieldHeaderIndex = -1;
+        _pendingFieldHeaderPreserveSelection = false;
+        _movingFieldIndex = -1;
+        _fieldMoveCueIndex = -1;
         if (!_isDraggingSelection
-            && !_isDraggingColumnHeaderSelection
-            && !_isDraggingRowHeaderSelection
-            && !_isResizingColumn
-            && !_isResizingRow
-            && !_isTrackingRowMove
+            && !_isDraggingFieldHeaderSelection
+            && !_isDraggingRecordHeaderSelection
+            && !_isResizingField
+            && !_isResizingRecord
+            && !_isTrackingRecordMove
             && IsMouseCaptured)
         {
             ReleaseMouseCapture();
         }
     }
 
-    private void StopRowMoveTracking()
+    private void StopRecordMoveTracking()
     {
-        _isTrackingRowMove = false;
-        _isMovingRow = false;
-        _movingRowIndex = -1;
-        _rowMoveCueIndex = -1;
-        _pendingRowHeaderSelectionOnMouseUp = false;
-        _pendingRowHeaderIndex = -1;
-        _pendingRowHeaderPreserveSelection = false;
+        _isTrackingRecordMove = false;
+        _isMovingRecord = false;
+        _movingRecordIndex = -1;
+        _recordMoveCueIndex = -1;
+        _pendingRecordHeaderSelectionOnMouseUp = false;
+        _pendingRecordHeaderIndex = -1;
+        _pendingRecordHeaderPreserveSelection = false;
         if (!_isDraggingSelection
-            && !_isDraggingColumnHeaderSelection
-            && !_isDraggingRowHeaderSelection
-            && !_isResizingColumn
-            && !_isResizingRow
-            && !_isTrackingColumnMove
+            && !_isDraggingFieldHeaderSelection
+            && !_isDraggingRecordHeaderSelection
+            && !_isResizingField
+            && !_isResizingRecord
+            && !_isTrackingFieldMove
             && IsMouseCaptured)
         {
             ReleaseMouseCapture();
         }
     }
 
-    private void RemapHeaderFocusColumnAfterMove(int fromIndex, int toIndex)
+    private void RemapHeaderFocusFieldAfterMove(int fromIndex, int toIndex)
     {
-        if (_headerFocusKind != HeaderFocusKind.Column)
+        if (_headerFocusKind != HeaderFocusKind.Field)
         {
             return;
         }
 
-        _headerFocusColumnIndex = RemapColumnIndex(_headerFocusColumnIndex, fromIndex, toIndex);
+        _headerFocusFieldIndex = RemapFieldIndex(_headerFocusFieldIndex, fromIndex, toIndex);
     }
 
-    private void MoveColumn(int fromIndex, int toIndex)
+    private void MoveField(int fromIndex, int toIndex)
     {
-        if (fromIndex < 0 || toIndex < 0 || fromIndex >= Columns.Count || toIndex >= Columns.Count || fromIndex == toIndex)
+        if (fromIndex < 0 || toIndex < 0 || fromIndex >= Fields.Count || toIndex >= Fields.Count || fromIndex == toIndex)
         {
             return;
         }
 
-        Columns.Move(fromIndex, toIndex);
+        Fields.Move(fromIndex, toIndex);
 
         var oldCurrent = _currentCell;
-        _currentCell = new GriddoCellAddress(oldCurrent.RowIndex, RemapColumnIndex(oldCurrent.ColumnIndex, fromIndex, toIndex));
+        _currentCell = new GriddoCellAddress(oldCurrent.RecordIndex, RemapFieldIndex(oldCurrent.FieldIndex, fromIndex, toIndex));
 
         var remapped = new HashSet<GriddoCellAddress>();
         foreach (var address in _selectedCells)
         {
-            remapped.Add(new GriddoCellAddress(address.RowIndex, RemapColumnIndex(address.ColumnIndex, fromIndex, toIndex)));
+            remapped.Add(new GriddoCellAddress(address.RecordIndex, RemapFieldIndex(address.FieldIndex, fromIndex, toIndex)));
         }
 
         _selectedCells.Clear();
         _selectedCells.UnionWith(remapped);
-        if (_columnHeaderOnlySelection.Count > 0)
+        if (_fieldHeaderOnlySelection.Count > 0)
         {
             var remappedHeaders = new HashSet<int>();
-            foreach (var c in _columnHeaderOnlySelection)
+            foreach (var c in _fieldHeaderOnlySelection)
             {
-                remappedHeaders.Add(RemapColumnIndex(c, fromIndex, toIndex));
+                remappedHeaders.Add(RemapFieldIndex(c, fromIndex, toIndex));
             }
 
-            _columnHeaderOnlySelection.Clear();
+            _fieldHeaderOnlySelection.Clear();
             foreach (var c in remappedHeaders)
             {
-                if (c >= 0 && c < Columns.Count)
+                if (c >= 0 && c < Fields.Count)
                 {
-                    _columnHeaderOnlySelection.Add(c);
+                    _fieldHeaderOnlySelection.Add(c);
                 }
             }
         }
 
-        if (_columnHeaderRightClickOutline.Count > 0)
+        if (_fieldHeaderRightClickOutline.Count > 0)
         {
             var remappedOutline = new HashSet<int>();
-            foreach (var c in _columnHeaderRightClickOutline)
+            foreach (var c in _fieldHeaderRightClickOutline)
             {
-                remappedOutline.Add(RemapColumnIndex(c, fromIndex, toIndex));
+                remappedOutline.Add(RemapFieldIndex(c, fromIndex, toIndex));
             }
 
-            _columnHeaderRightClickOutline.Clear();
+            _fieldHeaderRightClickOutline.Clear();
             foreach (var c in remappedOutline)
             {
-                if (c >= 0 && c < Columns.Count)
+                if (c >= 0 && c < Fields.Count)
                 {
-                    _columnHeaderRightClickOutline.Add(c);
+                    _fieldHeaderRightClickOutline.Add(c);
                 }
             }
         }
 
-        RemapHeaderFocusColumnAfterMove(fromIndex, toIndex);
-        var oldToNew = new int[Columns.Count];
+        RemapHeaderFocusFieldAfterMove(fromIndex, toIndex);
+        var oldToNew = new int[Fields.Count];
         for (var i = 0; i < oldToNew.Length; i++)
         {
-            oldToNew[i] = RemapColumnIndex(i, fromIndex, toIndex);
+            oldToNew[i] = RemapFieldIndex(i, fromIndex, toIndex);
         }
 
-        RemapSortDescriptorsAfterColumnMove(oldToNew);
+        RemapSortDescriptorsAfterFieldMove(oldToNew);
     }
 
-    private void MoveSelectedColumns(int anchorColumn, int targetColumn)
+    private void MoveSelectedFields(int anchorField, int targetField)
     {
-        var selected = GetSelectedColumnIndices();
-        if (selected.Count <= 1 || !selected.Contains(anchorColumn))
+        var selected = GetSelectedFieldIndices();
+        if (selected.Count <= 1 || !selected.Contains(anchorField))
         {
-            MoveColumn(anchorColumn, targetColumn);
+            MoveField(anchorField, targetField);
             return;
         }
 
         var minSelected = selected[0];
         var maxSelected = selected[^1];
-        var insertAfterTarget = targetColumn > maxSelected;
-        if (targetColumn >= minSelected && targetColumn <= maxSelected)
+        var insertAfterTarget = targetField > maxSelected;
+        if (targetField >= minSelected && targetField <= maxSelected)
         {
             return;
         }
 
-        var oldToNew = MoveColumnOrRowIndices(
-            Columns.Count,
+        var oldToNew = MoveFieldOrRecordIndices(
+            Fields.Count,
             selected,
-            targetColumn,
+            targetField,
             insertAfterTarget,
-            index => Columns.Move(index.from, index.to));
-        RemapSelectionAfterColumnMove(oldToNew);
-        RemapSortDescriptorsAfterColumnMove(oldToNew);
+            index => Fields.Move(index.from, index.to));
+        RemapSelectionAfterFieldMove(oldToNew);
+        RemapSortDescriptorsAfterFieldMove(oldToNew);
     }
 
-    private void MoveSelectedRows(int anchorRow, int targetRow)
+    private void MoveSelectedRecords(int anchorRecord, int targetRecord)
     {
-        var selected = GetSelectedRowIndices();
-        if (selected.Count == 0 || !selected.Contains(anchorRow))
+        var selected = GetSelectedRecordIndices();
+        if (selected.Count == 0 || !selected.Contains(anchorRecord))
         {
             return;
         }
 
         var minSelected = selected[0];
         var maxSelected = selected[^1];
-        var insertAfterTarget = targetRow > maxSelected;
-        if (targetRow >= minSelected && targetRow <= maxSelected)
+        var insertAfterTarget = targetRecord > maxSelected;
+        if (targetRecord >= minSelected && targetRecord <= maxSelected)
         {
             return;
         }
 
-        var oldToNew = MoveColumnOrRowIndices(
-            Rows.Count,
+        var oldToNew = MoveFieldOrRecordIndices(
+            Records.Count,
             selected,
-            targetRow,
+            targetRecord,
             insertAfterTarget,
-            index => Rows.Move(index.from, index.to));
-        RemapSelectionAfterRowMove(oldToNew);
+            index => Records.Move(index.from, index.to));
+        RemapSelectionAfterRecordMove(oldToNew);
     }
 
     /// <summary>Clears all selected cells without changing the logical current cell; ends in-cell editing.</summary>
@@ -339,26 +339,26 @@ public sealed partial class Griddo
         _hasKeyboardSelectionAnchor = false;
         _selectedCells.Clear();
         _isEditing = false;
-        if (Rows.Count > 0 && Columns.Count > 0)
+        if (Records.Count > 0 && Fields.Count > 0)
         {
             _currentCell = new GriddoCellAddress(
-                Math.Clamp(_currentCell.RowIndex, 0, Rows.Count - 1),
-                Math.Clamp(_currentCell.ColumnIndex, 0, Columns.Count - 1));
+                Math.Clamp(_currentCell.RecordIndex, 0, Records.Count - 1),
+                Math.Clamp(_currentCell.FieldIndex, 0, Fields.Count - 1));
         }
 
         InvalidateVisual();
     }
 
-    /// <summary>Moves all selected rows up (<paramref name="direction"/> = -1) or down (+1), matching row-header drag behavior.</summary>
+    /// <summary>Moves all selected records up (<paramref name="direction"/> = -1) or down (+1), matching record-header drag behavior.</summary>
     /// <returns>True if a move was applied.</returns>
-    public bool TryMoveSelectedRowsStep(int direction)
+    public bool TryMoveSelectedRecordsStep(int direction)
     {
-        if (direction is not (-1) and not 1 || Rows.Count == 0)
+        if (direction is not (-1) and not 1 || Records.Count == 0)
         {
             return false;
         }
 
-        var selected = GetSelectedRowIndices();
+        var selected = GetSelectedRecordIndices();
         if (selected.Count == 0)
         {
             return false;
@@ -372,24 +372,24 @@ public sealed partial class Griddo
                 return false;
             }
 
-            MoveSelectedRows(min, min - 1);
+            MoveSelectedRecords(min, min - 1);
         }
         else
         {
             var max = selected[^1];
-            if (max >= Rows.Count - 1)
+            if (max >= Records.Count - 1)
             {
                 return false;
             }
 
-            MoveSelectedRows(max, max + 1);
+            MoveSelectedRecords(max, max + 1);
         }
 
         InvalidateVisual();
         return true;
     }
 
-    private static int[] MoveColumnOrRowIndices(
+    private static int[] MoveFieldOrRecordIndices(
         int count,
         List<int> selectedIndices,
         int targetIndex,
@@ -440,42 +440,42 @@ public sealed partial class Griddo
         return oldToNew;
     }
 
-    private void RemapSelectionAfterColumnMove(int[] oldToNew)
+    private void RemapSelectionAfterFieldMove(int[] oldToNew)
     {
         if (oldToNew.Length == 0)
         {
             return;
         }
 
-        if (_currentCell is { IsValid: true, ColumnIndex: >= 0 }
-            && _currentCell.ColumnIndex < oldToNew.Length)
+        if (_currentCell is { IsValid: true, FieldIndex: >= 0 }
+            && _currentCell.FieldIndex < oldToNew.Length)
         {
-            _currentCell = new GriddoCellAddress(_currentCell.RowIndex, oldToNew[_currentCell.ColumnIndex]);
+            _currentCell = new GriddoCellAddress(_currentCell.RecordIndex, oldToNew[_currentCell.FieldIndex]);
         }
 
         var remapped = new HashSet<GriddoCellAddress>();
         foreach (var address in _selectedCells)
         {
-            if (address.ColumnIndex >= 0 && address.ColumnIndex < oldToNew.Length)
+            if (address.FieldIndex >= 0 && address.FieldIndex < oldToNew.Length)
             {
-                remapped.Add(new GriddoCellAddress(address.RowIndex, oldToNew[address.ColumnIndex]));
+                remapped.Add(new GriddoCellAddress(address.RecordIndex, oldToNew[address.FieldIndex]));
             }
         }
 
         _selectedCells.Clear();
         _selectedCells.UnionWith(remapped);
 
-        if (_headerFocusKind == HeaderFocusKind.Column
-            && _headerFocusColumnIndex >= 0
-            && _headerFocusColumnIndex < oldToNew.Length)
+        if (_headerFocusKind == HeaderFocusKind.Field
+            && _headerFocusFieldIndex >= 0
+            && _headerFocusFieldIndex < oldToNew.Length)
         {
-            _headerFocusColumnIndex = oldToNew[_headerFocusColumnIndex];
+            _headerFocusFieldIndex = oldToNew[_headerFocusFieldIndex];
         }
 
-        if (_columnHeaderOnlySelection.Count > 0)
+        if (_fieldHeaderOnlySelection.Count > 0)
         {
             var remappedHeaders = new HashSet<int>();
-            foreach (var c in _columnHeaderOnlySelection)
+            foreach (var c in _fieldHeaderOnlySelection)
             {
                 if (c >= 0 && c < oldToNew.Length)
                 {
@@ -483,17 +483,17 @@ public sealed partial class Griddo
                 }
             }
 
-            _columnHeaderOnlySelection.Clear();
+            _fieldHeaderOnlySelection.Clear();
             foreach (var c in remappedHeaders)
             {
-                _columnHeaderOnlySelection.Add(c);
+                _fieldHeaderOnlySelection.Add(c);
             }
         }
 
-        if (_columnHeaderRightClickOutline.Count > 0)
+        if (_fieldHeaderRightClickOutline.Count > 0)
         {
             var remappedOutline = new HashSet<int>();
-            foreach (var c in _columnHeaderRightClickOutline)
+            foreach (var c in _fieldHeaderRightClickOutline)
             {
                 if (c >= 0 && c < oldToNew.Length)
                 {
@@ -501,68 +501,68 @@ public sealed partial class Griddo
                 }
             }
 
-            _columnHeaderRightClickOutline.Clear();
+            _fieldHeaderRightClickOutline.Clear();
             foreach (var c in remappedOutline)
             {
-                _columnHeaderRightClickOutline.Add(c);
+                _fieldHeaderRightClickOutline.Add(c);
             }
         }
     }
 
-    private void RemapSelectionAfterRowMove(int[] oldToNew)
+    private void RemapSelectionAfterRecordMove(int[] oldToNew)
     {
         if (oldToNew.Length == 0)
         {
             return;
         }
 
-        if (_currentCell is { IsValid: true, RowIndex: >= 0 }
-            && _currentCell.RowIndex < oldToNew.Length)
+        if (_currentCell is { IsValid: true, RecordIndex: >= 0 }
+            && _currentCell.RecordIndex < oldToNew.Length)
         {
-            _currentCell = new GriddoCellAddress(oldToNew[_currentCell.RowIndex], _currentCell.ColumnIndex);
+            _currentCell = new GriddoCellAddress(oldToNew[_currentCell.RecordIndex], _currentCell.FieldIndex);
         }
 
         var remapped = new HashSet<GriddoCellAddress>();
         foreach (var address in _selectedCells)
         {
-            if (address.RowIndex >= 0 && address.RowIndex < oldToNew.Length)
+            if (address.RecordIndex >= 0 && address.RecordIndex < oldToNew.Length)
             {
-                remapped.Add(new GriddoCellAddress(oldToNew[address.RowIndex], address.ColumnIndex));
+                remapped.Add(new GriddoCellAddress(oldToNew[address.RecordIndex], address.FieldIndex));
             }
         }
 
         _selectedCells.Clear();
         _selectedCells.UnionWith(remapped);
 
-        if (_headerFocusKind == HeaderFocusKind.Row
-            && _headerFocusRowIndex >= 0
-            && _headerFocusRowIndex < oldToNew.Length)
+        if (_headerFocusKind == HeaderFocusKind.Record
+            && _headerFocusRecordIndex >= 0
+            && _headerFocusRecordIndex < oldToNew.Length)
         {
-            _headerFocusRowIndex = oldToNew[_headerFocusRowIndex];
+            _headerFocusRecordIndex = oldToNew[_headerFocusRecordIndex];
         }
 
-        if (_rowHeaderOnlySelection.Count > 0)
+        if (_recordHeaderOnlySelection.Count > 0)
         {
-            var remappedRows = new HashSet<int>();
-            foreach (var r in _rowHeaderOnlySelection)
+            var remappedRecords = new HashSet<int>();
+            foreach (var r in _recordHeaderOnlySelection)
             {
                 if (r >= 0 && r < oldToNew.Length)
                 {
-                    remappedRows.Add(oldToNew[r]);
+                    remappedRecords.Add(oldToNew[r]);
                 }
             }
 
-            _rowHeaderOnlySelection.Clear();
-            foreach (var r in remappedRows)
+            _recordHeaderOnlySelection.Clear();
+            foreach (var r in remappedRecords)
             {
-                _rowHeaderOnlySelection.Add(r);
+                _recordHeaderOnlySelection.Add(r);
             }
         }
 
-        if (_rowHeaderRightClickOutline.Count > 0)
+        if (_recordHeaderRightClickOutline.Count > 0)
         {
             var remappedOutline = new HashSet<int>();
-            foreach (var r in _rowHeaderRightClickOutline)
+            foreach (var r in _recordHeaderRightClickOutline)
             {
                 if (r >= 0 && r < oldToNew.Length)
                 {
@@ -570,32 +570,32 @@ public sealed partial class Griddo
                 }
             }
 
-            _rowHeaderRightClickOutline.Clear();
+            _recordHeaderRightClickOutline.Clear();
             foreach (var r in remappedOutline)
             {
-                _rowHeaderRightClickOutline.Add(r);
+                _recordHeaderRightClickOutline.Add(r);
             }
         }
     }
 
-    private static int RemapColumnIndex(int columnIndex, int fromIndex, int toIndex)
+    private static int RemapFieldIndex(int fieldIndex, int fromIndex, int toIndex)
     {
-        if (columnIndex == fromIndex)
+        if (fieldIndex == fromIndex)
         {
             return toIndex;
         }
 
         if (fromIndex < toIndex)
         {
-            return (columnIndex > fromIndex && columnIndex <= toIndex) ? columnIndex - 1 : columnIndex;
+            return (fieldIndex > fromIndex && fieldIndex <= toIndex) ? fieldIndex - 1 : fieldIndex;
         }
 
-        return (columnIndex >= toIndex && columnIndex < fromIndex) ? columnIndex + 1 : columnIndex;
+        return (fieldIndex >= toIndex && fieldIndex < fromIndex) ? fieldIndex + 1 : fieldIndex;
     }
 
-    private void SelectRow(int rowIndex, bool additive)
+    private void SelectRecord(int recordIndex, bool additive)
     {
-        if (rowIndex < 0 || rowIndex >= Rows.Count)
+        if (recordIndex < 0 || recordIndex >= Records.Count)
         {
             return;
         }
@@ -606,22 +606,22 @@ public sealed partial class Griddo
             _selectedCells.Clear();
         }
 
-        for (var col = 0; col < Columns.Count; col++)
+        for (var col = 0; col < Fields.Count; col++)
         {
-            _selectedCells.Add(new GriddoCellAddress(rowIndex, col));
+            _selectedCells.Add(new GriddoCellAddress(recordIndex, col));
         }
     }
 
-    /// <summary>Selects one entire row (all columns), optionally adding to the existing selection.</summary>
-    public void SelectEntireRow(int rowIndex, bool additive = false)
+    /// <summary>Selects one entire record (all fields), optionally adding to the existing selection.</summary>
+    public void SelectEntireRecord(int recordIndex, bool additive = false)
     {
         ClearHeaderFocus();
-        SelectRow(rowIndex, additive);
-        if (rowIndex >= 0 && rowIndex < Rows.Count && Columns.Count > 0)
+        SelectRecord(recordIndex, additive);
+        if (recordIndex >= 0 && recordIndex < Records.Count && Fields.Count > 0)
         {
             _currentCell = new GriddoCellAddress(
-                rowIndex,
-                Math.Clamp(_currentCell.ColumnIndex, 0, Columns.Count - 1));
+                recordIndex,
+                Math.Clamp(_currentCell.FieldIndex, 0, Fields.Count - 1));
         }
 
         _hasKeyboardSelectionAnchor = false;
@@ -629,30 +629,47 @@ public sealed partial class Griddo
         InvalidateVisual();
     }
 
-    private bool IsRowSelected(int rowIndex)
+    /// <summary>Selects one entire field (all records), optionally adding to the existing selection.</summary>
+    public void SelectEntireField(int fieldIndex, bool additive = false)
     {
-        return _selectedCells.Any(c => c.RowIndex == rowIndex);
+        ClearHeaderFocus();
+        SelectField(fieldIndex, additive);
+        if (fieldIndex >= 0 && fieldIndex < Fields.Count && Records.Count > 0)
+        {
+            _currentCell = new GriddoCellAddress(
+                Math.Clamp(_currentCell.RecordIndex, 0, Records.Count - 1),
+                fieldIndex);
+        }
+
+        _hasKeyboardSelectionAnchor = false;
+        _isEditing = false;
+        InvalidateVisual();
     }
 
-    private bool IsColumnSelected(int columnIndex)
+    private bool IsRecordSelected(int recordIndex)
     {
-        return _selectedCells.Any(c => c.ColumnIndex == columnIndex);
+        return _selectedCells.Any(c => c.RecordIndex == recordIndex);
     }
-    private List<int> GetSelectedColumnIndices()
+
+    private bool IsFieldSelected(int fieldIndex)
+    {
+        return _selectedCells.Any(c => c.FieldIndex == fieldIndex);
+    }
+    private List<int> GetSelectedFieldIndices()
     {
         var set = new HashSet<int>();
         foreach (var address in _selectedCells)
         {
-            var c = address.ColumnIndex;
-            if (c >= 0 && c < Columns.Count)
+            var c = address.FieldIndex;
+            if (c >= 0 && c < Fields.Count)
             {
                 set.Add(c);
             }
         }
 
-        foreach (var c in _columnHeaderOnlySelection)
+        foreach (var c in _fieldHeaderOnlySelection)
         {
-            if (c >= 0 && c < Columns.Count)
+            if (c >= 0 && c < Fields.Count)
             {
                 set.Add(c);
             }
@@ -661,21 +678,21 @@ public sealed partial class Griddo
         return set.OrderBy(c => c).ToList();
     }
 
-    private List<int> GetSelectedRowIndices()
+    private List<int> GetSelectedRecordIndices()
     {
         var set = new HashSet<int>();
         foreach (var address in _selectedCells)
         {
-            var r = address.RowIndex;
-            if (r >= 0 && r < Rows.Count)
+            var r = address.RecordIndex;
+            if (r >= 0 && r < Records.Count)
             {
                 set.Add(r);
             }
         }
 
-        foreach (var r in _rowHeaderOnlySelection)
+        foreach (var r in _recordHeaderOnlySelection)
         {
-            if (r >= 0 && r < Rows.Count)
+            if (r >= 0 && r < Records.Count)
             {
                 set.Add(r);
             }
@@ -684,72 +701,72 @@ public sealed partial class Griddo
         return set.OrderBy(r => r).ToList();
     }
 
-    private void ApplyRowHeaderDragSelection()
+    private void ApplyRecordHeaderDragSelection()
     {
-        if (_rowHeaderDragAnchorRow < 0
-            || _rowHeaderDragCurrentRow < 0
-            || Rows.Count == 0
-            || Columns.Count == 0)
+        if (_recordHeaderDragAnchorRecord < 0
+            || _recordHeaderDragCurrentRecord < 0
+            || Records.Count == 0
+            || Fields.Count == 0)
         {
             return;
         }
 
         ClearHeaderAuxiliarySelectionState();
         _selectedCells.Clear();
-        if (_rowHeaderDragIsAdditive || (Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        if (_recordHeaderDragIsAdditive || (Keyboard.Modifiers & ModifierKeys.Control) != 0)
         {
             _selectedCells.UnionWith(_selectionDragSnapshot);
         }
 
-        var minRow = Math.Min(_rowHeaderDragAnchorRow, _rowHeaderDragCurrentRow);
-        var maxRow = Math.Max(_rowHeaderDragAnchorRow, _rowHeaderDragCurrentRow);
-        for (var row = minRow; row <= maxRow; row++)
+        var minRecord = Math.Min(_recordHeaderDragAnchorRecord, _recordHeaderDragCurrentRecord);
+        var maxRecord = Math.Max(_recordHeaderDragAnchorRecord, _recordHeaderDragCurrentRecord);
+        for (var record = minRecord; record <= maxRecord; record++)
         {
-            for (var col = 0; col < Columns.Count; col++)
+            for (var col = 0; col < Fields.Count; col++)
             {
-                _selectedCells.Add(new GriddoCellAddress(row, col));
+                _selectedCells.Add(new GriddoCellAddress(record, col));
             }
         }
     }
 
-    private void ApplyColumnHeaderDragSelection()
+    private void ApplyFieldHeaderDragSelection()
     {
-        if (_columnHeaderDragAnchorColumn < 0
-            || _columnHeaderDragCurrentColumn < 0
-            || Rows.Count == 0
-            || Columns.Count == 0)
+        if (_fieldHeaderDragAnchorField < 0
+            || _fieldHeaderDragCurrentField < 0
+            || Records.Count == 0
+            || Fields.Count == 0)
         {
             return;
         }
 
         ClearHeaderAuxiliarySelectionState();
         _selectedCells.Clear();
-        if (_columnHeaderDragIsAdditive || (Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        if (_fieldHeaderDragIsAdditive || (Keyboard.Modifiers & ModifierKeys.Control) != 0)
         {
             _selectedCells.UnionWith(_selectionDragSnapshot);
         }
 
-        var minCol = Math.Min(_columnHeaderDragAnchorColumn, _columnHeaderDragCurrentColumn);
-        var maxCol = Math.Max(_columnHeaderDragAnchorColumn, _columnHeaderDragCurrentColumn);
+        var minCol = Math.Min(_fieldHeaderDragAnchorField, _fieldHeaderDragCurrentField);
+        var maxCol = Math.Max(_fieldHeaderDragAnchorField, _fieldHeaderDragCurrentField);
         for (var col = minCol; col <= maxCol; col++)
         {
-            for (var row = 0; row < Rows.Count; row++)
+            for (var record = 0; record < Records.Count; record++)
             {
-                _selectedCells.Add(new GriddoCellAddress(row, col));
+                _selectedCells.Add(new GriddoCellAddress(record, col));
             }
         }
     }
 
-    private void SelectProjectedColumnsFromCurrentRow(GriddoCellAddress current, int clickedColumn, bool additive)
+    private void SelectProjectedFieldsFromCurrentRecord(GriddoCellAddress current, int clickedField, bool additive)
     {
-        if (Rows.Count == 0 || Columns.Count == 0)
+        if (Records.Count == 0 || Fields.Count == 0)
         {
             return;
         }
 
-        var row = Math.Clamp(current.RowIndex, 0, Rows.Count - 1);
-        var currentCol = Math.Clamp(current.ColumnIndex, 0, Columns.Count - 1);
-        var targetCol = Math.Clamp(clickedColumn, 0, Columns.Count - 1);
+        var record = Math.Clamp(current.RecordIndex, 0, Records.Count - 1);
+        var currentCol = Math.Clamp(current.FieldIndex, 0, Fields.Count - 1);
+        var targetCol = Math.Clamp(clickedField, 0, Fields.Count - 1);
 
         if (!additive)
         {
@@ -757,102 +774,102 @@ public sealed partial class Griddo
             _selectedCells.Clear();
         }
 
-        var selectedColumnsOnRow = _selectedCells
-            .Where(c => c.RowIndex == row)
-            .Select(c => c.ColumnIndex)
+        var selectedFieldsOnRecord = _selectedCells
+            .Where(c => c.RecordIndex == record)
+            .Select(c => c.FieldIndex)
             .Distinct()
             .ToList();
 
-        // If there is no explicit row selection yet, use current-to-clicked columns on the current row.
-        if (selectedColumnsOnRow.Count == 0)
+        // If there is no explicit record selection yet, use current-to-clicked fields on the current record.
+        if (selectedFieldsOnRecord.Count == 0)
         {
             var minCol = Math.Min(currentCol, targetCol);
             var maxCol = Math.Max(currentCol, targetCol);
             for (var col = minCol; col <= maxCol; col++)
             {
-                selectedColumnsOnRow.Add(col);
+                selectedFieldsOnRecord.Add(col);
             }
         }
 
-        if (!selectedColumnsOnRow.Contains(targetCol))
+        if (!selectedFieldsOnRecord.Contains(targetCol))
         {
-            selectedColumnsOnRow.Add(targetCol);
+            selectedFieldsOnRecord.Add(targetCol);
         }
 
-        foreach (var col in selectedColumnsOnRow)
+        foreach (var col in selectedFieldsOnRecord)
         {
-            if (col < 0 || col >= Columns.Count)
+            if (col < 0 || col >= Fields.Count)
             {
                 continue;
             }
 
-            for (var r = 0; r < Rows.Count; r++)
+            for (var r = 0; r < Records.Count; r++)
             {
                 _selectedCells.Add(new GriddoCellAddress(r, col));
             }
         }
     }
 
-    private void IncludeRowsRangeForSelectedColumnsOnRow(int sourceRow, int targetRow)
+    private void IncludeRecordsRangeForSelectedFieldsOnRecord(int sourceRecord, int targetRecord)
     {
-        if (Rows.Count == 0 || Columns.Count == 0)
+        if (Records.Count == 0 || Fields.Count == 0)
         {
             return;
         }
 
-        var fromRow = Math.Clamp(sourceRow, 0, Rows.Count - 1);
-        var toRow = Math.Clamp(targetRow, 0, Rows.Count - 1);
-        var minRow = Math.Min(fromRow, toRow);
-        var maxRow = Math.Max(fromRow, toRow);
+        var fromRecord = Math.Clamp(sourceRecord, 0, Records.Count - 1);
+        var toRecord = Math.Clamp(targetRecord, 0, Records.Count - 1);
+        var minRecord = Math.Min(fromRecord, toRecord);
+        var maxRecord = Math.Max(fromRecord, toRecord);
 
-        var selectedColumnsOnRow = _selectedCells
-            .Where(c => c.RowIndex == fromRow)
-            .Select(c => c.ColumnIndex)
+        var selectedFieldsOnRecord = _selectedCells
+            .Where(c => c.RecordIndex == fromRecord)
+            .Select(c => c.FieldIndex)
             .Distinct()
             .ToList();
 
-        foreach (var col in selectedColumnsOnRow)
+        foreach (var col in selectedFieldsOnRecord)
         {
-            if (col < 0 || col >= Columns.Count)
+            if (col < 0 || col >= Fields.Count)
             {
                 continue;
             }
 
-            for (var r = minRow; r <= maxRow; r++)
+            for (var r = minRecord; r <= maxRecord; r++)
             {
                 _selectedCells.Add(new GriddoCellAddress(r, col));
             }
         }
     }
 
-    private void IncludeColumnsRangeForSelectedRowsOnColumn(int sourceColumn, int targetColumn)
+    private void IncludeFieldsRangeForSelectedRecordsOnField(int sourceField, int targetField)
     {
-        if (Rows.Count == 0 || Columns.Count == 0)
+        if (Records.Count == 0 || Fields.Count == 0)
         {
             return;
         }
 
-        var fromCol = Math.Clamp(sourceColumn, 0, Columns.Count - 1);
-        var toCol = Math.Clamp(targetColumn, 0, Columns.Count - 1);
+        var fromCol = Math.Clamp(sourceField, 0, Fields.Count - 1);
+        var toCol = Math.Clamp(targetField, 0, Fields.Count - 1);
         var minCol = Math.Min(fromCol, toCol);
         var maxCol = Math.Max(fromCol, toCol);
 
-        var selectedRowsOnColumn = _selectedCells
-            .Where(c => c.ColumnIndex == fromCol)
-            .Select(c => c.RowIndex)
+        var selectedRecordsOnField = _selectedCells
+            .Where(c => c.FieldIndex == fromCol)
+            .Select(c => c.RecordIndex)
             .Distinct()
             .ToList();
 
-        foreach (var row in selectedRowsOnColumn)
+        foreach (var record in selectedRecordsOnField)
         {
-            if (row < 0 || row >= Rows.Count)
+            if (record < 0 || record >= Records.Count)
             {
                 continue;
             }
 
             for (var col = minCol; col <= maxCol; col++)
             {
-                _selectedCells.Add(new GriddoCellAddress(row, col));
+                _selectedCells.Add(new GriddoCellAddress(record, col));
             }
         }
     }

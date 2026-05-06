@@ -3,7 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Threading;
-using Griddo.Columns;
+using Griddo.Fields;
 using Griddo.Editing;
 using Griddo.Primitives;
 
@@ -11,7 +11,7 @@ namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
-    /// <summary>Minimum pointer travel before column/row move or resize cues activate (DIP).</summary>
+    /// <summary>Minimum pointer travel before field/record move or resize cues activate (DIP).</summary>
     private const double DragCueMinPixels = 1.0;
 
     // -------------------------------------------------------------------------
@@ -54,7 +54,7 @@ public sealed partial class Griddo
                 var caretIndex = GetCaretIndexFromEditPoint(pointer);
                 if (e.ClickCount >= 2)
                 {
-                    if (TryGetCurrentColumn(out var currentColumn) && currentColumn.Editor is GriddoNumberCellEditor)
+                    if (TryGetCurrentField(out var currentField) && currentField.Editor is GriddoNumberCellEditor)
                     {
                         _editSession.SelectAll();
                     }
@@ -81,62 +81,62 @@ public sealed partial class Griddo
             }
         }
 
-        if (e.ChangedButton == MouseButton.Right && HitTestColumnHeader(pointer) is var rightCol and >= 0)
+        if (e.ChangedButton == MouseButton.Right && HitTestFieldHeader(pointer) is var rightCol and >= 0)
         {
-            _headerFocusKind = HeaderFocusKind.Column;
-            _headerFocusColumnIndex = rightCol;
-            _rowHeaderRightClickOutline.Clear();
-            _rowHeaderOnlySelection.Clear();
+            _headerFocusKind = HeaderFocusKind.Field;
+            _headerFocusFieldIndex = rightCol;
+            _recordHeaderRightClickOutline.Clear();
+            _recordHeaderOnlySelection.Clear();
 
             var headerAlreadySelected =
-                IsColumnHeaderMarkedSelected(rightCol);
+                IsFieldHeaderMarkedSelected(rightCol);
 
-            IReadOnlyList<int> contextColumnIndices;
+            IReadOnlyList<int> contextFieldIndices;
             if (headerAlreadySelected)
             {
                 var preserved = new HashSet<int>();
                 if (_selectedCells.Count > 0)
                 {
-                    foreach (var c in GetSelectedColumnIndices())
+                    foreach (var c in GetSelectedFieldIndices())
                     {
                         preserved.Add(c);
                     }
                 }
                 else
                 {
-                    preserved.UnionWith(_columnHeaderOnlySelection);
+                    preserved.UnionWith(_fieldHeaderOnlySelection);
                 }
 
-                _columnHeaderOnlySelection.Clear();
+                _fieldHeaderOnlySelection.Clear();
                 foreach (var c in preserved)
                 {
-                    _columnHeaderOnlySelection.Add(c);
+                    _fieldHeaderOnlySelection.Add(c);
                 }
 
                 _selectedCells.Clear();
-                _columnHeaderRightClickOutline.Clear();
+                _fieldHeaderRightClickOutline.Clear();
                 foreach (var c in preserved)
                 {
-                    _columnHeaderRightClickOutline.Add(c);
+                    _fieldHeaderRightClickOutline.Add(c);
                 }
 
-                contextColumnIndices = preserved.OrderBy(c => c).ToList();
+                contextFieldIndices = preserved.OrderBy(c => c).ToList();
             }
             else
             {
                 ClearHeaderAuxiliarySelectionState();
                 _selectedCells.Clear();
-                _columnHeaderOnlySelection.Add(rightCol);
-                _columnHeaderRightClickOutline.Add(rightCol);
-                contextColumnIndices = [rightCol];
+                _fieldHeaderOnlySelection.Add(rightCol);
+                _fieldHeaderRightClickOutline.Add(rightCol);
+                contextFieldIndices = [rightCol];
                 _currentCell = new GriddoCellAddress(
-                    Rows.Count == 0 ? 0 : Math.Clamp(_currentCell.RowIndex, 0, Math.Max(0, Rows.Count - 1)),
+                    Records.Count == 0 ? 0 : Math.Clamp(_currentCell.RecordIndex, 0, Math.Max(0, Records.Count - 1)),
                     rightCol);
             }
 
             _hasKeyboardSelectionAnchor = false;
             _isEditing = false;
-            ColumnHeaderRightClick?.Invoke(this, new GriddoColumnHeaderMouseEventArgs(rightCol, contextColumnIndices));
+            FieldHeaderRightClick?.Invoke(this, new GriddoFieldHeaderMouseEventArgs(rightCol, contextFieldIndices));
             InvalidateVisual();
             CompleteMouseDown(e, handled: true);
             return;
@@ -154,67 +154,68 @@ public sealed partial class Griddo
             _selectedCells.Clear();
             _hasKeyboardSelectionAnchor = false;
             _isEditing = false;
+            CornerHeaderRightClick?.Invoke(this, EventArgs.Empty);
             InvalidateVisual();
             CompleteMouseDown(e, handled: true);
             return;
         }
 
-        var rightRowHeaderHit = HitTestRowHeader(pointer);
-        if (e.ChangedButton == MouseButton.Right && rightRowHeaderHit >= 0)
+        var rightRecordHeaderHit = HitTestRecordHeader(pointer);
+        if (e.ChangedButton == MouseButton.Right && rightRecordHeaderHit >= 0)
         {
-            _headerFocusKind = HeaderFocusKind.Row;
-            _headerFocusRowIndex = rightRowHeaderHit;
-            _columnHeaderRightClickOutline.Clear();
-            _columnHeaderOnlySelection.Clear();
+            _headerFocusKind = HeaderFocusKind.Record;
+            _headerFocusRecordIndex = rightRecordHeaderHit;
+            _fieldHeaderRightClickOutline.Clear();
+            _fieldHeaderOnlySelection.Clear();
 
-            var rowHeaderAlreadySelected = IsRowHeaderMarkedSelected(rightRowHeaderHit);
+            var recordHeaderAlreadySelected = IsRecordHeaderMarkedSelected(rightRecordHeaderHit);
 
-            IReadOnlyList<int> contextRowIndices;
-            if (rowHeaderAlreadySelected)
+            IReadOnlyList<int> contextRecordIndices;
+            if (recordHeaderAlreadySelected)
             {
                 var preserved = new HashSet<int>();
                 if (_selectedCells.Count > 0)
                 {
-                    foreach (var r in GetSelectedRowIndices())
+                    foreach (var r in GetSelectedRecordIndices())
                     {
                         preserved.Add(r);
                     }
                 }
                 else
                 {
-                    preserved.UnionWith(_rowHeaderOnlySelection);
+                    preserved.UnionWith(_recordHeaderOnlySelection);
                 }
 
-                _rowHeaderOnlySelection.Clear();
+                _recordHeaderOnlySelection.Clear();
                 foreach (var r in preserved)
                 {
-                    _rowHeaderOnlySelection.Add(r);
+                    _recordHeaderOnlySelection.Add(r);
                 }
 
                 _selectedCells.Clear();
-                _rowHeaderRightClickOutline.Clear();
+                _recordHeaderRightClickOutline.Clear();
                 foreach (var r in preserved)
                 {
-                    _rowHeaderRightClickOutline.Add(r);
+                    _recordHeaderRightClickOutline.Add(r);
                 }
 
-                contextRowIndices = preserved.OrderBy(r => r).ToList();
+                contextRecordIndices = preserved.OrderBy(r => r).ToList();
             }
             else
             {
                 ClearHeaderAuxiliarySelectionState();
                 _selectedCells.Clear();
-                _rowHeaderOnlySelection.Add(rightRowHeaderHit);
-                _rowHeaderRightClickOutline.Add(rightRowHeaderHit);
-                contextRowIndices = [rightRowHeaderHit];
+                _recordHeaderOnlySelection.Add(rightRecordHeaderHit);
+                _recordHeaderRightClickOutline.Add(rightRecordHeaderHit);
+                contextRecordIndices = [rightRecordHeaderHit];
                 _currentCell = new GriddoCellAddress(
-                    rightRowHeaderHit,
-                    Columns.Count == 0 ? 0 : Math.Clamp(_currentCell.ColumnIndex, 0, Math.Max(0, Columns.Count - 1)));
+                    rightRecordHeaderHit,
+                    Fields.Count == 0 ? 0 : Math.Clamp(_currentCell.FieldIndex, 0, Math.Max(0, Fields.Count - 1)));
             }
 
             _hasKeyboardSelectionAnchor = false;
             _isEditing = false;
-            RowHeaderRightClick?.Invoke(this, new GriddoRowHeaderMouseEventArgs(rightRowHeaderHit, contextRowIndices));
+            RecordHeaderRightClick?.Invoke(this, new GriddoRecordHeaderMouseEventArgs(rightRecordHeaderHit, contextRecordIndices));
             InvalidateVisual();
             CompleteMouseDown(e, handled: true);
             return;
@@ -229,54 +230,54 @@ public sealed partial class Griddo
             return;
         }
 
-        var clickedColumnHeader = HitTestColumnHeader(pointer);
-        if (clickedColumnHeader >= 0)
+        var clickedFieldHeader = HitTestFieldHeader(pointer);
+        if (clickedFieldHeader >= 0)
         {
             if (e is { ChangedButton: MouseButton.Left, ClickCount: 2 })
             {
-                ToggleHeaderSort(clickedColumnHeader, additive: isCtrlPressed);
+                ToggleHeaderSort(clickedFieldHeader, additive: isCtrlPressed);
                 CompleteMouseDown(e, handled: true);
                 return;
             }
 
             ClearHeaderFocus();
             var target = new GriddoCellAddress(
-                Rows.Count == 0 ? 0 : Math.Clamp(oldCurrentCell.RowIndex, 0, Rows.Count - 1),
-                clickedColumnHeader);
-            var clickedSelectedColumnHeader = IsColumnHeaderMarkedSelected(clickedColumnHeader);
+                Records.Count == 0 ? 0 : Math.Clamp(oldCurrentCell.RecordIndex, 0, Records.Count - 1),
+                clickedFieldHeader);
+            var clickedSelectedFieldHeader = IsFieldHeaderMarkedSelected(clickedFieldHeader);
 
             if (e.ChangedButton == MouseButton.Left
-                && clickedSelectedColumnHeader
+                && clickedSelectedFieldHeader
                 && !isShiftPressed
-                && Rows.Count > 0
-                && Columns.Count > 0)
+                && Records.Count > 0
+                && Fields.Count > 0)
             {
                 _currentCell = target;
                 _isEditing = false;
                 InvalidateVisual();
-                _isTrackingColumnMove = true;
-                _isMovingColumn = false;
-                _columnMoveStartedFromSelectedHeader = true;
-                _movingColumnIndex = clickedColumnHeader;
-                _columnMoveCueIndex = -1;
-                _columnMoveStartPoint = pointer;
-                _pendingColumnHeaderSelectionOnMouseUp = true;
-                _pendingColumnHeaderIndex = clickedColumnHeader;
-                _pendingColumnHeaderSelectionAdditive = isCtrlPressed;
-                _pendingColumnHeaderPreserveSelection = clickedSelectedColumnHeader && !isCtrlPressed;
+                _isTrackingFieldMove = true;
+                _isMovingField = false;
+                _fieldMoveStartedFromSelectedHeader = true;
+                _movingFieldIndex = clickedFieldHeader;
+                _fieldMoveCueIndex = -1;
+                _fieldMoveStartPoint = pointer;
+                _pendingFieldHeaderSelectionOnMouseUp = true;
+                _pendingFieldHeaderIndex = clickedFieldHeader;
+                _pendingFieldHeaderSelectionAdditive = isCtrlPressed;
+                _pendingFieldHeaderPreserveSelection = clickedSelectedFieldHeader && !isCtrlPressed;
                 CaptureMouse();
                 CompleteMouseDown(e, handled: true);
                 return;
             }
 
-            if (isShiftPressed && oldCurrentCell.IsValid && Rows.Count > 0 && Columns.Count > 0)
+            if (isShiftPressed && oldCurrentCell.IsValid && Records.Count > 0 && Fields.Count > 0)
             {
                 SelectRange(oldCurrentCell, target, isCtrlPressed);
-                IncludeColumnsRangeForSelectedRowsOnColumn(oldCurrentCell.ColumnIndex, clickedColumnHeader);
+                IncludeFieldsRangeForSelectedRecordsOnField(oldCurrentCell.FieldIndex, clickedFieldHeader);
             }
             else
             {
-                SelectColumn(clickedColumnHeader, isCtrlPressed);
+                SelectField(clickedFieldHeader, isCtrlPressed);
             }
 
             _currentCell = target;
@@ -284,15 +285,15 @@ public sealed partial class Griddo
             InvalidateVisual();
             if (!isShiftPressed
                 && e.ChangedButton == MouseButton.Left
-                && Rows.Count > 0
-                && Columns.Count > 0)
+                && Records.Count > 0
+                && Fields.Count > 0)
             {
-                _columnHeaderDragIsAdditive = isCtrlPressed;
+                _fieldHeaderDragIsAdditive = isCtrlPressed;
                 _selectionDragSnapshot.Clear();
                 _selectionDragSnapshot.UnionWith(_selectedCells);
-                _columnHeaderDragAnchorColumn = clickedColumnHeader;
-                _columnHeaderDragCurrentColumn = clickedColumnHeader;
-                _isDraggingColumnHeaderSelection = true;
+                _fieldHeaderDragAnchorField = clickedFieldHeader;
+                _fieldHeaderDragCurrentField = clickedFieldHeader;
+                _isDraggingFieldHeaderSelection = true;
                 CaptureMouse();
             }
 
@@ -300,59 +301,59 @@ public sealed partial class Griddo
             return;
         }
 
-        var clickedRowHeader = HitTestRowHeader(pointer);
-        if (clickedRowHeader >= 0)
+        var clickedRecordHeader = HitTestRecordHeader(pointer);
+        if (clickedRecordHeader >= 0)
         {
             ClearHeaderFocus();
             var target = new GriddoCellAddress(
-                clickedRowHeader,
-                Columns.Count == 0 ? 0 : Math.Clamp(oldCurrentCell.ColumnIndex, 0, Columns.Count - 1));
-            var clickedSelectedRowHeader = IsRowHeaderMarkedSelected(clickedRowHeader);
+                clickedRecordHeader,
+                Fields.Count == 0 ? 0 : Math.Clamp(oldCurrentCell.FieldIndex, 0, Fields.Count - 1));
+            var clickedSelectedRecordHeader = IsRecordHeaderMarkedSelected(clickedRecordHeader);
 
             if (e.ChangedButton == MouseButton.Left
-                && clickedSelectedRowHeader
+                && clickedSelectedRecordHeader
                 && !isShiftPressed
-                && Rows.Count > 0
-                && Columns.Count > 0)
+                && Records.Count > 0
+                && Fields.Count > 0)
             {
                 _currentCell = target;
                 _isEditing = false;
                 InvalidateVisual();
-                _isTrackingRowMove = true;
-                _isMovingRow = false;
-                _movingRowIndex = clickedRowHeader;
-                _rowMoveCueIndex = clickedRowHeader;
-                _rowMoveStartPoint = pointer;
-                _pendingRowHeaderSelectionOnMouseUp = true;
-                _pendingRowHeaderIndex = clickedRowHeader;
-                _pendingRowHeaderSelectionAdditive = isCtrlPressed;
-                _pendingRowHeaderPreserveSelection = clickedSelectedRowHeader && !isCtrlPressed;
+                _isTrackingRecordMove = true;
+                _isMovingRecord = false;
+                _movingRecordIndex = clickedRecordHeader;
+                _recordMoveCueIndex = clickedRecordHeader;
+                _recordMoveStartPoint = pointer;
+                _pendingRecordHeaderSelectionOnMouseUp = true;
+                _pendingRecordHeaderIndex = clickedRecordHeader;
+                _pendingRecordHeaderSelectionAdditive = isCtrlPressed;
+                _pendingRecordHeaderPreserveSelection = clickedSelectedRecordHeader && !isCtrlPressed;
                 CaptureMouse();
                 CompleteMouseDown(e, handled: true);
                 return;
             }
 
-            if (isShiftPressed && oldCurrentCell.IsValid && Rows.Count > 0 && Columns.Count > 0)
+            if (isShiftPressed && oldCurrentCell.IsValid && Records.Count > 0 && Fields.Count > 0)
             {
                 SelectRange(oldCurrentCell, target, isCtrlPressed);
-                IncludeRowsRangeForSelectedColumnsOnRow(oldCurrentCell.RowIndex, clickedRowHeader);
+                IncludeRecordsRangeForSelectedFieldsOnRecord(oldCurrentCell.RecordIndex, clickedRecordHeader);
             }
             else
             {
-                SelectRow(clickedRowHeader, isCtrlPressed);
+                SelectRecord(clickedRecordHeader, isCtrlPressed);
             }
 
             if (!isShiftPressed
                 && e.ChangedButton == MouseButton.Left
-                && Rows.Count > 0
-                && Columns.Count > 0)
+                && Records.Count > 0
+                && Fields.Count > 0)
             {
-                _rowHeaderDragIsAdditive = isCtrlPressed;
+                _recordHeaderDragIsAdditive = isCtrlPressed;
                 _selectionDragSnapshot.Clear();
                 _selectionDragSnapshot.UnionWith(_selectedCells);
-                _rowHeaderDragAnchorRow = clickedRowHeader;
-                _rowHeaderDragCurrentRow = clickedRowHeader;
-                _isDraggingRowHeaderSelection = true;
+                _recordHeaderDragAnchorRecord = clickedRecordHeader;
+                _recordHeaderDragCurrentRecord = clickedRecordHeader;
+                _isDraggingRecordHeaderSelection = true;
                 CaptureMouse();
             }
 
@@ -379,7 +380,7 @@ public sealed partial class Griddo
         if (e.ChangedButton == MouseButton.Right
             && HostedPlotDirectEditOnMouseDown
             && e.ClickCount == 1
-            && Columns[clicked.ColumnIndex] is IGriddoHostedColumnView hostedRightDirect)
+            && Fields[clicked.FieldIndex] is IGriddoHostedFieldView hostedRightDirect)
         {
             var wasSelectedHosted = _selectedCells.Contains(clicked);
             if (!wasSelectedHosted)
@@ -444,7 +445,7 @@ public sealed partial class Griddo
                 {
                     ToggleBoolCell(clicked);
                 }
-                else if (Columns[clicked.ColumnIndex] is not IGriddoHostedColumnView)
+                else if (Fields[clicked.FieldIndex] is not IGriddoHostedFieldView)
                 {
                     BeginEditWithoutReplacing();
                 }
@@ -456,7 +457,7 @@ public sealed partial class Griddo
 
             if (HostedPlotDirectEditOnMouseDown
                 && e.ClickCount == 1
-                && Columns[clicked.ColumnIndex] is IGriddoHostedColumnView hostedDirect)
+                && Fields[clicked.FieldIndex] is IGriddoHostedFieldView hostedDirect)
             {
                 if (TryGetHostedElement(clicked) is { } hostedForDirect
                     && hostedDirect.IsHostInEditMode(hostedForDirect))
@@ -495,7 +496,7 @@ public sealed partial class Griddo
 
             if (ImmediateCellEditOnSingleClick
                 && e.ClickCount == 1
-                && Columns[clicked.ColumnIndex] is not IGriddoHostedColumnView
+                && Fields[clicked.FieldIndex] is not IGriddoHostedFieldView
                 && !IsCheckboxToggleCell(clicked))
             {
                 _selectedCells.Clear();
@@ -512,7 +513,7 @@ public sealed partial class Griddo
                 && oldCurrentCell.IsValid
                 && clicked == oldCurrentCell)
             {
-                if (Columns[clicked.ColumnIndex] is IGriddoHostedColumnView hostedSameCell)
+                if (Fields[clicked.FieldIndex] is IGriddoHostedFieldView hostedSameCell)
                 {
                     if (TryGetHostedElement(clicked) is { } hostedSameElement
                         && hostedSameCell.IsHostInEditMode(hostedSameElement))
@@ -560,8 +561,8 @@ public sealed partial class Griddo
         if (e.ChangedButton == MouseButton.Left
             && isShiftPressed
             && oldCurrentCell.IsValid
-            && Rows.Count > 0
-            && Columns.Count > 0)
+            && Records.Count > 0
+            && Fields.Count > 0)
         {
             SelectRange(oldCurrentCell, clicked, isCtrlPressed);
             _currentCell = clicked;
@@ -572,7 +573,7 @@ public sealed partial class Griddo
         }
 
         if (e.ChangedButton == MouseButton.Left
-            && Columns[clicked.ColumnIndex] is IGriddoHostedColumnView hostedForEdit
+            && Fields[clicked.FieldIndex] is IGriddoHostedFieldView hostedForEdit
             && TryGetHostedElement(clicked) is { } hostedElement
             && hostedForEdit.IsHostInEditMode(hostedElement))
         {
@@ -652,7 +653,7 @@ public sealed partial class Griddo
         base.OnMouseDown(e);
     }
 
-    /// <summary>Column or row divider: double-click autosize, drag starts resize with capture.</summary>
+    /// <summary>Field or record divider: double-click autosize, drag starts resize with capture.</summary>
     private bool TryBeginDividerResizeOrAutoSize(MouseButtonEventArgs e, Point pointer, bool isCtrlPressed)
     {
         if (e.ChangedButton != MouseButton.Left)
@@ -660,34 +661,34 @@ public sealed partial class Griddo
             return false;
         }
 
-        var dividerColumn = HitTestColumnDivider(pointer);
-        if (dividerColumn >= 0)
+        var dividerField = HitTestFieldDivider(pointer);
+        if (dividerField >= 0)
         {
             if (e.ClickCount == 2)
             {
                 if (isCtrlPressed)
                 {
-                    AutoSizeAllColumns();
+                    AutoSizeAllFields();
                     e.Handled = true;
                     return true;
                 }
 
-                AutoSizeColumn(dividerColumn);
+                AutoSizeField(dividerField);
                 e.Handled = true;
                 return true;
             }
 
-            _isResizingColumn = true;
-            _resizingColumnIndex = dividerColumn;
+            _isResizingField = true;
+            _resizingFieldIndex = dividerField;
             _resizeStartPoint = pointer;
-            _resizeInitialSize = GetColumnWidth(dividerColumn);
+            _resizeInitialSize = GetFieldWidth(dividerField);
             CaptureMouse();
             e.Handled = true;
             return true;
         }
 
-        var dividerRow = HitTestRowDivider(pointer);
-        if (dividerRow < 0)
+        var dividerRecord = HitTestRecordDivider(pointer);
+        if (dividerRecord < 0)
         {
             return false;
         }
@@ -696,31 +697,31 @@ public sealed partial class Griddo
         {
             if (isCtrlPressed)
             {
-                AutoSizeAllColumns();
+                AutoSizeAllFields();
                 e.Handled = true;
                 return true;
             }
 
-            AutoSizeRow(dividerRow);
+            AutoSizeRecord(dividerRecord);
             e.Handled = true;
             return true;
         }
 
-        _isResizingRow = true;
-        _resizingRowIndex = dividerRow;
-        ExitFillRowsUsingCurrentDisplayedRowHeight();
-        _resizePreserveOldRowHeight = GetRowHeight(dividerRow);
+        _isResizingRecord = true;
+        _resizingRecordIndex = dividerRecord;
+        ExitFillRecordsUsingCurrentDisplayedRecordHeight();
+        _resizePreserveOldRecordHeight = GetRecordHeight(dividerRecord);
         _resizePreserveOldVerticalOffset = _verticalOffset;
         _resizePreserveOldHorizontalOffset = _horizontalOffset;
         _resizeStartPoint = pointer;
-        _resizeInitialSize = GetRowHeight(dividerRow);
+        _resizeInitialSize = GetRecordHeight(dividerRecord);
         CaptureMouse();
         e.Handled = true;
         return true;
     }
 
     // -------------------------------------------------------------------------
-    // Preview mouse down (hosted columns)
+    // Preview mouse down (hosted fields)
     // -------------------------------------------------------------------------
 
     protected override void OnPreviewMouseDown(MouseButtonEventArgs e)
@@ -738,7 +739,7 @@ public sealed partial class Griddo
 
         var pointer = e.GetPosition(this);
         var clicked = HitTestCell(pointer);
-        if (!clicked.IsValid || Columns[clicked.ColumnIndex] is not IGriddoHostedColumnView)
+        if (!clicked.IsValid || Fields[clicked.FieldIndex] is not IGriddoHostedFieldView)
         {
             base.OnPreviewMouseDown(e);
             return;
@@ -776,7 +777,7 @@ public sealed partial class Griddo
             }
         }
 
-        if (isShiftPressed && oldCurrentCell.IsValid && Rows.Count > 0 && Columns.Count > 0)
+        if (isShiftPressed && oldCurrentCell.IsValid && Records.Count > 0 && Fields.Count > 0)
         {
             SelectRange(oldCurrentCell, clicked, isCtrlPressed);
             _currentCell = clicked;
@@ -816,7 +817,7 @@ public sealed partial class Griddo
     protected override void OnMouseMove(MouseEventArgs e)
     {
         var pointer = e.GetPosition(this);
-        UpdateColumnHeaderTooltip(pointer);
+        UpdateFieldHeaderTooltip(pointer);
         if (_isDraggingEditSelection && e.LeftButton == MouseButtonState.Pressed)
         {
             var caretIndex = GetCaretIndexFromEditPoint(pointer);
@@ -827,75 +828,75 @@ public sealed partial class Griddo
             return;
         }
 
-        if (_isResizingColumn)
+        if (_isResizingField)
         {
             var delta = IsBodyTransposed ? pointer.Y - _resizeStartPoint.Y : pointer.X - _resizeStartPoint.X;
-            SetColumnWidth(_resizingColumnIndex, _resizeInitialSize + delta);
+            SetFieldWidth(_resizingFieldIndex, _resizeInitialSize + delta);
             InvalidateVisual();
             e.Handled = true;
             base.OnMouseMove(e);
             return;
         }
 
-        if (_isResizingRow)
+        if (_isResizingRecord)
         {
             double requestedHeight;
             if (IsBodyTransposed)
             {
-                var bodyPx = pointer.X - _rowHeaderWidth;
-                requestedHeight = GetUniformRowHeightScreenFromDividerBodyX(_resizingRowIndex, bodyPx);
+                var bodyPx = pointer.X - _recordHeaderWidth;
+                requestedHeight = GetUniformRecordHeightScreenFromDividerBodyX(_resizingRecordIndex, bodyPx);
             }
             else
             {
-                var bodyPy = pointer.Y - ScaledColumnHeaderHeight;
-                requestedHeight = GetUniformRowHeightScreenFromDividerBodyY(_resizingRowIndex, bodyPy);
+                var bodyPy = pointer.Y - ScaledFieldHeaderHeight;
+                requestedHeight = GetUniformRecordHeightScreenFromDividerBodyY(_resizingRecordIndex, bodyPy);
             }
 
-            SetRowHeightKeepingRowTop(_resizingRowIndex, requestedHeight);
+            SetRecordHeightKeepingRecordTop(_resizingRecordIndex, requestedHeight);
             InvalidateVisual();
             e.Handled = true;
             base.OnMouseMove(e);
             return;
         }
 
-        if (_isTrackingColumnMove)
+        if (_isTrackingFieldMove)
         {
             if (e.LeftButton != MouseButtonState.Pressed)
             {
-                StopColumnMoveTracking();
+                StopFieldMoveTracking();
                 base.OnMouseMove(e);
                 return;
             }
 
-            var dragDistance = (pointer - _columnMoveStartPoint).Length;
-            var isPointerInColumnHeader = HitTestColumnHeader(pointer) >= 0;
-            var shouldShowMovingHeaderCue = isPointerInColumnHeader && dragDistance >= DragCueMinPixels;
-            if (_isMovingPointerInColumnHeader != shouldShowMovingHeaderCue)
+            var dragDistance = (pointer - _fieldMoveStartPoint).Length;
+            var isPointerInFieldHeader = HitTestFieldHeader(pointer) >= 0;
+            var shouldShowMovingHeaderCue = isPointerInFieldHeader && dragDistance >= DragCueMinPixels;
+            if (_isMovingPointerInFieldHeader != shouldShowMovingHeaderCue)
             {
-                _isMovingPointerInColumnHeader = shouldShowMovingHeaderCue;
+                _isMovingPointerInFieldHeader = shouldShowMovingHeaderCue;
                 InvalidateVisual();
             }
 
-            if (!_isMovingColumn)
+            if (!_isMovingField)
             {
                 if (dragDistance >= DragCueMinPixels)
                 {
-                    _isMovingColumn = true;
+                    _isMovingField = true;
                 }
             }
 
-            if (_isMovingColumn)
+            if (_isMovingField)
             {
-                AutoScrollDuringColumnMove(pointer.X);
-                var targetColumn = HitTestColumnHeaderDrag(pointer);
-                if (targetColumn >= 0 && targetColumn != _movingColumnIndex)
+                AutoScrollDuringFieldMove(pointer.X);
+                var targetField = HitTestFieldHeaderDrag(pointer);
+                if (targetField >= 0 && targetField != _movingFieldIndex)
                 {
-                    _columnMoveCueIndex = targetColumn;
+                    _fieldMoveCueIndex = targetField;
                     InvalidateVisual();
                 }
-                else if (_columnMoveCueIndex != -1)
+                else if (_fieldMoveCueIndex != -1)
                 {
-                    _columnMoveCueIndex = -1;
+                    _fieldMoveCueIndex = -1;
                     InvalidateVisual();
                 }
             }
@@ -905,26 +906,26 @@ public sealed partial class Griddo
             return;
         }
 
-        if (_isTrackingRowMove)
+        if (_isTrackingRecordMove)
         {
             if (e.LeftButton != MouseButtonState.Pressed)
             {
-                StopRowMoveTracking();
+                StopRecordMoveTracking();
                 base.OnMouseMove(e);
                 return;
             }
 
-            var dragDistance = (pointer - _rowMoveStartPoint).Length;
-            if (!_isMovingRow && dragDistance >= DragCueMinPixels)
+            var dragDistance = (pointer - _recordMoveStartPoint).Length;
+            if (!_isMovingRecord && dragDistance >= DragCueMinPixels)
             {
-                _isMovingRow = true;
+                _isMovingRecord = true;
             }
 
-            AutoScrollDuringRowInteraction(pointer.Y);
-            var targetRow = HitTestRowHeaderDrag(pointer);
-            if (targetRow >= 0 && targetRow != _rowMoveCueIndex)
+            AutoScrollDuringRecordInteraction(pointer.Y);
+            var targetRecord = HitTestRecordHeaderDrag(pointer);
+            if (targetRecord >= 0 && targetRecord != _recordMoveCueIndex)
             {
-                _rowMoveCueIndex = targetRow;
+                _recordMoveCueIndex = targetRecord;
                 InvalidateVisual();
             }
 
@@ -933,16 +934,16 @@ public sealed partial class Griddo
             return;
         }
 
-        if (_isDraggingColumnHeaderSelection
+        if (_isDraggingFieldHeaderSelection
             && IsMouseCaptured
             && e.LeftButton == MouseButtonState.Pressed)
         {
-            AutoScrollDuringColumnMove(pointer.X);
-            var hoveredColumnHeader = HitTestColumnHeaderDrag(pointer);
-            if (hoveredColumnHeader >= 0 && hoveredColumnHeader != _columnHeaderDragCurrentColumn)
+            AutoScrollDuringFieldMove(pointer.X);
+            var hoveredFieldHeader = HitTestFieldHeaderDrag(pointer);
+            if (hoveredFieldHeader >= 0 && hoveredFieldHeader != _fieldHeaderDragCurrentField)
             {
-                _columnHeaderDragCurrentColumn = hoveredColumnHeader;
-                ApplyColumnHeaderDragSelection();
+                _fieldHeaderDragCurrentField = hoveredFieldHeader;
+                ApplyFieldHeaderDragSelection();
                 InvalidateVisual();
                 e.Handled = true;
             }
@@ -951,16 +952,16 @@ public sealed partial class Griddo
             return;
         }
 
-        if (_isDraggingRowHeaderSelection
+        if (_isDraggingRecordHeaderSelection
             && IsMouseCaptured
             && e.LeftButton == MouseButtonState.Pressed)
         {
-            AutoScrollDuringRowInteraction(pointer.Y);
-            var hoveredRowHeader = HitTestRowHeaderDrag(pointer);
-            if (hoveredRowHeader >= 0 && hoveredRowHeader != _rowHeaderDragCurrentRow)
+            AutoScrollDuringRecordInteraction(pointer.Y);
+            var hoveredRecordHeader = HitTestRecordHeaderDrag(pointer);
+            if (hoveredRecordHeader >= 0 && hoveredRecordHeader != _recordHeaderDragCurrentRecord)
             {
-                _rowHeaderDragCurrentRow = hoveredRowHeader;
-                ApplyRowHeaderDragSelection();
+                _recordHeaderDragCurrentRecord = hoveredRecordHeader;
+                ApplyRecordHeaderDragSelection();
                 InvalidateVisual();
                 e.Handled = true;
             }
@@ -1001,9 +1002,9 @@ public sealed partial class Griddo
 
     protected override void OnToolTipOpening(ToolTipEventArgs e)
     {
-        UpdateColumnHeaderTooltip(Mouse.GetPosition(this));
-        if (ReferenceEquals(ToolTip, _columnHeaderToolTip)
-            && IsEmptyColumnHeaderToolTipContent(_columnHeaderToolTip.Content))
+        UpdateFieldHeaderTooltip(Mouse.GetPosition(this));
+        if (ReferenceEquals(ToolTip, _fieldHeaderToolTip)
+            && IsEmptyFieldHeaderToolTipContent(_fieldHeaderToolTip.Content))
         {
             e.Handled = true;
         }
@@ -1014,113 +1015,113 @@ public sealed partial class Griddo
     protected override void OnMouseLeave(MouseEventArgs e)
     {
         // Pointer left the grid; allow the next header hover to run a fresh ToolTip attach cycle.
-        // Do not reset while the column-header tooltip is open — the pointer often leaves the grid to read the popup.
-        if (ReferenceEquals(ToolTip, _columnHeaderToolTip) && !_columnHeaderToolTip.IsOpen)
+        // Do not reset while the field-header tooltip is open — the pointer often leaves the grid to read the popup.
+        if (ReferenceEquals(ToolTip, _fieldHeaderToolTip) && !_fieldHeaderToolTip.IsOpen)
         {
-            ClearColumnHeaderToolTipContent();
-            _columnHeaderToolTipNeedsReattach = true;
-            _priorPointerOnDescribedColumnHeader = false;
+            ClearFieldHeaderToolTipContent();
+            _fieldHeaderToolTipNeedsReattach = true;
+            _priorPointerOnDescribedFieldHeader = false;
         }
 
         base.OnMouseLeave(e);
     }
 
-    private void ColumnHeaderToolTipOnClosed(object sender, RoutedEventArgs e)
+    private void FieldHeaderToolTipOnClosed(object sender, RoutedEventArgs e)
     {
         _ = sender;
         _ = e;
-        if (_columnHeaderToolTipClosedSuppress > 0)
+        if (_fieldHeaderToolTipClosedSuppress > 0)
         {
             return;
         }
 
-        _columnHeaderToolTipNeedsReattach = true;
-        _priorPointerOnDescribedColumnHeader = false;
-        if (ReferenceEquals(ToolTip, _columnHeaderToolTip))
+        _fieldHeaderToolTipNeedsReattach = true;
+        _priorPointerOnDescribedFieldHeader = false;
+        if (ReferenceEquals(ToolTip, _fieldHeaderToolTip))
         {
-            _columnHeaderToolTip.Content = null;
+            _fieldHeaderToolTip.Content = null;
         }
 
-        Dispatcher.BeginInvoke(DispatcherPriority.Input, RefreshColumnHeaderTooltipIfApplicable);
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, RefreshFieldHeaderTooltipIfApplicable);
     }
 
-    private void RefreshColumnHeaderTooltipIfApplicable()
+    private void RefreshFieldHeaderTooltipIfApplicable()
     {
-        if (!IsLoaded || !IsVisible || !ReferenceEquals(ToolTip, _columnHeaderToolTip))
+        if (!IsLoaded || !IsVisible || !ReferenceEquals(ToolTip, _fieldHeaderToolTip))
         {
             return;
         }
 
-        UpdateColumnHeaderTooltip(Mouse.GetPosition(this));
+        UpdateFieldHeaderTooltip(Mouse.GetPosition(this));
     }
 
-    private void UpdateColumnHeaderTooltip(Point pointer)
+    private void UpdateFieldHeaderTooltip(Point pointer)
     {
-        if (!ReferenceEquals(ToolTip, _columnHeaderToolTip))
+        if (!ReferenceEquals(ToolTip, _fieldHeaderToolTip))
         {
             return;
         }
 
-        var headerCol = HitTestColumnHeader(pointer);
-        var inStrip = headerCol >= 0 && headerCol < Columns.Count;
-        if (inStrip && TryGetColumnHeaderDescription(Columns[headerCol], out var text))
+        var headerCol = HitTestFieldHeader(pointer);
+        var inStrip = headerCol >= 0 && headerCol < Fields.Count;
+        if (inStrip && TryGetFieldHeaderDescription(Fields[headerCol], out var text))
         {
             // Reattach when (a) tooltip service asked for it after close, or (b) pointer re-enters a described
             // header from body / undescribed header — WPF will not reopen on the same attach after leaving the strip
             // if we only rely on ToolTip.Closed (it may not run when IsOpen is cleared from mouse moves).
-            if (!_priorPointerOnDescribedColumnHeader || _columnHeaderToolTipNeedsReattach)
+            if (!_priorPointerOnDescribedFieldHeader || _fieldHeaderToolTipNeedsReattach)
             {
-                _columnHeaderToolTipClosedSuppress++;
+                _fieldHeaderToolTipClosedSuppress++;
                 try
                 {
                     ToolTip = null;
-                    ToolTip = _columnHeaderToolTip;
+                    ToolTip = _fieldHeaderToolTip;
                 }
                 finally
                 {
-                    _columnHeaderToolTipClosedSuppress--;
+                    _fieldHeaderToolTipClosedSuppress--;
                 }
 
-                _columnHeaderToolTipNeedsReattach = false;
+                _fieldHeaderToolTipNeedsReattach = false;
             }
 
-            _priorPointerOnDescribedColumnHeader = true;
-            ApplyColumnHeaderToolTipText(text);
+            _priorPointerOnDescribedFieldHeader = true;
+            ApplyFieldHeaderToolTipText(text);
             return;
         }
 
-        _priorPointerOnDescribedColumnHeader = false;
+        _priorPointerOnDescribedFieldHeader = false;
 
         if (inStrip)
         {
-            if (_columnHeaderToolTip.IsOpen)
+            if (_fieldHeaderToolTip.IsOpen)
             {
-                _columnHeaderToolTip.IsOpen = false;
+                _fieldHeaderToolTip.IsOpen = false;
             }
 
-            ClearColumnHeaderToolTipContent();
-            _columnHeaderToolTipNeedsReattach = true;
+            ClearFieldHeaderToolTipContent();
+            _fieldHeaderToolTipNeedsReattach = true;
             return;
         }
 
-        if (_columnHeaderToolTip.IsOpen)
+        if (_fieldHeaderToolTip.IsOpen)
         {
-            _columnHeaderToolTip.IsOpen = false;
+            _fieldHeaderToolTip.IsOpen = false;
         }
 
-        ClearColumnHeaderToolTipContent();
-        _columnHeaderToolTipNeedsReattach = true;
+        ClearFieldHeaderToolTipContent();
+        _fieldHeaderToolTipNeedsReattach = true;
     }
 
-    private void ApplyColumnHeaderToolTipText(string text)
+    private void ApplyFieldHeaderToolTipText(string text)
     {
-        if (_columnHeaderToolTip.Content is TextBlock tb)
+        if (_fieldHeaderToolTip.Content is TextBlock tb)
         {
             tb.Text = text;
             return;
         }
 
-        _columnHeaderToolTip.Content = new TextBlock
+        _fieldHeaderToolTip.Content = new TextBlock
         {
             Text = text,
             TextWrapping = TextWrapping.Wrap,
@@ -1130,12 +1131,12 @@ public sealed partial class Griddo
         };
     }
 
-    private void ClearColumnHeaderToolTipContent()
+    private void ClearFieldHeaderToolTipContent()
     {
-        _columnHeaderToolTip.Content = null;
+        _fieldHeaderToolTip.Content = null;
     }
 
-    private static bool IsEmptyColumnHeaderToolTipContent(object? content) =>
+    private static bool IsEmptyFieldHeaderToolTipContent(object? content) =>
         content switch
         {
             null => true,
@@ -1144,9 +1145,9 @@ public sealed partial class Griddo
             _ => false
         };
 
-    private static bool TryGetColumnHeaderDescription(IGriddoColumnView column, out string text)
+    private static bool TryGetFieldHeaderDescription(IGriddoFieldView field, out string text)
     {
-        if (column is IGriddoColumnDescriptionView descriptionView
+        if (field is IGriddoFieldDescriptionView descriptionView
             && !string.IsNullOrWhiteSpace(descriptionView.Description))
         {
             text = descriptionView.Description.Trim();
@@ -1161,15 +1162,15 @@ public sealed partial class Griddo
     // Auto-scroll while dragging near viewport edges
     // -------------------------------------------------------------------------
 
-    private void AutoScrollDuringColumnMove(double pointerX)
+    private void AutoScrollDuringFieldMove(double pointerX)
     {
-        if (Columns.Count == 0 || _viewportBodyWidth <= 0)
+        if (Fields.Count == 0 || _viewportBodyWidth <= 0)
         {
             return;
         }
 
-        var scrollStart = _rowHeaderWidth + GetFixedColumnsWidth();
-        var scrollEnd = _rowHeaderWidth + _viewportBodyWidth;
+        var scrollStart = _recordHeaderWidth + GetFixedFieldsWidth();
+        var scrollEnd = _recordHeaderWidth + _viewportBodyWidth;
         if (scrollEnd <= scrollStart)
         {
             return;
@@ -1202,15 +1203,15 @@ public sealed partial class Griddo
         }
     }
 
-    private void AutoScrollDuringRowInteraction(double pointerY)
+    private void AutoScrollDuringRecordInteraction(double pointerY)
     {
-        if (Rows.Count == 0 || _viewportBodyHeight <= 0)
+        if (Records.Count == 0 || _viewportBodyHeight <= 0)
         {
             return;
         }
 
-        var scrollStartY = ScaledColumnHeaderHeight;
-        var scrollEndY = ScaledColumnHeaderHeight + _viewportBodyHeight;
+        var scrollStartY = ScaledFieldHeaderHeight;
+        var scrollEndY = ScaledFieldHeaderHeight + _viewportBodyHeight;
         if (scrollEndY <= scrollStartY)
         {
             return;
@@ -1245,7 +1246,7 @@ public sealed partial class Griddo
 
     private void AutoScrollDuringCellSelection(Point pointer)
     {
-        if (Rows.Count == 0 || Columns.Count == 0 || _viewportBodyWidth <= 0 || _viewportBodyHeight <= 0)
+        if (Records.Count == 0 || Fields.Count == 0 || _viewportBodyWidth <= 0 || _viewportBodyHeight <= 0)
         {
             return;
         }
@@ -1254,8 +1255,8 @@ public sealed partial class Griddo
         const double maxHorizontalSpeed = 48.0;
         const double maxVerticalSpeed = 36.0;
 
-        var scrollStartX = _rowHeaderWidth + GetFixedColumnsWidth();
-        var scrollEndX = _rowHeaderWidth + _viewportBodyWidth;
+        var scrollStartX = _recordHeaderWidth + GetFixedFieldsWidth();
+        var scrollEndX = _recordHeaderWidth + _viewportBodyWidth;
         var horizontalDelta = 0.0;
         if (scrollEndX > scrollStartX)
         {
@@ -1271,8 +1272,8 @@ public sealed partial class Griddo
             }
         }
 
-        var scrollStartY = ScaledColumnHeaderHeight;
-        var scrollEndY = ScaledColumnHeaderHeight + _viewportBodyHeight;
+        var scrollStartY = ScaledFieldHeaderHeight;
+        var scrollEndY = ScaledFieldHeaderHeight + _viewportBodyHeight;
         var verticalDelta = 0.0;
         if (pointer.Y < scrollStartY + edgeBand)
         {
@@ -1313,88 +1314,88 @@ public sealed partial class Griddo
         {
             _isDraggingEditSelection = false;
             if (!_isDraggingSelection
-                && !_isDraggingColumnHeaderSelection
-                && !_isDraggingRowHeaderSelection
-                && !_isResizingColumn
-                && !_isResizingRow
-                && !_isTrackingColumnMove
-                && !_isTrackingRowMove
+                && !_isDraggingFieldHeaderSelection
+                && !_isDraggingRecordHeaderSelection
+                && !_isResizingField
+                && !_isResizingRecord
+                && !_isTrackingFieldMove
+                && !_isTrackingRecordMove
                 && IsMouseCaptured)
             {
                 ReleaseMouseCapture();
             }
         }
 
-        if (_isTrackingColumnMove && e.ChangedButton == MouseButton.Left)
+        if (_isTrackingFieldMove && e.ChangedButton == MouseButton.Left)
         {
-            if (_isMovingColumn &&
-                _movingColumnIndex >= 0 &&
-                _columnMoveCueIndex >= 0 &&
-                _movingColumnIndex != _columnMoveCueIndex)
+            if (_isMovingField &&
+                _movingFieldIndex >= 0 &&
+                _fieldMoveCueIndex >= 0 &&
+                _movingFieldIndex != _fieldMoveCueIndex)
             {
-                if (_columnMoveStartedFromSelectedHeader)
+                if (_fieldMoveStartedFromSelectedHeader)
                 {
-                    MoveSelectedColumns(_movingColumnIndex, _columnMoveCueIndex);
+                    MoveSelectedFields(_movingFieldIndex, _fieldMoveCueIndex);
                 }
                 else
                 {
-                    MoveColumn(_movingColumnIndex, _columnMoveCueIndex);
+                    MoveField(_movingFieldIndex, _fieldMoveCueIndex);
                 }
                 InvalidateVisual();
             }
-            else if (_pendingColumnHeaderSelectionOnMouseUp
-                && _pendingColumnHeaderIndex >= 0)
+            else if (_pendingFieldHeaderSelectionOnMouseUp
+                && _pendingFieldHeaderIndex >= 0)
             {
-                if (!_pendingColumnHeaderPreserveSelection)
+                if (!_pendingFieldHeaderPreserveSelection)
                 {
-                    SelectColumn(_pendingColumnHeaderIndex, _pendingColumnHeaderSelectionAdditive);
+                    SelectField(_pendingFieldHeaderIndex, _pendingFieldHeaderSelectionAdditive);
                 }
 
                 _currentCell = new GriddoCellAddress(
-                    Rows.Count == 0 ? 0 : Math.Clamp(_currentCell.RowIndex, 0, Rows.Count - 1),
-                    _pendingColumnHeaderIndex);
+                    Records.Count == 0 ? 0 : Math.Clamp(_currentCell.RecordIndex, 0, Records.Count - 1),
+                    _pendingFieldHeaderIndex);
                 _isEditing = false;
                 InvalidateVisual();
             }
 
-            StopColumnMoveTracking();
+            StopFieldMoveTracking();
             InvalidateVisual();
             e.Handled = true;
         }
 
-        if (_isTrackingRowMove && e.ChangedButton == MouseButton.Left)
+        if (_isTrackingRecordMove && e.ChangedButton == MouseButton.Left)
         {
-            if (_isMovingRow &&
-                _movingRowIndex >= 0 &&
-                _rowMoveCueIndex >= 0 &&
-                _movingRowIndex != _rowMoveCueIndex)
+            if (_isMovingRecord &&
+                _movingRecordIndex >= 0 &&
+                _recordMoveCueIndex >= 0 &&
+                _movingRecordIndex != _recordMoveCueIndex)
             {
-                MoveSelectedRows(_movingRowIndex, _rowMoveCueIndex);
+                MoveSelectedRecords(_movingRecordIndex, _recordMoveCueIndex);
                 InvalidateVisual();
             }
-            else if (_pendingRowHeaderSelectionOnMouseUp
-                && _pendingRowHeaderIndex >= 0)
+            else if (_pendingRecordHeaderSelectionOnMouseUp
+                && _pendingRecordHeaderIndex >= 0)
             {
-                if (!_pendingRowHeaderPreserveSelection)
+                if (!_pendingRecordHeaderPreserveSelection)
                 {
-                    SelectRow(_pendingRowHeaderIndex, _pendingRowHeaderSelectionAdditive);
+                    SelectRecord(_pendingRecordHeaderIndex, _pendingRecordHeaderSelectionAdditive);
                 }
 
                 _currentCell = new GriddoCellAddress(
-                    _pendingRowHeaderIndex,
-                    Columns.Count == 0 ? 0 : Math.Clamp(_currentCell.ColumnIndex, 0, Columns.Count - 1));
+                    _pendingRecordHeaderIndex,
+                    Fields.Count == 0 ? 0 : Math.Clamp(_currentCell.FieldIndex, 0, Fields.Count - 1));
                 _isEditing = false;
                 InvalidateVisual();
             }
 
-            StopRowMoveTracking();
+            StopRecordMoveTracking();
             e.Handled = true;
         }
 
-        if (_isResizingColumn && e.ChangedButton == MouseButton.Left)
+        if (_isResizingField && e.ChangedButton == MouseButton.Left)
         {
-            _isResizingColumn = false;
-            _resizingColumnIndex = -1;
+            _isResizingField = false;
+            _resizingFieldIndex = -1;
             if (!_isDraggingSelection && IsMouseCaptured)
             {
                 ReleaseMouseCapture();
@@ -1403,16 +1404,16 @@ public sealed partial class Griddo
             e.Handled = true;
         }
 
-        if (_isResizingRow && e.ChangedButton == MouseButton.Left)
+        if (_isResizingRecord && e.ChangedButton == MouseButton.Left)
         {
-            _isResizingRow = false;
-            var savedDivider = _resizingRowIndex;
-            _resizingRowIndex = -1;
+            _isResizingRecord = false;
+            var savedDivider = _resizingRecordIndex;
+            _resizingRecordIndex = -1;
             if (savedDivider >= 0)
             {
-                ApplyInteractiveRowResizeScrollPreservation(
+                ApplyInteractiveRecordResizeScrollPreservation(
                     savedDivider,
-                    _resizePreserveOldRowHeight,
+                    _resizePreserveOldRecordHeight,
                     IsBodyTransposed ? _resizePreserveOldHorizontalOffset : _resizePreserveOldVerticalOffset);
             }
 
@@ -1447,17 +1448,17 @@ public sealed partial class Griddo
             e.Handled = true;
         }
 
-        if (_isDraggingColumnHeaderSelection && e.ChangedButton == MouseButton.Left)
+        if (_isDraggingFieldHeaderSelection && e.ChangedButton == MouseButton.Left)
         {
-            _isDraggingColumnHeaderSelection = false;
-            _columnHeaderDragAnchorColumn = -1;
-            _columnHeaderDragCurrentColumn = -1;
+            _isDraggingFieldHeaderSelection = false;
+            _fieldHeaderDragAnchorField = -1;
+            _fieldHeaderDragCurrentField = -1;
             if (!_isDraggingSelection
-                && !_isDraggingRowHeaderSelection
-                && !_isResizingColumn
-                && !_isResizingRow
-                && !_isTrackingColumnMove
-                && !_isTrackingRowMove
+                && !_isDraggingRecordHeaderSelection
+                && !_isResizingField
+                && !_isResizingRecord
+                && !_isTrackingFieldMove
+                && !_isTrackingRecordMove
                 && IsMouseCaptured)
             {
                 ReleaseMouseCapture();
@@ -1466,15 +1467,15 @@ public sealed partial class Griddo
             e.Handled = true;
         }
 
-        if (_isDraggingRowHeaderSelection && e.ChangedButton == MouseButton.Left)
+        if (_isDraggingRecordHeaderSelection && e.ChangedButton == MouseButton.Left)
         {
-            _isDraggingRowHeaderSelection = false;
-            _rowHeaderDragAnchorRow = -1;
-            _rowHeaderDragCurrentRow = -1;
+            _isDraggingRecordHeaderSelection = false;
+            _recordHeaderDragAnchorRecord = -1;
+            _recordHeaderDragCurrentRecord = -1;
             if (!_isDraggingSelection
-                && !_isResizingColumn
-                && !_isResizingRow
-                && !_isTrackingColumnMove
+                && !_isResizingField
+                && !_isResizingRecord
+                && !_isTrackingFieldMove
                 && IsMouseCaptured)
             {
                 ReleaseMouseCapture();
@@ -1485,11 +1486,11 @@ public sealed partial class Griddo
 
         if (e.ChangedButton == MouseButton.Right
             && ReferenceEquals(e.OriginalSource, this)
-            && _currentCell is { IsValid: true, RowIndex: >= 0 }
-            && _currentCell.RowIndex < Rows.Count
-            && _currentCell.ColumnIndex >= 0
-            && _currentCell.ColumnIndex < Columns.Count
-            && Columns[_currentCell.ColumnIndex] is IGriddoHostedColumnView hostedUp
+            && _currentCell is { IsValid: true, RecordIndex: >= 0 }
+            && _currentCell.RecordIndex < Records.Count
+            && _currentCell.FieldIndex >= 0
+            && _currentCell.FieldIndex < Fields.Count
+            && Fields[_currentCell.FieldIndex] is IGriddoHostedFieldView hostedUp
             && TryGetHostedElement(_currentCell) is { } hostUp)
         {
             hostedUp.RelayDirectEditMouseUp(hostUp, e);
@@ -1538,12 +1539,12 @@ public sealed partial class Griddo
 
     private bool TryRouteHostedMouseWheelForCell(GriddoCellAddress cell, MouseWheelEventArgs e)
     {
-        if (!cell.IsValid || cell.ColumnIndex < 0 || cell.ColumnIndex >= Columns.Count)
+        if (!cell.IsValid || cell.FieldIndex < 0 || cell.FieldIndex >= Fields.Count)
         {
             return false;
         }
 
-        if (Columns[cell.ColumnIndex] is not IGriddoHostedColumnView hosted)
+        if (Fields[cell.FieldIndex] is not IGriddoHostedFieldView hosted)
         {
             return false;
         }
@@ -1560,7 +1561,7 @@ public sealed partial class Griddo
     {
         var pos = e.GetPosition(this);
         var cell = HitTestCell(pos);
-        if (!cell.IsValid || Columns[cell.ColumnIndex] is not IGriddoHostedColumnView hosted)
+        if (!cell.IsValid || Fields[cell.FieldIndex] is not IGriddoHostedFieldView hosted)
         {
             return false;
         }
@@ -1602,7 +1603,7 @@ public sealed partial class Griddo
             return;
         }
 
-        var delta = e.Delta > 0 ? -GetRowHeight(0) : GetRowHeight(0);
+        var delta = e.Delta > 0 ? -GetRecordHeight(0) : GetRecordHeight(0);
         SetVerticalOffset(_verticalOffset + delta);
         e.Handled = true;
         base.OnMouseWheel(e);

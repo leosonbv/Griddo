@@ -4,7 +4,7 @@ ModelView laag voor consistente en eenvoudige configuratie van grids in chemisch
 
 ## Bestanden
 - `PropertyViewConfiguration.cs` → Globale eigenschappen per veld
-- `GridConfiguration.cs` + `ColumnConfiguration.cs` → Per-grid lay-out
+- `GridConfiguration.cs` + `FieldConfiguration.cs` → Per-grid lay-out
 - `PropertyViewStore.cs` + `GridConfigurationStore.cs` → JSON opslag
 
 Gebruik deze voor eenvoudige, herbruikbare kolomdefinities in HPLC, GC-MS, etc.

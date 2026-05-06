@@ -6,14 +6,14 @@ namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
-    private void UpdateRowHeaderWidth()
+    private void UpdateRecordHeaderWidth()
     {
-        var rowCountText = Math.Max(1, Rows.Count).ToString();
-        var required = MeasureRowHeaderWidthForText(rowCountText);
-        _rowHeaderWidth = Math.Max(MeasureRowHeaderWidthForText("1"), required);
+        var recordCountText = Math.Max(1, Records.Count).ToString();
+        var required = MeasureRecordHeaderWidthForText(recordCountText);
+        _recordHeaderWidth = Math.Max(MeasureRecordHeaderWidthForText("1"), required);
     }
 
-    private double MeasureRowHeaderWidthForText(string text)
+    private double MeasureRecordHeaderWidthForText(string text)
     {
         var formatted = new FormattedText(
             text,

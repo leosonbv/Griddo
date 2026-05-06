@@ -1,14 +1,21 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Windows.Input;
-using Griddo.Columns;
+using Griddo.Fields;
 using Griddo.Primitives;
 
 namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
-    /// <summary>Copy the topmost selected cell's value in each column to every other selected cell in that column.</summary>
+    private enum IncrementPaddingMode : byte
+    {
+        None,
+        KeepSourceWidth,
+        NormalizeSeries
+    }
+
+    /// <summary>Copy the topmost selected cell's value in each field to every other selected cell in that field.</summary>
     /// <returns>True if at least one cell was updated.</returns>
     public bool FillSelectionDown()
     {
@@ -22,13 +29,46 @@ public sealed partial class Griddo
     }
 
     /// <summary>
-    /// Like <see cref="FillSelectionDown"/> but increments the last integer in each column's formatted top cell for
-    /// each lower selected row; zero-pads magnitudes so all values share the same digit width.
+    /// Like <see cref="FillSelectionDown"/> but increments the last integer in each field's formatted top cell for
+    /// each lower selected record; zero-pads magnitudes so all values share the same digit width.
     /// </summary>
     /// <returns>True if at least one cell was updated.</returns>
     public bool FillSelectionIncrementalDown()
     {
-        var n = ApplyFillDownOrIncrement(increment: true);
+        var n = ApplyFillDownOrIncrement(increment: true, paddingMode: IncrementPaddingMode.NormalizeSeries);
+        if (n > 0)
+        {
+            InvalidateVisual();
+        }
+
+        return n > 0;
+    }
+
+    /// <summary>
+    /// Like <see cref="FillSelectionDown"/> but increments the last integer in each field's formatted top cell for
+    /// each lower selected record and controls whether magnitudes are left-padded with zeros.
+    /// </summary>
+    /// <param name="zeroPad">When true, magnitudes are left-padded to normalize series width; when false, natural digit width is used.</param>
+    /// <returns>True if at least one cell was updated.</returns>
+    public bool FillSelectionIncrementalDown(bool zeroPad)
+    {
+        var paddingMode = zeroPad ? IncrementPaddingMode.NormalizeSeries : IncrementPaddingMode.None;
+        var n = ApplyFillDownOrIncrement(increment: true, paddingMode: paddingMode);
+        if (n > 0)
+        {
+            InvalidateVisual();
+        }
+
+        return n > 0;
+    }
+
+    /// <summary>
+    /// Like <see cref="FillSelectionDown"/> but increments the last integer while keeping the source number padding width.
+    /// </summary>
+    /// <returns>True if at least one cell was updated.</returns>
+    public bool FillSelectionIncrementalDownKeepPadding()
+    {
+        var n = ApplyFillDownOrIncrement(increment: true, paddingMode: IncrementPaddingMode.KeepSourceWidth);
         if (n > 0)
         {
             InvalidateVisual();
@@ -60,7 +100,13 @@ public sealed partial class Griddo
             return false;
         }
 
-        if (!FillSelectionIncrementalDown())
+        var modifiers = Keyboard.Modifiers;
+        var shiftPressed = (modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+        var altPressed = (modifiers & ModifierKeys.Alt) == ModifierKeys.Alt;
+        var changed = altPressed
+            ? FillSelectionIncrementalDownKeepPadding()
+            : FillSelectionIncrementalDown(zeroPad: shiftPressed);
+        if (!changed)
         {
             return false;
         }
@@ -69,9 +115,9 @@ public sealed partial class Griddo
         return true;
     }
 
-    private int ApplyFillDownOrIncrement(bool increment)
+    private int ApplyFillDownOrIncrement(bool increment, IncrementPaddingMode paddingMode = IncrementPaddingMode.NormalizeSeries)
     {
-        if (_isEditing || IsCurrentHostedCellInEditMode() || Rows.Count == 0 || Columns.Count == 0 || _selectedCells.Count < 2)
+        if (_isEditing || IsCurrentHostedCellInEditMode() || Records.Count == 0 || Fields.Count == 0 || _selectedCells.Count < 2)
         {
             return 0;
         }
@@ -84,42 +130,42 @@ public sealed partial class Griddo
                 continue;
             }
 
-            if (addr.RowIndex < 0 || addr.RowIndex >= Rows.Count || addr.ColumnIndex < 0 || addr.ColumnIndex >= Columns.Count)
+            if (addr.RecordIndex < 0 || addr.RecordIndex >= Records.Count || addr.FieldIndex < 0 || addr.FieldIndex >= Fields.Count)
             {
                 continue;
             }
 
-            if (!byCol.TryGetValue(addr.ColumnIndex, out var list))
+            if (!byCol.TryGetValue(addr.FieldIndex, out var list))
             {
                 list = [];
-                byCol[addr.ColumnIndex] = list;
+                byCol[addr.FieldIndex] = list;
             }
 
-            list.Add(addr.RowIndex);
+            list.Add(addr.RecordIndex);
         }
 
         var writes = 0;
-        foreach (var (col, rowList) in byCol.OrderBy(static kv => kv.Key))
+        foreach (var (col, recordList) in byCol.OrderBy(static kv => kv.Key))
         {
-            rowList.Sort();
-            if (rowList.Count < 2)
+            recordList.Sort();
+            if (recordList.Count < 2)
             {
                 continue;
             }
 
-            var column = Columns[col];
-            if (column is IGriddoHostedColumnView)
+            var field = Fields[col];
+            if (field is IGriddoHostedFieldView)
             {
                 continue;
             }
 
             if (!increment)
             {
-                var sourceRow = rowList[0];
-                var value = column.GetValue(Rows[sourceRow]);
-                for (var i = 1; i < rowList.Count; i++)
+                var sourceRecord = recordList[0];
+                var value = field.GetValue(Records[sourceRecord]);
+                for (var i = 1; i < recordList.Count; i++)
                 {
-                    if (column.TrySetValue(Rows[rowList[i]], value))
+                    if (field.TrySetValue(Records[recordList[i]], value))
                     {
                         writes++;
                     }
@@ -127,17 +173,17 @@ public sealed partial class Griddo
             }
             else
             {
-                writes += ApplyIncrementForColumn(column, rowList);
+                writes += ApplyIncrementForField(field, recordList, paddingMode);
             }
         }
 
         return writes;
     }
 
-    private int ApplyIncrementForColumn(IGriddoColumnView column, List<int> rowList)
+    private int ApplyIncrementForField(IGriddoFieldView field, List<int> recordList, IncrementPaddingMode paddingMode)
     {
-        var sourceRow = rowList[0];
-        var formatted = column.FormatValue(column.GetValue(Rows[sourceRow]));
+        var sourceRecord = recordList[0];
+        var formatted = field.FormatValue(field.GetValue(Records[sourceRecord]));
         if (!TryFindLastIntegerSpan(formatted, out var intStart, out var intEnd, out var baseLong, out var minMagDigitsFromSource))
         {
             return 0;
@@ -145,7 +191,7 @@ public sealed partial class Griddo
 
         var prefix = formatted[..intStart];
         var suffix = formatted[intEnd..];
-        var count = rowList.Count;
+        var count = recordList.Count;
         var values = new long[count];
         values[0] = baseLong;
         try
@@ -176,14 +222,14 @@ public sealed partial class Griddo
         var written = 0;
         for (var i = 0; i < count; i++)
         {
-            var intText = FormatIncrementInteger(values[i], maxMagLen, minMagDigitsFromSource);
+            var intText = FormatIncrementInteger(values[i], maxMagLen, minMagDigitsFromSource, paddingMode);
             var newText = prefix + intText + suffix;
-            if (!column.Editor.TryCommit(newText, out var parsed))
+            if (!field.Editor.TryCommit(newText, out var parsed))
             {
                 continue;
             }
 
-            if (column.TrySetValue(Rows[rowList[i]], parsed))
+            if (field.TrySetValue(Records[recordList[i]], parsed))
             {
                 written++;
             }
@@ -208,21 +254,38 @@ public sealed partial class Griddo
         return a.ToString(CultureInfo.InvariantCulture).Length;
     }
 
-    private static string FormatIncrementInteger(long v, int paddedMagLen, int minMagnitudeDigitsFromSource)
+    private static string FormatIncrementInteger(
+        long v,
+        int paddedMagLen,
+        int minMagnitudeDigitsFromSource,
+        IncrementPaddingMode paddingMode)
     {
-        var magLen = Math.Max(paddedMagLen, minMagnitudeDigitsFromSource);
+        var magLen = paddingMode switch
+        {
+            IncrementPaddingMode.NormalizeSeries => Math.Max(paddedMagLen, minMagnitudeDigitsFromSource),
+            IncrementPaddingMode.KeepSourceWidth => minMagnitudeDigitsFromSource,
+            _ => 0
+        };
+        var applyPadding = paddingMode != IncrementPaddingMode.None;
         if (v < 0)
         {
             if (v == long.MinValue)
             {
-                return "-" + "9223372036854775808".PadLeft(magLen, '0');
+                var minValueText = "9223372036854775808";
+                return "-" + (applyPadding ? minValueText.PadLeft(magLen, '0') : minValueText);
             }
 
-            var mag = ((ulong)(-v)).ToString(CultureInfo.InvariantCulture).PadLeft(magLen, '0');
+            var mag = ((ulong)(-v)).ToString(CultureInfo.InvariantCulture);
+            if (applyPadding)
+            {
+                mag = mag.PadLeft(magLen, '0');
+            }
+
             return "-" + mag;
         }
 
-        return ((ulong)v).ToString(CultureInfo.InvariantCulture).PadLeft(magLen, '0');
+        var positive = ((ulong)v).ToString(CultureInfo.InvariantCulture);
+        return applyPadding ? positive.PadLeft(magLen, '0') : positive;
     }
 
     private static bool TryFindLastIntegerSpan(

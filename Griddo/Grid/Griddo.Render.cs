@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
 using System.Linq;
-using Griddo.Columns;
+using Griddo.Fields;
 using Griddo.Primitives;
 
 namespace Griddo.Grid;
@@ -17,26 +17,26 @@ public sealed partial class Griddo
         DrawBody(dc);
         DrawEditingText(dc);
         DrawCurrentCellOverlay(dc);
-        DrawRowMoveCue(dc);
+        DrawRecordMoveCue(dc);
         DrawScrollBarCorner(dc);
     }
 
-    private void DrawColumnHeader(DrawingContext dc, int col, double x, Typeface typeface)
+    private void DrawFieldHeader(DrawingContext dc, int col, double x, Typeface typeface)
     {
-        var width = GetColumnWidth(col);
-        var rect = new Rect(x, 0, width, ScaledColumnHeaderHeight);
-        var headerBackground = (IsColumnHeaderMarkedSelected(col) && ShowColumnHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
+        var width = GetFieldWidth(col);
+        var rect = new Rect(x, 0, width, ScaledFieldHeaderHeight);
+        var headerBackground = (IsFieldHeaderMarkedSelected(col) && ShowFieldHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
         dc.DrawRectangle(headerBackground, null, rect);
         var pen = new Pen(GridLineBrush, GridPenThickness);
-        // Top edge of header strip is drawn once in DrawOuterWorksheetFrame (matches DrawLine rasterization for scroll columns).
+        // Top edge of header strip is drawn once in DrawOuterWorksheetFrame (matches DrawLine rasterization for scroll fields).
         dc.DrawLine(pen, rect.TopRight, rect.BottomRight);
         if (col == 0)
         {
             dc.DrawLine(pen, rect.TopLeft, rect.BottomLeft);
         }
-        var headerLabel = Columns[col] is IGriddoColumnTitleView titleView && !string.IsNullOrWhiteSpace(titleView.AbbreviatedHeader)
+        var headerLabel = Fields[col] is IGriddoFieldTitleView titleView && !string.IsNullOrWhiteSpace(titleView.AbbreviatedHeader)
             ? titleView.AbbreviatedHeader
-            : Columns[col].Header;
+            : Fields[col].Header;
         var headerText = new FormattedText(
             headerLabel,
             System.Globalization.CultureInfo.CurrentCulture,
@@ -53,10 +53,10 @@ public sealed partial class Griddo
         dc.DrawText(headerText, new Point(rect.X + 4, headerY));
         DrawSortHeaderIndicator(dc, col, rect, typeface);
 
-        if (_fixedColumnCount > 0 && col == _fixedColumnCount - 1)
+        if (_fixedFieldCount > 0 && col == _fixedFieldCount - 1)
         {
             dc.DrawLine(
-                new Pen(FixedColumnRightBorderBrush, GridPenThickness),
+                new Pen(FixedFieldRightBorderBrush, GridPenThickness),
                 new Point(rect.Right, rect.Top),
                 new Point(rect.Right, rect.Bottom));
         }
@@ -69,20 +69,21 @@ public sealed partial class Griddo
             return;
         }
 
-        var priority = TryGetSortPriorityForColumn(col, out var ascending);
+        var priority = TryGetSortPriorityForField(col, out var ascending);
         if (priority <= 0)
         {
             return;
         }
 
-        var arrowText = ascending ? "▲" : "▼";
-        var arrow = new FormattedText(
-            arrowText,
+        var arrecordText = ascending ? "▲" : "▼";
+        var indicatorBrush = new SolidColorBrush(Color.FromRgb(120, 120, 120));
+        var arrecord = new FormattedText(
+            arrecordText,
             System.Globalization.CultureInfo.CurrentCulture,
             FlowDirection.LeftToRight,
             typeface,
             Math.Max(7.0, EffectiveFontSize * 0.7),
-            Brushes.DarkSlateBlue,
+            indicatorBrush,
             1.0);
         var prio = new FormattedText(
             priority.ToString(System.Globalization.CultureInfo.InvariantCulture),
@@ -90,43 +91,44 @@ public sealed partial class Griddo
             FlowDirection.LeftToRight,
             typeface,
             Math.Max(8.0, EffectiveFontSize * 0.65),
-            Brushes.DarkSlateBlue,
+            indicatorBrush,
             1.0);
         prio.SetFontWeight(FontWeights.Bold);
 
         var right = rect.Right - 3;
         dc.DrawText(prio, new Point(right - prio.Width, rect.Top + 1));
-        dc.DrawText(arrow, new Point(right - Math.Max(arrow.Width, prio.Width), rect.Top + 1 + prio.Height));
+        dc.DrawText(arrecord, new Point(right - Math.Max(arrecord.Width, prio.Width), rect.Top + 1 + prio.Height));
     }
 
     private void DrawBodyCell(
         DrawingContext dc,
-        int row,
+        int record,
         int col,
         double x,
         double y,
-        double rowHeight,
-        object rowData,
+        double recordHeight,
+        object recordData,
         Rect bodyViewport,
         Typeface typeface)
     {
-        var colWidth = GetColumnWidth(col);
+        var colWidth = GetFieldWidth(col);
         var cellW = colWidth;
-        var cellH = rowHeight;
+        var cellH = recordHeight;
         if (IsBodyTransposed)
         {
-            cellW = GetRowHeight(row);
+            cellW = GetRecordHeight(record);
             cellH = colWidth;
         }
 
         var rect = new Rect(x, y, cellW, cellH);
-        var address = new GriddoCellAddress(row, col);
+        var address = new GriddoCellAddress(record, col);
+        var mergedRenderRect = GetMergedRecordCellRect(record, col, rect);
 
-        var cellView = ResolveCellPropertyView(rowData, col);
+        var cellView = ResolveCellPropertyView(recordData, col);
         var isHostedCellEditing = IsHostedCellInEditMode(address);
-        if (TryGetColumnBackgroundBrush(col, cellView, out var columnBackgroundBrush))
+        if (TryGetFieldBackgroundBrush(col, cellView, out var fieldBackgroundBrush))
         {
-            dc.DrawRectangle(columnBackgroundBrush, null, rect);
+            dc.DrawRectangle(fieldBackgroundBrush, null, rect);
         }
 
         if (_findMatchedCells.Contains(address))
@@ -134,76 +136,134 @@ public sealed partial class Griddo
             dc.DrawRectangle(FindMatchBackground, null, rect);
         }
 
-        if (_selectedCells.Contains(address) && !isHostedCellEditing && ShowCellSelectionColoring)
+        if (!isHostedCellEditing && ShowCellSelectionColoring)
         {
-            dc.DrawRectangle(SelectionBackground, null, rect);
+            var drawSelection = _selectedCells.Contains(address);
+            if (!IsBodyTransposed
+                && Fields[col] is IGriddoRecordMergeBandView mergeBandSelection
+                && mergeBandSelection.IsMergedWithPreviousRecord(Records, record))
+            {
+                drawSelection = false;
+            }
+            else if (!IsBodyTransposed && Fields[col] is IGriddoRecordMergeBandView)
+            {
+                drawSelection = false;
+                var top = record;
+                while (top > 0 && Fields[col] is IGriddoRecordMergeBandView m0 && m0.IsMergedWithPreviousRecord(Records, top))
+                {
+                    top--;
+                }
+
+                var bottom = record;
+                while (bottom < Records.Count - 1 && Fields[col] is IGriddoRecordMergeBandView m1 && m1.IsMergedWithNextRecord(Records, bottom))
+                {
+                    bottom++;
+                }
+
+                for (var r = top; r <= bottom; r++)
+                {
+                    if (_selectedCells.Contains(new GriddoCellAddress(r, col)))
+                    {
+                        drawSelection = true;
+                        break;
+                    }
+                }
+            }
+
+            if (drawSelection)
+            {
+                dc.DrawRectangle(SelectionBackground, null, mergedRenderRect);
+            }
         }
 
-        dc.DrawRectangle(null, new Pen(GridLineBrush, GridPenThickness), rect);
-        if (!IsBodyTransposed && _fixedColumnCount > 0 && col == _fixedColumnCount - 1)
+        var mergeBand = Fields[col] as IGriddoRecordMergeBandView;
+        var mergedWithPrev = !IsBodyTransposed
+            && mergeBand?.IsMergedWithPreviousRecord(Records, record) == true;
+        var mergedWithNext = !IsBodyTransposed
+            && mergeBand?.IsMergedWithNextRecord(Records, record) == true;
+        if (!mergedWithPrev && !mergedWithNext)
+        {
+            dc.DrawRectangle(null, new Pen(GridLineBrush, GridPenThickness), rect);
+        }
+        else
+        {
+            var pen = new Pen(GridLineBrush, GridPenThickness);
+            dc.DrawLine(pen, rect.TopLeft, rect.BottomLeft);
+            dc.DrawLine(pen, rect.TopRight, rect.BottomRight);
+            if (!mergedWithPrev)
+            {
+                dc.DrawLine(pen, rect.TopLeft, rect.TopRight);
+            }
+
+            if (!mergedWithNext)
+            {
+                dc.DrawLine(pen, rect.BottomLeft, rect.BottomRight);
+            }
+        }
+        if (!IsBodyTransposed && _fixedFieldCount > 0 && col == _fixedFieldCount - 1)
         {
             dc.DrawLine(
-                new Pen(FixedColumnRightBorderBrush, GridPenThickness),
+                new Pen(FixedFieldRightBorderBrush, GridPenThickness),
                 new Point(rect.Right, rect.Top),
                 new Point(rect.Right, rect.Bottom));
         }
 
-        if (IsBodyTransposed && _fixedColumnCount > 0 && col == _fixedColumnCount - 1)
+        if (IsBodyTransposed && _fixedFieldCount > 0 && col == _fixedFieldCount - 1)
         {
             dc.DrawLine(
-                new Pen(FixedColumnRightBorderBrush, GridPenThickness),
+                new Pen(FixedFieldRightBorderBrush, GridPenThickness),
                 new Point(rect.Left, rect.Bottom),
                 new Point(rect.Right, rect.Bottom));
         }
 
-        if (Columns[col] is IGriddoHostedColumnView)
+        if (Fields[col] is IGriddoHostedFieldView)
         {
             return;
         }
 
-        var columnTypeface = ResolveColumnTypeface(col, typeface, cellView);
-        var columnFontSize = ResolveColumnFontSize(col, cellView);
-        var foregroundBrush = ResolveColumnForegroundBrush(col, cellView);
+        var fieldTypeface = ResolveFieldTypeface(col, typeface, cellView);
+        var fieldFontSize = ResolveFieldFontSize(col, cellView);
+        var foregroundBrush = ResolveFieldForegroundBrush(col, cellView);
         var underline = HasUnderlineStyle(col, cellView);
 
-        if (Columns[col] is IGriddoCheckboxToggleColumnView toggleCol && toggleCol.IsCheckboxCell(rowData))
+        if (Fields[col] is IGriddoCheckboxToggleFieldView toggleCol && toggleCol.IsCheckboxCell(recordData))
         {
-            var rawBool = Columns[col].GetValue(rowData);
+            var rawBool = Fields[col].GetValue(recordData);
             var isChecked = rawBool is true;
             var boolPaintBounds = Rect.Intersect(rect, bodyViewport);
             if (!boolPaintBounds.IsEmpty)
             {
-                GriddoValuePainter.DrawBoolCheckbox(dc, isChecked, boolPaintBounds, columnFontSize);
+                GriddoValuePainter.DrawBoolCheckbox(dc, isChecked, boolPaintBounds, fieldFontSize);
             }
 
             return;
         }
 
-        var rawValue = Columns[col].GetValue(rowData);
+        var rawValue = Fields[col].GetValue(recordData);
         var isGraphic = rawValue is ImageSource or Geometry;
-        var paintValue = (!isGraphic && !Columns[col].IsHtml)
+        var paintValue = (!isGraphic && !Fields[col].IsHtml)
             ? FormatCellValue(rawValue, col, cellView)
             : rawValue;
-        // Intersect with viewport so HTML (and plain text) centers in the visible strip when the row is clipped vertically.
-        var paintBounds = isGraphic ? rect : Rect.Intersect(rect, bodyViewport);
+        // Intersect with viewport so HTML (and plain text) centers in the visible strip when the record is clipped vertically.
+        var paintBounds = isGraphic ? mergedRenderRect : Rect.Intersect(mergedRenderRect, bodyViewport);
         if (!paintBounds.IsEmpty)
         {
             GriddoValuePainter.Paint(
                 dc,
                 paintValue,
                 paintBounds,
-                columnTypeface,
-                columnFontSize,
+                fieldTypeface,
+                fieldFontSize,
                 foregroundBrush,
                 underline,
-                Columns[col].IsHtml,
+                Fields[col].IsHtml,
                 true,
-                Columns[col].ContentAlignment,
+                Fields[col].ContentAlignment,
                 isGraphic ? VerticalAlignment.Top : VerticalAlignment.Center);
         }
     }
 
-    private GriddoCellPropertyView? ResolveCellPropertyView(object rowData, int col)
+    private GriddoCellPropertyView? ResolveCellPropertyView(object recordData, int col)
     {
         if (CellPropertyViewResolver is null)
         {
@@ -212,7 +272,7 @@ public sealed partial class Griddo
 
         try
         {
-            return CellPropertyViewResolver(rowData, col);
+            return CellPropertyViewResolver(recordData, col);
         }
         catch
         {
@@ -231,25 +291,25 @@ public sealed partial class Griddo
             }
             catch (FormatException)
             {
-                // Fall back to the column's formatting.
+                // Fall back to the field's formatting.
             }
         }
 
-        return Columns[col].FormatValue(rawValue);
+        return Fields[col].FormatValue(rawValue);
     }
 
-    private Typeface ResolveColumnTypeface(int col, Typeface fallback, GriddoCellPropertyView? cellView)
+    private Typeface ResolveFieldTypeface(int col, Typeface fallback, GriddoCellPropertyView? cellView)
     {
-        if (col < 0 || col >= Columns.Count)
+        if (col < 0 || col >= Fields.Count)
         {
             return fallback;
         }
 
-        var source = Columns[col];
+        var source = Fields[col];
         var overrideFamily = cellView?.FontFamilyName?.Trim() ?? string.Empty;
         var overrideStyle = cellView?.FontStyleName?.Trim() ?? string.Empty;
-        var hasFamily = overrideFamily.Length > 0 || source is IGriddoColumnFontView { FontFamilyName: { Length: > 0 } };
-        var hasStyle = overrideStyle.Length > 0 || source is IGriddoColumnFontView { FontStyleName: { Length: > 0 } };
+        var hasFamily = overrideFamily.Length > 0 || source is IGriddoFieldFontView { FontFamilyName: { Length: > 0 } };
+        var hasStyle = overrideStyle.Length > 0 || source is IGriddoFieldFontView { FontStyleName: { Length: > 0 } };
         if (!hasFamily && !hasStyle)
         {
             return fallback;
@@ -257,12 +317,12 @@ public sealed partial class Griddo
 
         var family = overrideFamily.Length > 0
             ? overrideFamily
-            : source is IGriddoColumnFontView familyView && !string.IsNullOrWhiteSpace(familyView.FontFamilyName)
+            : source is IGriddoFieldFontView familyView && !string.IsNullOrWhiteSpace(familyView.FontFamilyName)
                 ? familyView.FontFamilyName
             : fallback.FontFamily.Source;
         var styleName = overrideStyle.Length > 0
             ? overrideStyle
-            : source is IGriddoColumnFontView styleView ? styleView.FontStyleName : string.Empty;
+            : source is IGriddoFieldFontView styleView ? styleView.FontStyleName : string.Empty;
         var style = ParseFontStyle(styleName);
         var weight = ParseFontWeight(styleName);
         try
@@ -275,9 +335,9 @@ public sealed partial class Griddo
         }
     }
 
-    private double ResolveColumnFontSize(int col, GriddoCellPropertyView? cellView)
+    private double ResolveFieldFontSize(int col, GriddoCellPropertyView? cellView)
     {
-        if (col < 0 || col >= Columns.Count)
+        if (col < 0 || col >= Fields.Count)
         {
             return EffectiveFontSize;
         }
@@ -287,7 +347,7 @@ public sealed partial class Griddo
             return Math.Max(6, cellView.FontSize * ContentScale);
         }
 
-        if (Columns[col] is IGriddoColumnFontView { FontSize: > 0 } fontView)
+        if (Fields[col] is IGriddoFieldFontView { FontSize: > 0 } fontView)
         {
             return Math.Max(6, fontView.FontSize * ContentScale);
         }
@@ -295,9 +355,9 @@ public sealed partial class Griddo
         return EffectiveFontSize;
     }
 
-    private Brush ResolveColumnForegroundBrush(int col, GriddoCellPropertyView? cellView)
+    private Brush ResolveFieldForegroundBrush(int col, GriddoCellPropertyView? cellView)
     {
-        if (col < 0 || col >= Columns.Count)
+        if (col < 0 || col >= Fields.Count)
         {
             return Brushes.Black;
         }
@@ -308,7 +368,7 @@ public sealed partial class Griddo
             return overrideBrush;
         }
 
-        if (Columns[col] is IGriddoColumnColorView colorView
+        if (Fields[col] is IGriddoFieldColorView colorView
             && TryParseBrush(colorView.ForegroundColor, out var brush))
         {
             return brush;
@@ -317,10 +377,10 @@ public sealed partial class Griddo
         return Brushes.Black;
     }
 
-    private bool TryGetColumnBackgroundBrush(int col, GriddoCellPropertyView? cellView, out Brush brush)
+    private bool TryGetFieldBackgroundBrush(int col, GriddoCellPropertyView? cellView, out Brush brush)
     {
         brush = Brushes.Transparent;
-        if (col < 0 || col >= Columns.Count)
+        if (col < 0 || col >= Fields.Count)
         {
             return false;
         }
@@ -332,7 +392,7 @@ public sealed partial class Griddo
             return true;
         }
 
-        if (Columns[col] is IGriddoColumnColorView colorView
+        if (Fields[col] is IGriddoFieldColorView colorView
             && TryParseBrush(colorView.BackgroundColor, out var parsed))
         {
             brush = parsed;
@@ -402,7 +462,7 @@ public sealed partial class Griddo
             return NormalizeStyleText(overrideStyle).Contains("underline", StringComparison.Ordinal);
         }
 
-        if (col < 0 || col >= Columns.Count || Columns[col] is not IGriddoColumnFontView fontView)
+        if (col < 0 || col >= Fields.Count || Fields[col] is not IGriddoFieldFontView fontView)
         {
             return false;
         }
@@ -432,69 +492,69 @@ public sealed partial class Griddo
             return;
         }
 
-        // Fixed top-left corner header cell (row-header column title area). Outer top/left strokes live in DrawOuterWorksheetFrame only.
-        var cornerRect = new Rect(0, 0, _rowHeaderWidth, ScaledColumnHeaderHeight);
+        // Fixed top-left corner header cell (record-header field title area). Outer top/left strokes live in DrawOuterWorksheetFrame only.
+        var cornerRect = new Rect(0, 0, _recordHeaderWidth, ScaledFieldHeaderHeight);
         dc.DrawRectangle(HeaderBackground, null, cornerRect);
 
         var typeface = new Typeface("Segoe UI");
-        var fixedW = GetFixedColumnsWidth();
-        var scrollLeft = _rowHeaderWidth + fixedW;
+        var fixedW = GetFixedFieldsWidth();
+        var scrollLeft = _recordHeaderWidth + fixedW;
 
-        if (_fixedColumnCount < Columns.Count && scrollLeft < _rowHeaderWidth + _viewportBodyWidth)
+        if (_fixedFieldCount < Fields.Count && scrollLeft < _recordHeaderWidth + _viewportBodyWidth)
         {
             var scrollClipW = Math.Max(0, _viewportBodyWidth - fixedW);
-            var scrollClip = new Rect(scrollLeft, 0, scrollClipW, ScaledColumnHeaderHeight);
+            var scrollClip = new Rect(scrollLeft, 0, scrollClipW, ScaledFieldHeaderHeight);
             dc.PushClip(new RectangleGeometry(scrollClip));
-            GetVisibleScrollColumnRange(out var sCol, out var eCol, out var x);
+            GetVisibleScrollFieldRange(out var sCol, out var eCol, out var x);
             if (eCol >= sCol)
             {
                 for (var col = sCol; col <= eCol; col++)
                 {
-                    DrawColumnHeader(dc, col, x, typeface);
-                    x += GetColumnWidth(col);
+                    DrawFieldHeader(dc, col, x, typeface);
+                    x += GetFieldWidth(col);
                 }
             }
 
             dc.Pop();
         }
 
-        if (_fixedColumnCount > 0)
+        if (_fixedFieldCount > 0)
         {
             var fixedClipW = Math.Min(fixedW, _viewportBodyWidth);
-            var fixedClip = new Rect(_rowHeaderWidth, 0, fixedClipW, ScaledColumnHeaderHeight);
+            var fixedClip = new Rect(_recordHeaderWidth, 0, fixedClipW, ScaledFieldHeaderHeight);
             dc.PushClip(new RectangleGeometry(fixedClip));
-            var fx = _rowHeaderWidth;
-            for (var col = 0; col < _fixedColumnCount; col++)
+            var fx = _recordHeaderWidth;
+            for (var col = 0; col < _fixedFieldCount; col++)
             {
-                DrawColumnHeader(dc, col, fx, typeface);
-                fx += GetColumnWidth(col);
+                DrawFieldHeader(dc, col, fx, typeface);
+                fx += GetFieldWidth(col);
             }
 
             dc.Pop();
         }
 
-        DrawColumnMoveCue(dc);
+        DrawFieldMoveCue(dc);
 
-        var rowHeaderClip = new Rect(0, ScaledColumnHeaderHeight, _rowHeaderWidth, _viewportBodyHeight);
-        dc.PushClip(new RectangleGeometry(rowHeaderClip));
+        var recordHeaderClip = new Rect(0, ScaledFieldHeaderHeight, _recordHeaderWidth, _viewportBodyHeight);
+        dc.PushClip(new RectangleGeometry(recordHeaderClip));
         {
-            var rowHeaderPen = new Pen(GridLineBrush, GridPenThickness);
-            ForEachVisibleRow(row =>
+            var recordHeaderPen = new Pen(GridLineBrush, GridPenThickness);
+            ForEachVisibleRecord(record =>
             {
-                var rowHeight = GetRowHeight(row);
-                var y = ScaledColumnHeaderHeight + GetRowBodyTopRel(row);
-                var rect = new Rect(0, y, _rowHeaderWidth, rowHeight);
-                var rowHeaderBackground = (IsRowHeaderMarkedSelected(row) && ShowRowHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
-                dc.DrawRectangle(rowHeaderBackground, null, rect);
+                var recordHeight = GetRecordHeight(record);
+                var y = ScaledFieldHeaderHeight + GetRecordBodyTopRel(record);
+                var rect = new Rect(0, y, _recordHeaderWidth, recordHeight);
+                var recordHeaderBackground = (IsRecordHeaderMarkedSelected(record) && ShowRecordHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
+                dc.DrawRectangle(recordHeaderBackground, null, rect);
                 // Top + bottom only; outer x=0 edge is one DrawLine in DrawOuterWorksheetFrame (avoids path vs line mismatch).
-                dc.DrawLine(rowHeaderPen, new Point(rect.Left, rect.Top), new Point(rect.Right, rect.Top));
-                dc.DrawLine(rowHeaderPen, new Point(rect.Left, rect.Bottom), new Point(rect.Right, rect.Bottom));
-                var visibleRect = Rect.Intersect(rect, rowHeaderClip);
+                dc.DrawLine(recordHeaderPen, new Point(rect.Left, rect.Top), new Point(rect.Right, rect.Top));
+                dc.DrawLine(recordHeaderPen, new Point(rect.Left, rect.Bottom), new Point(rect.Right, rect.Bottom));
+                var visibleRect = Rect.Intersect(rect, recordHeaderClip);
                 if (!visibleRect.IsEmpty)
                 {
                     GriddoValuePainter.Paint(
                         dc,
-                        row + 1,
+                        record + 1,
                         visibleRect,
                         typeface,
                         EffectiveFontSize,
@@ -515,21 +575,21 @@ public sealed partial class Griddo
 
     private void DrawHeadersTransposed(DrawingContext dc)
     {
-        var cornerRect = new Rect(0, 0, _rowHeaderWidth, ScaledColumnHeaderHeight);
+        var cornerRect = new Rect(0, 0, _recordHeaderWidth, ScaledFieldHeaderHeight);
         dc.DrawRectangle(HeaderBackground, null, cornerRect);
         var typeface = new Typeface("Segoe UI");
-        var bodyRowHeaderLeft = _rowHeaderWidth;
-        var headerStripH = ScaledColumnHeaderHeight;
-        var fixedRowsW = GetTransposeFixedRowsWidth();
-        var fRows = GetEffectiveFixedRowCount();
-        var fixedRowsHeaderW = Math.Min(fixedRowsW, _viewportBodyWidth);
-        var scrollRowsHeaderW = Math.Max(0, _viewportBodyWidth - fixedRowsW);
+        var bodyRecordHeaderLeft = _recordHeaderWidth;
+        var headerStripH = ScaledFieldHeaderHeight;
+        var fixedRecordsW = GetTransposeFixedRecordsWidth();
+        var fRecords = GetEffectiveFixedRecordCount();
+        var fixedRecordsHeaderW = Math.Min(fixedRecordsW, _viewportBodyWidth);
+        var scrollRecordsHeaderW = Math.Max(0, _viewportBodyWidth - fixedRecordsW);
 
-        void DrawRowHeaderStripCell(int row, Rect clipIntersect)
+        void DrawRecordHeaderStripCell(int record, Rect clipIntersect)
         {
-            var rr = GetRowHeaderRect(row);
-            var rowHeaderBackground = (IsRowHeaderMarkedSelected(row) && ShowRowHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
-            dc.DrawRectangle(rowHeaderBackground, null, rr);
+            var rr = GetRecordHeaderRect(record);
+            var recordHeaderBackground = (IsRecordHeaderMarkedSelected(record) && ShowRecordHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
+            dc.DrawRectangle(recordHeaderBackground, null, rr);
             var pen = new Pen(GridLineBrush, GridPenThickness);
             dc.DrawLine(pen, rr.TopLeft, rr.BottomLeft);
             dc.DrawLine(pen, rr.TopRight, rr.BottomRight);
@@ -538,7 +598,7 @@ public sealed partial class Griddo
             {
                 GriddoValuePainter.Paint(
                     dc,
-                    row + 1,
+                    record + 1,
                     visibleRect,
                     typeface,
                     EffectiveFontSize,
@@ -551,56 +611,56 @@ public sealed partial class Griddo
             }
         }
 
-        var clipTopFull = new Rect(bodyRowHeaderLeft, 0, _viewportBodyWidth, headerStripH);
+        var clipTopFull = new Rect(bodyRecordHeaderLeft, 0, _viewportBodyWidth, headerStripH);
 
-        // Left: frozen row headers — horizontal scroll must not bleed into this strip from scroll rows.
-        if (fixedRowsHeaderW > 0 && fRows > 0)
+        // Left: frozen record headers — horizontal scroll must not bleed into this strip from scroll records.
+        if (fixedRecordsHeaderW > 0 && fRecords > 0)
         {
-            var clipFixedTop = new Rect(bodyRowHeaderLeft, 0, fixedRowsHeaderW, headerStripH);
+            var clipFixedTop = new Rect(bodyRecordHeaderLeft, 0, fixedRecordsHeaderW, headerStripH);
             dc.PushClip(new RectangleGeometry(clipFixedTop));
-            for (var row = 0; row < fRows && row < Rows.Count; row++)
+            for (var record = 0; record < fRecords && record < Records.Count; record++)
             {
-                DrawRowHeaderStripCell(row, clipTopFull);
+                DrawRecordHeaderStripCell(record, clipTopFull);
             }
 
             dc.Pop();
         }
 
-        // Right: scroll row headers only
-        if (scrollRowsHeaderW > 0)
+        // Right: scroll record headers only
+        if (scrollRecordsHeaderW > 0)
         {
-            var clipScrollTop = new Rect(bodyRowHeaderLeft + fixedRowsW, 0, scrollRowsHeaderW, headerStripH);
+            var clipScrollTop = new Rect(bodyRecordHeaderLeft + fixedRecordsW, 0, scrollRecordsHeaderW, headerStripH);
             dc.PushClip(new RectangleGeometry(clipScrollTop));
-            ForEachVisibleScrollRowForTranspose(row =>
+            ForEachVisibleScrollRecordForTranspose(record =>
             {
-                if (row < fRows)
+                if (record < fRecords)
                 {
                     return;
                 }
 
-                DrawRowHeaderStripCell(row, clipTopFull);
+                DrawRecordHeaderStripCell(record, clipTopFull);
             });
             dc.Pop();
         }
 
-        var bodyTop = ScaledColumnHeaderHeight;
-        var fixedColsH = GetFixedColumnsWidth();
-        var fCols = Math.Clamp(_fixedColumnCount, 0, Columns.Count);
+        var bodyTop = ScaledFieldHeaderHeight;
+        var fixedColsH = GetFixedFieldsWidth();
+        var fCols = Math.Clamp(_fixedFieldCount, 0, Fields.Count);
         var bodyH = _viewportBodyHeight;
         var fixedColsClipH = Math.Min(fixedColsH, bodyH);
         var scrollColHeadersH = Math.Max(0, bodyH - fixedColsH);
 
-        void DrawColumnHeaderCell(int col)
+        void DrawFieldHeaderCell(int col)
         {
-            var rr = GetColumnHeaderRect(col);
-            var headerBackground = (IsColumnHeaderMarkedSelected(col) && ShowColumnHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
+            var rr = GetFieldHeaderRect(col);
+            var headerBackground = (IsFieldHeaderMarkedSelected(col) && ShowFieldHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
             dc.DrawRectangle(headerBackground, null, rr);
             var pen = new Pen(GridLineBrush, GridPenThickness);
             dc.DrawLine(pen, rr.TopLeft, rr.TopRight);
             dc.DrawLine(pen, rr.BottomLeft, rr.BottomRight);
-            var headerLabel = Columns[col] is IGriddoColumnTitleView titleView && !string.IsNullOrWhiteSpace(titleView.AbbreviatedHeader)
+            var headerLabel = Fields[col] is IGriddoFieldTitleView titleView && !string.IsNullOrWhiteSpace(titleView.AbbreviatedHeader)
                 ? titleView.AbbreviatedHeader
-                : Columns[col].Header;
+                : Fields[col].Header;
             var headerText = new FormattedText(
                 headerLabel,
                 CultureInfo.CurrentCulture,
@@ -619,31 +679,31 @@ public sealed partial class Griddo
             DrawSortHeaderIndicator(dc, col, rr, typeface);
         }
 
-        // Clip frozen vs scroll column headers separately so vertical scroll does not bleed into frozen bands.
+        // Clip frozen vs scroll field headers separately so vertical scroll does not bleed into frozen bands.
         if (fixedColsClipH > 0 && fCols > 0)
         {
-            var clipFixed = new Rect(0, bodyTop, _rowHeaderWidth, fixedColsClipH);
+            var clipFixed = new Rect(0, bodyTop, _recordHeaderWidth, fixedColsClipH);
             dc.PushClip(new RectangleGeometry(clipFixed));
-            for (var col = 0; col < fCols && col < Columns.Count; col++)
+            for (var col = 0; col < fCols && col < Fields.Count; col++)
             {
-                DrawColumnHeaderCell(col);
+                DrawFieldHeaderCell(col);
             }
 
             dc.Pop();
         }
 
-        if (scrollColHeadersH > 0 && fCols < Columns.Count)
+        if (scrollColHeadersH > 0 && fCols < Fields.Count)
         {
-            var clipScroll = new Rect(0, bodyTop + fixedColsH, _rowHeaderWidth, scrollColHeadersH);
+            var clipScroll = new Rect(0, bodyTop + fixedColsH, _recordHeaderWidth, scrollColHeadersH);
             dc.PushClip(new RectangleGeometry(clipScroll));
-            ForEachVisibleColumnForTranspose(col =>
+            ForEachVisibleFieldForTranspose(col =>
             {
                 if (col < fCols)
                 {
                     return;
                 }
 
-                DrawColumnHeaderCell(col);
+                DrawFieldHeaderCell(col);
             });
             dc.Pop();
         }
@@ -662,9 +722,9 @@ public sealed partial class Griddo
         var pen = new Pen(Brushes.Red, 2);
         pen.Freeze();
         var inset = pen.Thickness / 2;
-        var columnHeaderClip = new Rect(_rowHeaderWidth, 0, _viewportBodyWidth, ScaledColumnHeaderHeight);
-        var rowHeaderClip = new Rect(0, ScaledColumnHeaderHeight, _rowHeaderWidth, _viewportBodyHeight);
-        var cornerHeaderClip = new Rect(0, 0, _rowHeaderWidth, ScaledColumnHeaderHeight);
+        var fieldHeaderClip = new Rect(_recordHeaderWidth, 0, _viewportBodyWidth, ScaledFieldHeaderHeight);
+        var recordHeaderClip = new Rect(0, ScaledFieldHeaderHeight, _recordHeaderWidth, _viewportBodyHeight);
+        var cornerHeaderClip = new Rect(0, 0, _recordHeaderWidth, ScaledFieldHeaderHeight);
 
         void DrawOutlinedRect(Rect rect, Rect clipRect)
         {
@@ -692,21 +752,21 @@ public sealed partial class Griddo
             dc.DrawRectangle(null, pen, rr);
         }
 
-        if (_headerFocusKind == HeaderFocusKind.Column && _columnHeaderRightClickOutline.Count > 0)
+        if (_headerFocusKind == HeaderFocusKind.Field && _fieldHeaderRightClickOutline.Count > 0)
         {
-            foreach (var col in _columnHeaderRightClickOutline.OrderBy(c => c))
+            foreach (var col in _fieldHeaderRightClickOutline.OrderBy(c => c))
             {
-                DrawOutlinedRect(GetColumnHeaderRect(col), columnHeaderClip);
+                DrawOutlinedRect(GetFieldHeaderRect(col), fieldHeaderClip);
             }
 
             return;
         }
 
-        if (_headerFocusKind == HeaderFocusKind.Row && _rowHeaderRightClickOutline.Count > 0)
+        if (_headerFocusKind == HeaderFocusKind.Record && _recordHeaderRightClickOutline.Count > 0)
         {
-            foreach (var row in _rowHeaderRightClickOutline.OrderBy(r => r))
+            foreach (var record in _recordHeaderRightClickOutline.OrderBy(r => r))
             {
-                DrawOutlinedRect(GetRowHeaderRect(row), rowHeaderClip);
+                DrawOutlinedRect(GetRecordHeaderRect(record), recordHeaderClip);
             }
 
             return;
@@ -715,25 +775,25 @@ public sealed partial class Griddo
         Rect r = Rect.Empty;
         if (_headerFocusKind == HeaderFocusKind.Corner)
         {
-            r = new Rect(0, 0, _rowHeaderWidth, ScaledColumnHeaderHeight);
+            r = new Rect(0, 0, _recordHeaderWidth, ScaledFieldHeaderHeight);
         }
-        else if (_headerFocusKind == HeaderFocusKind.Column
-                 && _headerFocusColumnIndex >= 0
-                 && _headerFocusColumnIndex < Columns.Count)
+        else if (_headerFocusKind == HeaderFocusKind.Field
+                 && _headerFocusFieldIndex >= 0
+                 && _headerFocusFieldIndex < Fields.Count)
         {
-            r = GetColumnHeaderRect(_headerFocusColumnIndex);
+            r = GetFieldHeaderRect(_headerFocusFieldIndex);
         }
-        else if (_headerFocusKind == HeaderFocusKind.Row
-                 && _headerFocusRowIndex >= 0
-                 && _headerFocusRowIndex < Rows.Count)
+        else if (_headerFocusKind == HeaderFocusKind.Record
+                 && _headerFocusRecordIndex >= 0
+                 && _headerFocusRecordIndex < Records.Count)
         {
-            r = GetRowHeaderRect(_headerFocusRowIndex);
+            r = GetRecordHeaderRect(_headerFocusRecordIndex);
         }
 
         var clip = _headerFocusKind switch
         {
-            HeaderFocusKind.Column => columnHeaderClip,
-            HeaderFocusKind.Row => rowHeaderClip,
+            HeaderFocusKind.Field => fieldHeaderClip,
+            HeaderFocusKind.Record => recordHeaderClip,
             HeaderFocusKind.Corner => cornerHeaderClip,
             _ => Rect.Empty
         };
@@ -741,7 +801,7 @@ public sealed partial class Griddo
     }
 
     /// <summary>
-    /// Single DrawLine for the outermost grid edges so they match column header strokes (PathGeometry stroke looked thicker under AA).
+    /// Single DrawLine for the outermost grid edges so they match field header strokes (PathGeometry stroke looked thicker under AA).
     /// </summary>
     private void DrawOuterWorksheetFrame(DrawingContext dc)
     {
@@ -752,7 +812,7 @@ public sealed partial class Griddo
 
         var pen = new Pen(GridLineBrush, GridPenThickness);
         var topRight = Math.Max(0, ActualWidth - EffectiveVerticalScrollBarThickness);
-        var stripBottom = ScaledColumnHeaderHeight + Math.Max(0, _viewportBodyHeight);
+        var stripBottom = ScaledFieldHeaderHeight + Math.Max(0, _viewportBodyHeight);
         var layoutBottom = Math.Max(0, ActualHeight - EffectiveHorizontalScrollBarThickness);
         var leftBottom = Math.Min(stripBottom, layoutBottom);
         var rightX = Math.Max(0, ActualWidth - 1);
@@ -765,7 +825,7 @@ public sealed partial class Griddo
 
     private void DrawBody(DrawingContext dc)
     {
-        if (Rows.Count == 0)
+        if (Records.Count == 0)
         {
             return;
         }
@@ -776,29 +836,29 @@ public sealed partial class Griddo
             return;
         }
 
-        var bodyViewport = new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
+        var bodyViewport = new Rect(_recordHeaderWidth, ScaledFieldHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
         var typeface = new Typeface("Segoe UI");
-        var rowHeight = GetRowHeight(0);
-        var fixedW = GetFixedColumnsWidth();
-        var scrollLeft = _rowHeaderWidth + fixedW;
+        var recordHeight = GetRecordHeight(0);
+        var fixedW = GetFixedFieldsWidth();
+        var scrollLeft = _recordHeaderWidth + fixedW;
 
-        if (_fixedColumnCount < Columns.Count && scrollLeft < _rowHeaderWidth + _viewportBodyWidth)
+        if (_fixedFieldCount < Fields.Count && scrollLeft < _recordHeaderWidth + _viewportBodyWidth)
         {
             var scrollClipW = Math.Max(0, _viewportBodyWidth - fixedW);
-            var scrollClip = new Rect(scrollLeft, ScaledColumnHeaderHeight, scrollClipW, _viewportBodyHeight);
+            var scrollClip = new Rect(scrollLeft, ScaledFieldHeaderHeight, scrollClipW, _viewportBodyHeight);
             dc.PushClip(new RectangleGeometry(scrollClip));
-            GetVisibleScrollColumnRange(out var sCol, out var eCol, out var startX);
+            GetVisibleScrollFieldRange(out var sCol, out var eCol, out var startX);
             if (eCol >= sCol)
             {
-                ForEachVisibleRow(row =>
+                ForEachVisibleRecord(record =>
                 {
-                    var y = ScaledColumnHeaderHeight + GetRowBodyTopRel(row);
-                    var rowData = Rows[row];
+                    var y = ScaledFieldHeaderHeight + GetRecordBodyTopRel(record);
+                    var recordData = Records[record];
                     var x = startX;
                     for (var col = sCol; col <= eCol; col++)
                     {
-                        DrawBodyCell(dc, row, col, x, y, rowHeight, rowData, bodyViewport, typeface);
-                        x += GetColumnWidth(col);
+                        DrawBodyCell(dc, record, col, x, y, recordHeight, recordData, bodyViewport, typeface);
+                        x += GetFieldWidth(col);
                     }
                 });
             }
@@ -806,175 +866,175 @@ public sealed partial class Griddo
             dc.Pop();
         }
 
-        if (_fixedColumnCount > 0)
+        if (_fixedFieldCount > 0)
         {
             var fixedClipW = Math.Min(fixedW, _viewportBodyWidth);
-            var fixedClip = new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, fixedClipW, _viewportBodyHeight);
+            var fixedClip = new Rect(_recordHeaderWidth, ScaledFieldHeaderHeight, fixedClipW, _viewportBodyHeight);
             dc.PushClip(new RectangleGeometry(fixedClip));
-            ForEachVisibleRow(row =>
+            ForEachVisibleRecord(record =>
             {
-                var y = ScaledColumnHeaderHeight + GetRowBodyTopRel(row);
-                var rowData = Rows[row];
-                var x = _rowHeaderWidth;
-                for (var col = 0; col < _fixedColumnCount; col++)
+                var y = ScaledFieldHeaderHeight + GetRecordBodyTopRel(record);
+                var recordData = Records[record];
+                var x = _recordHeaderWidth;
+                for (var col = 0; col < _fixedFieldCount; col++)
                 {
-                    DrawBodyCell(dc, row, col, x, y, rowHeight, rowData, bodyViewport, typeface);
-                    x += GetColumnWidth(col);
+                    DrawBodyCell(dc, record, col, x, y, recordHeight, recordData, bodyViewport, typeface);
+                    x += GetFieldWidth(col);
                 }
             });
 
             dc.Pop();
         }
 
-        DrawFixedRowSeparator(dc);
+        DrawFixedRecordSeparator(dc);
     }
 
     private void DrawBodyTransposed(DrawingContext dc)
     {
-        var bodyViewport = new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
+        var bodyViewport = new Rect(_recordHeaderWidth, ScaledFieldHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
         var typeface = new Typeface("Segoe UI");
-        var bodyLeft = _rowHeaderWidth;
-        var bodyTop = ScaledColumnHeaderHeight;
+        var bodyLeft = _recordHeaderWidth;
+        var bodyTop = ScaledFieldHeaderHeight;
         var bodyW = _viewportBodyWidth;
         var bodyH = _viewportBodyHeight;
-        var fixedRowsW = GetTransposeFixedRowsWidth();
-        var fixedColsH = GetFixedColumnsWidth();
-        var fRows = GetEffectiveFixedRowCount();
-        var fCols = Math.Clamp(_fixedColumnCount, 0, Columns.Count);
-        var scrollLeft = bodyLeft + fixedRowsW;
+        var fixedRecordsW = GetTransposeFixedRecordsWidth();
+        var fixedColsH = GetFixedFieldsWidth();
+        var fRecords = GetEffectiveFixedRecordCount();
+        var fCols = Math.Clamp(_fixedFieldCount, 0, Fields.Count);
+        var scrollLeft = bodyLeft + fixedRecordsW;
         var scrollTop = bodyTop + fixedColsH;
-        var scrollW = Math.Max(0, bodyW - fixedRowsW);
+        var scrollW = Math.Max(0, bodyW - fixedRecordsW);
         var scrollH = Math.Max(0, bodyH - fixedColsH);
-        var fixedRowsClipW = Math.Min(fixedRowsW, bodyW);
+        var fixedRecordsClipW = Math.Min(fixedRecordsW, bodyW);
         var fixedColsClipH = Math.Min(fixedColsH, bodyH);
 
-        void DrawCell(int row, int col)
+        void DrawCell(int record, int col)
         {
-            var rect = GetCellRect(row, col);
+            var rect = GetCellRect(record, col);
             if (rect.IsEmpty)
             {
                 return;
             }
 
-            DrawBodyCell(dc, row, col, rect.X, rect.Y, GetRowHeight(row), Rows[row], bodyViewport, typeface);
+            DrawBodyCell(dc, record, col, rect.X, rect.Y, GetRecordHeight(record), Records[record], bodyViewport, typeface);
         }
 
-        // Split body into four clips so vertically scrolled column bands cannot paint over frozen top columns.
+        // Split body into four clips so vertically scrolled field bands cannot paint over frozen top fields.
         // Order: scroll×scroll (back), then top-right & bottom-left, then frozen×frozen (front).
 
-        // Q_ss — scroll rows × scroll columns (below frozen columns, right of frozen rows)
+        // Q_ss — scroll records × scroll fields (below frozen fields, right of frozen records)
         if (scrollW > 0 && scrollH > 0)
         {
             dc.PushClip(new RectangleGeometry(new Rect(scrollLeft, scrollTop, scrollW, scrollH)));
-            ForEachVisibleColumnForTranspose(col =>
+            ForEachVisibleFieldForTranspose(col =>
             {
                 if (col < fCols)
                 {
                     return;
                 }
 
-                ForEachVisibleScrollRowForTranspose(row => DrawCell(row, col));
+                ForEachVisibleScrollRecordForTranspose(record => DrawCell(record, col));
             });
             dc.Pop();
         }
 
-        // Q_sf — scroll rows × frozen columns (top strip on the right)
+        // Q_sf — scroll records × frozen fields (top strip on the right)
         if (scrollW > 0 && fixedColsClipH > 0 && fCols > 0)
         {
             dc.PushClip(new RectangleGeometry(new Rect(scrollLeft, bodyTop, scrollW, fixedColsClipH)));
-            ForEachVisibleColumnForTranspose(col =>
+            ForEachVisibleFieldForTranspose(col =>
             {
                 if (col >= fCols)
                 {
                     return;
                 }
 
-                ForEachVisibleScrollRowForTranspose(row => DrawCell(row, col));
+                ForEachVisibleScrollRecordForTranspose(record => DrawCell(record, col));
             });
             dc.Pop();
         }
 
-        // Q_fs — frozen rows × scroll columns (left strip below frozen columns)
-        if (fixedRowsClipW > 0 && scrollH > 0 && fRows > 0)
+        // Q_fs — frozen records × scroll fields (left strip below frozen fields)
+        if (fixedRecordsClipW > 0 && scrollH > 0 && fRecords > 0)
         {
-            dc.PushClip(new RectangleGeometry(new Rect(bodyLeft, scrollTop, fixedRowsClipW, scrollH)));
-            ForEachVisibleColumnForTranspose(col =>
+            dc.PushClip(new RectangleGeometry(new Rect(bodyLeft, scrollTop, fixedRecordsClipW, scrollH)));
+            ForEachVisibleFieldForTranspose(col =>
             {
                 if (col < fCols)
                 {
                     return;
                 }
 
-                for (var row = 0; row < fRows && row < Rows.Count; row++)
+                for (var record = 0; record < fRecords && record < Records.Count; record++)
                 {
-                    DrawCell(row, col);
+                    DrawCell(record, col);
                 }
             });
             dc.Pop();
         }
 
-        // Q_ff — frozen rows × frozen columns (top-left corner)
-        if (fixedRowsClipW > 0 && fixedColsClipH > 0 && fRows > 0 && fCols > 0)
+        // Q_ff — frozen records × frozen fields (top-left corner)
+        if (fixedRecordsClipW > 0 && fixedColsClipH > 0 && fRecords > 0 && fCols > 0)
         {
-            dc.PushClip(new RectangleGeometry(new Rect(bodyLeft, bodyTop, fixedRowsClipW, fixedColsClipH)));
-            for (var col = 0; col < fCols && col < Columns.Count; col++)
+            dc.PushClip(new RectangleGeometry(new Rect(bodyLeft, bodyTop, fixedRecordsClipW, fixedColsClipH)));
+            for (var col = 0; col < fCols && col < Fields.Count; col++)
             {
-                for (var row = 0; row < fRows && row < Rows.Count; row++)
+                for (var record = 0; record < fRecords && record < Records.Count; record++)
                 {
-                    DrawCell(row, col);
+                    DrawCell(record, col);
                 }
             }
 
             dc.Pop();
         }
 
-        DrawFixedRowSeparator(dc);
+        DrawFixedRecordSeparator(dc);
     }
 
-    private void DrawFixedRowSeparator(DrawingContext dc)
+    private void DrawFixedRecordSeparator(DrawingContext dc)
     {
         if (IsBodyTransposed)
         {
-            var w = GetTransposeFixedRowsWidth();
+            var w = GetTransposeFixedRecordsWidth();
             if (w <= 1e-6)
             {
                 return;
             }
 
-            var xLine = _rowHeaderWidth + w;
-            if (xLine > _rowHeaderWidth + _viewportBodyWidth)
+            var xLine = _recordHeaderWidth + w;
+            if (xLine > _recordHeaderWidth + _viewportBodyWidth)
             {
                 return;
             }
 
-            var transposePen = new Pen(FixedColumnRightBorderBrush, GridPenThickness);
+            var transposePen = new Pen(FixedFieldRightBorderBrush, GridPenThickness);
             dc.DrawLine(
                 transposePen,
-                new Point(xLine, ScaledColumnHeaderHeight),
-                new Point(xLine, ScaledColumnHeaderHeight + _viewportBodyHeight));
+                new Point(xLine, ScaledFieldHeaderHeight),
+                new Point(xLine, ScaledFieldHeaderHeight + _viewportBodyHeight));
             return;
         }
 
-        if (GetScrollableRowsContentHeight() <= 1e-6)
+        if (GetScrollableRecordsContentHeight() <= 1e-6)
         {
             return;
         }
 
-        var f = GetEffectiveFixedRowCount();
+        var f = GetEffectiveFixedRecordCount();
         if (f <= 0)
         {
             return;
         }
 
-        var h = GetRowHeight(0);
-        var yLine = ScaledColumnHeaderHeight + f * h;
-        if (yLine > ScaledColumnHeaderHeight + _viewportBodyHeight)
+        var h = GetRecordHeight(0);
+        var yLine = ScaledFieldHeaderHeight + f * h;
+        if (yLine > ScaledFieldHeaderHeight + _viewportBodyHeight)
         {
             return;
         }
 
-        var normalPen = new Pen(FixedRowBottomBorderBrush, GridPenThickness);
-        dc.DrawLine(normalPen, new Point(_rowHeaderWidth, yLine), new Point(_rowHeaderWidth + _viewportBodyWidth, yLine));
+        var normalPen = new Pen(FixedRecordBottomBorderBrush, GridPenThickness);
+        dc.DrawLine(normalPen, new Point(_recordHeaderWidth, yLine), new Point(_recordHeaderWidth + _viewportBodyWidth, yLine));
     }
     private void DrawCurrentCellOverlay(DrawingContext dc)
     {
@@ -983,20 +1043,21 @@ public sealed partial class Griddo
             return;
         }
 
-        var rect = GetCellRect(_currentCell.RowIndex, _currentCell.ColumnIndex);
+        var baseRect = GetCellRect(_currentCell.RecordIndex, _currentCell.FieldIndex);
+        var rect = GetMergedRecordCellRect(_currentCell.RecordIndex, _currentCell.FieldIndex, baseRect);
         if (rect.IsEmpty)
         {
             return;
         }
 
-        var bodyViewport = new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
+        var bodyViewport = new Rect(_recordHeaderWidth, ScaledFieldHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
         if (IsBodyTransposed)
         {
             dc.PushClip(new RectangleGeometry(Rect.Intersect(rect, bodyViewport)));
         }
         else
         {
-            dc.PushClip(new RectangleGeometry(GetColumnBodyBandClipRect(_currentCell.ColumnIndex)));
+            dc.PushClip(new RectangleGeometry(GetFieldBodyBandClipRect(_currentCell.FieldIndex)));
         }
 
         const double currentCellInset = 0.5;
@@ -1024,25 +1085,26 @@ public sealed partial class Griddo
             return;
         }
 
-        var rect = GetCellRect(_currentCell.RowIndex, _currentCell.ColumnIndex);
+        var baseRect = GetCellRect(_currentCell.RecordIndex, _currentCell.FieldIndex);
+        var rect = GetMergedRecordCellRect(_currentCell.RecordIndex, _currentCell.FieldIndex, baseRect);
         if (rect.IsEmpty)
         {
             return;
         }
 
-        if (!TryGetCurrentColumn(out var column))
+        if (!TryGetCurrentField(out var field))
         {
             return;
         }
 
-        var bodyViewportForEdit = new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
+        var bodyViewportForEdit = new Rect(_recordHeaderWidth, ScaledFieldHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
         if (IsBodyTransposed)
         {
             dc.PushClip(new RectangleGeometry(Rect.Intersect(rect, bodyViewportForEdit)));
         }
         else
         {
-            dc.PushClip(new RectangleGeometry(GetColumnBodyBandClipRect(_currentCell.ColumnIndex)));
+            dc.PushClip(new RectangleGeometry(GetFieldBodyBandClipRect(_currentCell.FieldIndex)));
         }
 
         // Keep editor visuals inside the cell border so the edit outline thickness stays consistent.
@@ -1054,9 +1116,9 @@ public sealed partial class Griddo
             Math.Max(0, rect.Height - (editContentInset * 2)));
         var editContentRect = GetInlineEditTextRect(fullEditRect);
 
-        if (column.IsHtml)
+        if (field.IsHtml)
         {
-            var bodyCellsViewport = new Rect(_rowHeaderWidth, ScaledColumnHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
+            var bodyCellsViewport = new Rect(_recordHeaderWidth, ScaledFieldHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
             editContentRect = Rect.Intersect(editContentRect, bodyCellsViewport);
         }
 
@@ -1085,9 +1147,9 @@ public sealed partial class Griddo
             dc.DrawText(buttonText, new Point(buttonTextX, buttonTextY));
         }
         var verticalAlignment = VerticalAlignment.Center;
-        var underline = _currentCell.IsValid && HasUnderlineStyle(_currentCell.ColumnIndex, null);
+        var underline = _currentCell.IsValid && HasUnderlineStyle(_currentCell.FieldIndex, null);
         // Edit mode should show the literal source text (including HTML markup), not rendered HTML.
-        GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, underline, false, false, column.ContentAlignment, verticalAlignment);
+        GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, underline, false, false, field.ContentAlignment, verticalAlignment);
 
         var displayText = _editSession.Buffer;
         var editText = new FormattedText(
@@ -1098,7 +1160,7 @@ public sealed partial class Griddo
             fontSize,
             Brushes.Black,
             1.0);
-        editText.TextAlignment = column.ContentAlignment;
+        editText.TextAlignment = field.ContentAlignment;
         editText.MaxTextWidth = Math.Max(1, editContentRect.Width - 8);
         editText.MaxTextHeight = Math.Max(1, editContentRect.Height - 4);
         editText.Trimming = TextTrimming.CharacterEllipsis;
@@ -1117,25 +1179,25 @@ public sealed partial class Griddo
         var contentWidth = Math.Max(1, editContentRect.Width - 8);
         var totalTextWidth = Math.Min(editText.WidthIncludingTrailingWhitespace, contentWidth);
         var textStartX = editContentRect.X + 4;
-        if (column.ContentAlignment == TextAlignment.Right)
+        if (field.ContentAlignment == TextAlignment.Right)
         {
             textStartX += Math.Max(0, contentWidth - totalTextWidth);
         }
-        else if (column.ContentAlignment == TextAlignment.Center)
+        else if (field.ContentAlignment == TextAlignment.Center)
         {
             textStartX += Math.Max(0, (contentWidth - totalTextWidth) / 2);
         }
 
         if (_editSession.TryGetSelection(out var selectionStart, out var selectionEnd))
         {
-            if (column.IsHtml)
+            if (field.IsHtml)
             {
                 var selectionGeometry = editText.BuildHighlightGeometry(new Point(textStartX, caretOriginY), selectionStart, selectionEnd - selectionStart);
                 if (selectionGeometry is not null && !selectionGeometry.Bounds.IsEmpty)
                 {
                     dc.PushClip(new RectangleGeometry(editContentRect));
                     dc.DrawGeometry(new SolidColorBrush(Color.FromArgb(120, 102, 178, 255)), null, selectionGeometry);
-                    GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, underline, false, false, column.ContentAlignment, verticalAlignment);
+                    GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, underline, false, false, field.ContentAlignment, verticalAlignment);
                     dc.Pop();
                 }
             }
@@ -1165,7 +1227,7 @@ public sealed partial class Griddo
                 {
                     var selectionRect = new Rect(selectionX, caretOriginY, selectionRight - selectionX, Math.Max(1, editText.Height));
                     dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(120, 102, 178, 255)), null, selectionRect);
-                    GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, underline, false, false, column.ContentAlignment, verticalAlignment);
+                    GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, underline, false, false, field.ContentAlignment, verticalAlignment);
                 }
             }
         }
@@ -1190,6 +1252,49 @@ public sealed partial class Griddo
         }
 
         dc.Pop();
+    }
+
+    private Rect GetMergedRecordCellRect(int record, int col, Rect fallbackRect)
+    {
+        if (IsBodyTransposed
+            || col < 0
+            || col >= Fields.Count
+            || record < 0
+            || record >= Records.Count
+            || Fields[col] is not IGriddoRecordMergeBandView mergeBand)
+        {
+            return fallbackRect;
+        }
+
+        var topRecord = record;
+        while (topRecord > 0 && mergeBand.IsMergedWithPreviousRecord(Records, topRecord))
+        {
+            topRecord--;
+        }
+
+        var bottomRecord = record;
+        while (bottomRecord < Records.Count - 1 && mergeBand.IsMergedWithNextRecord(Records, bottomRecord))
+        {
+            bottomRecord++;
+        }
+
+        if (topRecord == record && bottomRecord == record)
+        {
+            return fallbackRect;
+        }
+
+        var topRect = GetCellRect(topRecord, col);
+        var bottomRect = GetCellRect(bottomRecord, col);
+        if (topRect.IsEmpty || bottomRect.IsEmpty)
+        {
+            return fallbackRect;
+        }
+
+        return new Rect(
+            fallbackRect.X,
+            topRect.Y,
+            fallbackRect.Width,
+            Math.Max(0, bottomRect.Bottom - topRect.Y));
     }
 
     private static bool TryGetCaretBounds(FormattedText formattedText, Point origin, int caretIndex, out Rect bounds)
@@ -1226,30 +1331,30 @@ public sealed partial class Griddo
 
         return false;
     }
-    private void DrawColumnMoveCue(DrawingContext dc)
+    private void DrawFieldMoveCue(DrawingContext dc)
     {
-        if (!_isTrackingColumnMove)
+        if (!_isTrackingFieldMove)
         {
             return;
         }
 
-        var clipRect = new Rect(_rowHeaderWidth, 0, _viewportBodyWidth, ScaledColumnHeaderHeight);
+        var clipRect = new Rect(_recordHeaderWidth, 0, _viewportBodyWidth, ScaledFieldHeaderHeight);
 
-        // Keep a thin red "current/source" marker on the column(s) being moved.
-        if (_isMovingPointerInColumnHeader && _movingColumnIndex >= 0 && _movingColumnIndex < Columns.Count)
+        // Keep a thin red "current/source" marker on the field(s) being moved.
+        if (_isMovingPointerInFieldHeader && _movingFieldIndex >= 0 && _movingFieldIndex < Fields.Count)
         {
             var currentPen = new Pen(Brushes.Red, 1);
-            var movingColumns = _columnMoveStartedFromSelectedHeader && _isMovingColumn
-                ? GetSelectedColumnIndices()
-                : [_movingColumnIndex];
-            foreach (var movingColumn in movingColumns)
+            var movingFields = _fieldMoveStartedFromSelectedHeader && _isMovingField
+                ? GetSelectedFieldIndices()
+                : [_movingFieldIndex];
+            foreach (var movingField in movingFields)
             {
-                if (movingColumn < 0 || movingColumn >= Columns.Count)
+                if (movingField < 0 || movingField >= Fields.Count)
                 {
                     continue;
                 }
 
-                var movingRect = GetColumnHeaderRect(movingColumn);
+                var movingRect = GetFieldHeaderRect(movingField);
                 var visibleMovingRect = Rect.Intersect(movingRect, clipRect);
                 if (visibleMovingRect.IsEmpty)
                 {
@@ -1265,12 +1370,12 @@ public sealed partial class Griddo
             }
         }
 
-        if (_columnMoveCueIndex < 0 || _columnMoveCueIndex >= Columns.Count)
+        if (_fieldMoveCueIndex < 0 || _fieldMoveCueIndex >= Fields.Count)
         {
             return;
         }
 
-        var cueRect = GetColumnHeaderRect(_columnMoveCueIndex);
+        var cueRect = GetFieldHeaderRect(_fieldMoveCueIndex);
         if (cueRect.IsEmpty)
         {
             return;
@@ -1283,45 +1388,45 @@ public sealed partial class Griddo
         }
 
         var x = visibleCueRect.Left;
-        if (_columnMoveStartedFromSelectedHeader && _isMovingColumn)
+        if (_fieldMoveStartedFromSelectedHeader && _isMovingField)
         {
-            var selectedColumns = GetSelectedColumnIndices();
-            if (selectedColumns.Count > 0)
+            var selectedFields = GetSelectedFieldIndices();
+            if (selectedFields.Count > 0)
             {
-                var minSelected = selectedColumns[0];
-                var maxSelected = selectedColumns[^1];
-                var movingLeft = _columnMoveCueIndex < minSelected;
-                var movingRight = _columnMoveCueIndex > maxSelected;
+                var minSelected = selectedFields[0];
+                var maxSelected = selectedFields[^1];
+                var movingLeft = _fieldMoveCueIndex < minSelected;
+                var movingRight = _fieldMoveCueIndex > maxSelected;
                 x = movingRight ? visibleCueRect.Right : visibleCueRect.Left;
             }
         }
         else
         {
-            var movingRight = _movingColumnIndex >= 0 && _columnMoveCueIndex > _movingColumnIndex;
+            var movingRight = _movingFieldIndex >= 0 && _fieldMoveCueIndex > _movingFieldIndex;
             x = movingRight ? visibleCueRect.Right : visibleCueRect.Left;
         }
         var insertionPen = new Pen(Brushes.Red, 2);
         dc.DrawLine(
             insertionPen,
             new Point(x, 1),
-            new Point(x, Math.Max(1, ScaledColumnHeaderHeight - 1)));
+            new Point(x, Math.Max(1, ScaledFieldHeaderHeight - 1)));
 
-        DrawDropArrows(dc, x, ScaledColumnHeaderHeight);
+        DrawDropArrows(dc, x, ScaledFieldHeaderHeight);
     }
 
-    private void DrawRowMoveCue(DrawingContext dc)
+    private void DrawRecordMoveCue(DrawingContext dc)
     {
-        if (!_isTrackingRowMove || !_isMovingRow)
+        if (!_isTrackingRecordMove || !_isMovingRecord)
         {
             return;
         }
 
-        var clipRect = new Rect(0, ScaledColumnHeaderHeight, _rowHeaderWidth, _viewportBodyHeight);
+        var clipRect = new Rect(0, ScaledFieldHeaderHeight, _recordHeaderWidth, _viewportBodyHeight);
         var currentPen = new Pen(Brushes.Red, 1);
-        var movingRows = GetSelectedRowIndices();
-        foreach (var movingRow in movingRows)
+        var movingRecords = GetSelectedRecordIndices();
+        foreach (var movingRecord in movingRecords)
         {
-            var movingRect = GetRowHeaderRect(movingRow);
+            var movingRect = GetRecordHeaderRect(movingRecord);
             var visibleMovingRect = Rect.Intersect(movingRect, clipRect);
             if (visibleMovingRect.IsEmpty)
             {
@@ -1336,18 +1441,18 @@ public sealed partial class Griddo
             dc.DrawRectangle(null, currentPen, currentRect);
         }
 
-        if (_rowMoveCueIndex < 0 || _rowMoveCueIndex >= Rows.Count)
+        if (_recordMoveCueIndex < 0 || _recordMoveCueIndex >= Records.Count)
         {
             return;
         }
 
-        var cueRect = GetRowHeaderRect(_rowMoveCueIndex);
+        var cueRect = GetRecordHeaderRect(_recordMoveCueIndex);
         if (cueRect.IsEmpty)
         {
             return;
         }
 
-        if (!TryGetRowDropIndicatorY(out var y))
+        if (!TryGetRecordDropIndicatorY(out var y))
         {
             return;
         }
@@ -1357,176 +1462,176 @@ public sealed partial class Griddo
         dc.DrawLine(
             insertionPen,
             new Point(1, y),
-            new Point(Math.Max(1, _rowHeaderWidth - 1), y));
+            new Point(Math.Max(1, _recordHeaderWidth - 1), y));
 
-        DrawRowDropArrows(dc, y, _rowHeaderWidth, clipRect.Top + 1, clipRect.Bottom - 1);
+        DrawRecordDropArrows(dc, y, _recordHeaderWidth, clipRect.Top + 1, clipRect.Bottom - 1);
     }
 
-    private bool TryGetRowDropIndicatorY(out double y)
+    private bool TryGetRecordDropIndicatorY(out double y)
     {
         y = 0;
-        if (_rowMoveCueIndex < 0 || _rowMoveCueIndex >= Rows.Count)
+        if (_recordMoveCueIndex < 0 || _recordMoveCueIndex >= Records.Count)
         {
             return false;
         }
 
-        var selectedRows = GetSelectedRowIndices();
-        if (selectedRows.Count == 0)
+        var selectedRecords = GetSelectedRecordIndices();
+        if (selectedRecords.Count == 0)
         {
-            if (_movingRowIndex < 0 || _movingRowIndex >= Rows.Count || _rowMoveCueIndex == _movingRowIndex)
+            if (_movingRecordIndex < 0 || _movingRecordIndex >= Records.Count || _recordMoveCueIndex == _movingRecordIndex)
             {
                 return false;
             }
 
-            var cueRectSingle = GetRowHeaderRect(_rowMoveCueIndex);
+            var cueRectSingle = GetRecordHeaderRect(_recordMoveCueIndex);
             if (cueRectSingle.IsEmpty)
             {
                 return false;
             }
 
-            y = _rowMoveCueIndex > _movingRowIndex ? cueRectSingle.Bottom : cueRectSingle.Top;
+            y = _recordMoveCueIndex > _movingRecordIndex ? cueRectSingle.Bottom : cueRectSingle.Top;
             return true;
         }
 
-        var minSelected = selectedRows[0];
-        var maxSelected = selectedRows[^1];
-        if (_rowMoveCueIndex >= minSelected && _rowMoveCueIndex <= maxSelected)
+        var minSelected = selectedRecords[0];
+        var maxSelected = selectedRecords[^1];
+        if (_recordMoveCueIndex >= minSelected && _recordMoveCueIndex <= maxSelected)
         {
             return false;
         }
 
-        var cueRect = GetRowHeaderRect(_rowMoveCueIndex);
+        var cueRect = GetRecordHeaderRect(_recordMoveCueIndex);
         if (cueRect.IsEmpty)
         {
             return false;
         }
 
-        var insertAfterTarget = _rowMoveCueIndex > maxSelected;
+        var insertAfterTarget = _recordMoveCueIndex > maxSelected;
         y = insertAfterTarget ? cueRect.Bottom : cueRect.Top;
         return true;
     }
 
     private static void DrawDropArrows(DrawingContext dc, double lineX, double headerHeight)
     {
-        const double arrowWidth = 6;
-        const double arrowHeight = 4;
+        const double arrecordWidth = 6;
+        const double arrecordHeight = 4;
         const double gap = 3;
         var centerY = headerHeight / 2.0;
 
         var red = Brushes.Red;
 
-        // Left arrow pointing right.
+        // Left arrecord pointing right.
         var leftArrow = new StreamGeometry();
         using (var ctx = leftArrow.Open())
         {
             var tip = new Point(lineX - gap, centerY);
-            ctx.BeginFigure(new Point(tip.X - arrowWidth, tip.Y - arrowHeight), true, true);
-            ctx.LineTo(new Point(tip.X - arrowWidth, tip.Y + arrowHeight), true, false);
+            ctx.BeginFigure(new Point(tip.X - arrecordWidth, tip.Y - arrecordHeight), true, true);
+            ctx.LineTo(new Point(tip.X - arrecordWidth, tip.Y + arrecordHeight), true, false);
             ctx.LineTo(tip, true, false);
         }
         leftArrow.Freeze();
         dc.DrawGeometry(red, null, leftArrow);
 
-        // Right arrow pointing left.
+        // Right arrecord pointing left.
         var rightArrow = new StreamGeometry();
         using (var ctx = rightArrow.Open())
         {
             var tip = new Point(lineX + gap, centerY);
-            ctx.BeginFigure(new Point(tip.X + arrowWidth, tip.Y - arrowHeight), true, true);
-            ctx.LineTo(new Point(tip.X + arrowWidth, tip.Y + arrowHeight), true, false);
+            ctx.BeginFigure(new Point(tip.X + arrecordWidth, tip.Y - arrecordHeight), true, true);
+            ctx.LineTo(new Point(tip.X + arrecordWidth, tip.Y + arrecordHeight), true, false);
             ctx.LineTo(tip, true, false);
         }
         rightArrow.Freeze();
         dc.DrawGeometry(red, null, rightArrow);
     }
 
-    private static void DrawRowDropArrows(DrawingContext dc, double lineY, double headerWidth, double minY, double maxY)
+    private static void DrawRecordDropArrows(DrawingContext dc, double lineY, double headerWidth, double minY, double maxY)
     {
-        const double arrowWidth = 4;
-        const double arrowHeight = 6;
+        const double arrecordWidth = 4;
+        const double arrecordHeight = 6;
         const double gap = 3;
         var clampedLineY = Math.Clamp(lineY, minY, maxY);
         var centerX = headerWidth / 2.0;
         var red = Brushes.Red;
 
-        // Down arrow above insertion line.
+        // Down arrecord above insertion line.
         var downArrow = new StreamGeometry();
         using (var ctx = downArrow.Open())
         {
-            var tipY = Math.Clamp(clampedLineY - gap, minY + arrowHeight, maxY - arrowHeight);
+            var tipY = Math.Clamp(clampedLineY - gap, minY + arrecordHeight, maxY - arrecordHeight);
             var tip = new Point(centerX, tipY);
-            ctx.BeginFigure(new Point(tip.X - arrowWidth, tip.Y - arrowHeight), true, true);
-            ctx.LineTo(new Point(tip.X + arrowWidth, tip.Y - arrowHeight), true, false);
+            ctx.BeginFigure(new Point(tip.X - arrecordWidth, tip.Y - arrecordHeight), true, true);
+            ctx.LineTo(new Point(tip.X + arrecordWidth, tip.Y - arrecordHeight), true, false);
             ctx.LineTo(tip, true, false);
         }
         downArrow.Freeze();
         dc.DrawGeometry(red, null, downArrow);
 
-        // Up arrow below insertion line.
+        // Up arrecord below insertion line.
         var upArrow = new StreamGeometry();
         using (var ctx = upArrow.Open())
         {
-            var tipY = Math.Clamp(clampedLineY + gap, minY + arrowHeight, maxY - arrowHeight);
+            var tipY = Math.Clamp(clampedLineY + gap, minY + arrecordHeight, maxY - arrecordHeight);
             var tip = new Point(centerX, tipY);
-            ctx.BeginFigure(new Point(tip.X - arrowWidth, tip.Y + arrowHeight), true, true);
-            ctx.LineTo(new Point(tip.X + arrowWidth, tip.Y + arrowHeight), true, false);
+            ctx.BeginFigure(new Point(tip.X - arrecordWidth, tip.Y + arrecordHeight), true, true);
+            ctx.LineTo(new Point(tip.X + arrecordWidth, tip.Y + arrecordHeight), true, false);
             ctx.LineTo(tip, true, false);
         }
         upArrow.Freeze();
         dc.DrawGeometry(red, null, upArrow);
     }
 
-    private Rect GetColumnHeaderRect(int columnIndex)
+    private Rect GetFieldHeaderRect(int fieldIndex)
     {
-        if (columnIndex < 0 || columnIndex >= Columns.Count)
+        if (fieldIndex < 0 || fieldIndex >= Fields.Count)
         {
             return Rect.Empty;
         }
 
         if (IsBodyTransposed)
         {
-            var y = ScaledColumnHeaderHeight + GetTransposedColumnBodyTopRel(columnIndex);
-            return new Rect(0, y, _rowHeaderWidth, GetColumnWidth(columnIndex));
+            var y = ScaledFieldHeaderHeight + GetTransposedFieldBodyTopRel(fieldIndex);
+            return new Rect(0, y, _recordHeaderWidth, GetFieldWidth(fieldIndex));
         }
 
         double left;
-        if (columnIndex < _fixedColumnCount)
+        if (fieldIndex < _fixedFieldCount)
         {
-            left = _rowHeaderWidth;
-            for (var col = 0; col < columnIndex; col++)
+            left = _recordHeaderWidth;
+            for (var col = 0; col < fieldIndex; col++)
             {
-                left += GetColumnWidth(col);
+                left += GetFieldWidth(col);
             }
         }
         else
         {
-            left = _rowHeaderWidth + GetFixedColumnsWidth();
-            for (var col = _fixedColumnCount; col < columnIndex; col++)
+            left = _recordHeaderWidth + GetFixedFieldsWidth();
+            for (var col = _fixedFieldCount; col < fieldIndex; col++)
             {
-                left += GetColumnWidth(col);
+                left += GetFieldWidth(col);
             }
 
             left -= _horizontalOffset;
         }
 
-        return new Rect(left, 0, GetColumnWidth(columnIndex), ScaledColumnHeaderHeight);
+        return new Rect(left, 0, GetFieldWidth(fieldIndex), ScaledFieldHeaderHeight);
     }
 
-    private Rect GetRowHeaderRect(int rowIndex)
+    private Rect GetRecordHeaderRect(int recordIndex)
     {
-        if (rowIndex < 0 || rowIndex >= Rows.Count)
+        if (recordIndex < 0 || recordIndex >= Records.Count)
         {
             return Rect.Empty;
         }
 
         if (IsBodyTransposed)
         {
-            var x = _rowHeaderWidth + GetTransposedRowBodyLeftRel(rowIndex);
-            return new Rect(x, 0, GetRowHeight(rowIndex), ScaledColumnHeaderHeight);
+            var x = _recordHeaderWidth + GetTransposedRecordBodyLeftRel(recordIndex);
+            return new Rect(x, 0, GetRecordHeight(recordIndex), ScaledFieldHeaderHeight);
         }
 
-        var y = ScaledColumnHeaderHeight + GetRowBodyTopRel(rowIndex);
-        return new Rect(0, y, _rowHeaderWidth, GetRowHeight(rowIndex));
+        var y = ScaledFieldHeaderHeight + GetRecordBodyTopRel(recordIndex);
+        return new Rect(0, y, _recordHeaderWidth, GetRecordHeight(recordIndex));
     }
     private void DrawScrollBarCorner(DrawingContext dc)
     {
@@ -1544,11 +1649,11 @@ public sealed partial class Griddo
             Math.Max(0, ActualWidth - verticalThickness - outerBorderInset),
             0,
             cornerThicknessX,
-            Math.Max(0, ScaledColumnHeaderHeight));
+            Math.Max(0, ScaledFieldHeaderHeight));
         var bottomLeftRect = new Rect(
             0,
             Math.Max(0, ActualHeight - horizontalThickness - outerBorderInset),
-            Math.Max(0, _rowHeaderWidth),
+            Math.Max(0, _recordHeaderWidth),
             cornerThicknessY);
         var bottomRightRect = new Rect(
             Math.Max(0, ActualWidth - verticalThickness - outerBorderInset),

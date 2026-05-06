@@ -4,7 +4,7 @@ using System.Globalization;
 
 namespace Griddo.Grid;
 
-public readonly record struct GriddoSortDescriptor(int ColumnIndex, bool Ascending, int Priority);
+public readonly record struct GriddoSortDescriptor(int FieldIndex, bool Ascending, int Priority);
 
 public sealed partial class Griddo
 {
@@ -12,16 +12,16 @@ public sealed partial class Griddo
     {
         _sortDescriptors.Clear();
         foreach (var d in descriptors
-                     .Where(static x => x.ColumnIndex >= 0)
+                     .Where(static x => x.FieldIndex >= 0)
                      .OrderBy(static x => x.Priority)
-                     .ThenBy(static x => x.ColumnIndex))
+                     .ThenBy(static x => x.FieldIndex))
         {
-            if (_sortDescriptors.Any(x => x.ColumnIndex == d.ColumnIndex))
+            if (_sortDescriptors.Any(x => x.FieldIndex == d.FieldIndex))
             {
                 continue;
             }
 
-            _sortDescriptors.Add(new GriddoSortDescriptor(d.ColumnIndex, d.Ascending, _sortDescriptors.Count + 1));
+            _sortDescriptors.Add(new GriddoSortDescriptor(d.FieldIndex, d.Ascending, _sortDescriptors.Count + 1));
         }
 
         ApplySorting();
@@ -29,16 +29,16 @@ public sealed partial class Griddo
         InvalidateVisual();
     }
 
-    private void ToggleHeaderSort(int columnIndex, bool additive)
+    private void ToggleHeaderSort(int fieldIndex, bool additive)
     {
-        if (columnIndex < 0 || columnIndex >= Columns.Count)
+        if (fieldIndex < 0 || fieldIndex >= Fields.Count)
         {
             return;
         }
 
         if (!additive)
         {
-            if (_sortDescriptors.Count == 1 && _sortDescriptors[0].ColumnIndex == columnIndex)
+            if (_sortDescriptors.Count == 1 && _sortDescriptors[0].FieldIndex == fieldIndex)
             {
                 var current = _sortDescriptors[0];
                 _sortDescriptors[0] = current with { Ascending = !current.Ascending, Priority = 1 };
@@ -46,12 +46,12 @@ public sealed partial class Griddo
             else
             {
                 _sortDescriptors.Clear();
-                _sortDescriptors.Add(new GriddoSortDescriptor(columnIndex, Ascending: true, Priority: 1));
+                _sortDescriptors.Add(new GriddoSortDescriptor(fieldIndex, Ascending: true, Priority: 1));
             }
         }
         else
         {
-            var idx = _sortDescriptors.FindIndex(x => x.ColumnIndex == columnIndex);
+            var idx = _sortDescriptors.FindIndex(x => x.FieldIndex == fieldIndex);
             if (idx >= 0)
             {
                 var current = _sortDescriptors[idx];
@@ -59,7 +59,7 @@ public sealed partial class Griddo
             }
             else
             {
-                _sortDescriptors.Add(new GriddoSortDescriptor(columnIndex, Ascending: true, Priority: _sortDescriptors.Count + 1));
+                _sortDescriptors.Add(new GriddoSortDescriptor(fieldIndex, Ascending: true, Priority: _sortDescriptors.Count + 1));
             }
         }
 
@@ -80,13 +80,13 @@ public sealed partial class Griddo
 
     private void ApplySorting()
     {
-        if (Rows.Count <= 1 || _sortDescriptors.Count == 0)
+        if (Records.Count <= 1 || _sortDescriptors.Count == 0)
         {
             return;
         }
 
         var active = _sortDescriptors
-            .Where(d => d.ColumnIndex >= 0 && d.ColumnIndex < Columns.Count)
+            .Where(d => d.FieldIndex >= 0 && d.FieldIndex < Fields.Count)
             .OrderBy(d => d.Priority)
             .ToList();
         if (active.Count == 0)
@@ -94,18 +94,21 @@ public sealed partial class Griddo
             return;
         }
 
-        var rowCount = Rows.Count;
-        var keyColumns = active.Select(d => Columns[d.ColumnIndex]).ToArray();
+        var recordCount = Records.Count;
+        var keyFields = active.Select(d => Fields[d.FieldIndex]).ToArray();
         var keyValues = new object?[active.Count][];
         for (var k = 0; k < active.Count; k++)
         {
-            var keys = new object?[rowCount];
-            var col = keyColumns[k];
-            for (var i = 0; i < rowCount; i++)
+            var keys = new object?[recordCount];
+            var col = keyFields[k];
+            for (var i = 0; i < recordCount; i++)
             {
                 try
                 {
-                    keys[i] = col.GetValue(Rows[i]);
+                    var recordSource = Records[i];
+                    keys[i] = col is Fields.IGriddoFieldSortValueView sortableField
+                        ? sortableField.GetSortValue(recordSource)
+                        : col.GetValue(recordSource);
                 }
                 catch
                 {
@@ -116,7 +119,7 @@ public sealed partial class Griddo
             keyValues[k] = keys;
         }
 
-        var sortedOldIndices = Enumerable.Range(0, rowCount).ToList();
+        var sortedOldIndices = Enumerable.Range(0, recordCount).ToList();
         sortedOldIndices.Sort((a, b) =>
         {
             for (var k = 0; k < active.Count; k++)
@@ -135,7 +138,7 @@ public sealed partial class Griddo
         });
 
         var isAlreadySorted = true;
-        for (var i = 0; i < rowCount; i++)
+        for (var i = 0; i < recordCount; i++)
         {
             if (sortedOldIndices[i] == i)
             {
@@ -151,19 +154,19 @@ public sealed partial class Griddo
             return;
         }
 
-        var sortedRows = new object[rowCount];
-        for (var i = 0; i < rowCount; i++)
+        var sortedRecords = new object[recordCount];
+        for (var i = 0; i < recordCount; i++)
         {
-            sortedRows[i] = Rows[sortedOldIndices[i]];
+            sortedRecords[i] = Records[sortedOldIndices[i]];
         }
 
         _suspendGridCollectionChanged++;
         try
         {
-            Rows.Clear();
-            for (var i = 0; i < sortedRows.Length; i++)
+            Records.Clear();
+            for (var i = 0; i < sortedRecords.Length; i++)
             {
-                Rows.Add(sortedRows[i]);
+                Records.Add(sortedRecords[i]);
             }
         }
         finally
@@ -174,9 +177,9 @@ public sealed partial class Griddo
         OnGridCollectionChanged(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
 
         _selectedCells.Clear();
-        if (Rows.Count > 0 && Columns.Count > 0)
+        if (Records.Count > 0 && Fields.Count > 0)
         {
-            _currentCell = new Primitives.GriddoCellAddress(Math.Clamp(_currentCell.RowIndex, 0, Rows.Count - 1), Math.Clamp(_currentCell.ColumnIndex, 0, Columns.Count - 1));
+            _currentCell = new Primitives.GriddoCellAddress(Math.Clamp(_currentCell.RecordIndex, 0, Records.Count - 1), Math.Clamp(_currentCell.FieldIndex, 0, Fields.Count - 1));
             _selectedCells.Add(_currentCell);
         }
     }
@@ -220,12 +223,12 @@ public sealed partial class Griddo
         return StringComparer.CurrentCultureIgnoreCase.Compare(sa, sb);
     }
 
-    private int TryGetSortPriorityForColumn(int columnIndex, out bool ascending)
+    private int TryGetSortPriorityForField(int fieldIndex, out bool ascending)
     {
         for (var i = 0; i < _sortDescriptors.Count; i++)
         {
             var d = _sortDescriptors[i];
-            if (d.ColumnIndex != columnIndex)
+            if (d.FieldIndex != fieldIndex)
             {
                 continue;
             }
@@ -238,7 +241,7 @@ public sealed partial class Griddo
         return 0;
     }
 
-    private void RemapSortDescriptorsAfterColumnMove(int[] oldToNew)
+    private void RemapSortDescriptorsAfterFieldMove(int[] oldToNew)
     {
         if (oldToNew.Length == 0 || _sortDescriptors.Count == 0)
         {
@@ -248,9 +251,9 @@ public sealed partial class Griddo
         for (var i = 0; i < _sortDescriptors.Count; i++)
         {
             var d = _sortDescriptors[i];
-            if (d.ColumnIndex >= 0 && d.ColumnIndex < oldToNew.Length)
+            if (d.FieldIndex >= 0 && d.FieldIndex < oldToNew.Length)
             {
-                _sortDescriptors[i] = d with { ColumnIndex = oldToNew[d.ColumnIndex] };
+                _sortDescriptors[i] = d with { FieldIndex = oldToNew[d.FieldIndex] };
             }
         }
     }

@@ -3,42 +3,42 @@ using System.Windows;
 
 namespace Griddo.Grid;
 
-/// <summary>Transposed layout: logical rows extend horizontally, logical columns vertically (property-grid style).</summary>
+/// <summary>Transposed layout: logical records extend horizontally, logical fields vertically (property-grid style).</summary>
 public sealed partial class Griddo
 {
-    private bool IsBodyTransposed => _isTransposed && Rows.Count > 0 && Columns.Count > 0;
+    private bool IsBodyTransposed => _isTransposed && Records.Count > 0 && Fields.Count > 0;
 
-    private double GetTransposeFixedRowsWidth()
+    private double GetTransposeFixedRecordsWidth()
     {
-        var f = GetEffectiveFixedRowCount();
-        if (f <= 0 || Rows.Count == 0)
+        var f = GetEffectiveFixedRecordCount();
+        if (f <= 0 || Records.Count == 0)
         {
             return 0;
         }
 
-        return f * GetRowHeight(0);
+        return f * GetRecordHeight(0);
     }
 
-    /// <summary>Left edge of row band in body coordinates (uniform row height; <see cref="GetRowHeight"/> ignores row index).</summary>
-    private double GetTransposedRowBodyLeftRel(int rowIndex)
+    /// <summary>Left edge of record band in body coordinates (uniform record height; <see cref="GetRecordHeight"/> ignores record index).</summary>
+    private double GetTransposedRecordBodyLeftRel(int recordIndex)
     {
-        var h = GetRowHeight(0);
-        var f = GetEffectiveFixedRowCount();
-        if (rowIndex < f)
+        var h = GetRecordHeight(0);
+        var f = GetEffectiveFixedRecordCount();
+        if (recordIndex < f)
         {
-            return rowIndex * h;
+            return recordIndex * h;
         }
 
-        return rowIndex * h - _horizontalOffset;
+        return recordIndex * h - _horizontalOffset;
     }
 
-    private double GetTransposedColumnBodyTopRel(int colIndex)
+    private double GetTransposedFieldBodyTopRel(int colIndex)
     {
-        var f = Math.Clamp(_fixedColumnCount, 0, Columns.Count);
+        var f = Math.Clamp(_fixedFieldCount, 0, Fields.Count);
         var top = 0.0;
-        for (var c = 0; c < colIndex && c < Columns.Count; c++)
+        for (var c = 0; c < colIndex && c < Fields.Count; c++)
         {
-            top += GetColumnWidth(c);
+            top += GetFieldWidth(c);
         }
 
         if (colIndex < f)
@@ -49,45 +49,45 @@ public sealed partial class Griddo
         var fixedH = 0.0;
         for (var c = 0; c < f; c++)
         {
-            fixedH += GetColumnWidth(c);
+            fixedH += GetFieldWidth(c);
         }
 
         var scroll = 0.0;
         for (var c = f; c < colIndex; c++)
         {
-            scroll += GetColumnWidth(c);
+            scroll += GetFieldWidth(c);
         }
 
         return fixedH + scroll - _verticalOffset;
     }
 
-    private void ForEachVisibleColumnForTranspose(Action<int> onCol)
+    private void ForEachVisibleFieldForTranspose(Action<int> onCol)
     {
-        if (Columns.Count == 0 || _viewportBodyHeight <= 0)
+        if (Fields.Count == 0 || _viewportBodyHeight <= 0)
         {
             return;
         }
 
-        var f = Math.Clamp(_fixedColumnCount, 0, Columns.Count);
+        var f = Math.Clamp(_fixedFieldCount, 0, Fields.Count);
         var acc = 0.0;
-        for (var c = 0; c < f && c < Columns.Count; c++)
+        for (var c = 0; c < f && c < Fields.Count; c++)
         {
             if (acc < _viewportBodyHeight)
             {
                 onCol(c);
             }
 
-            acc += GetColumnWidth(c);
+            acc += GetFieldWidth(c);
         }
 
         var fixedH = 0.0;
         for (var i = 0; i < f; i++)
         {
-            fixedH += GetColumnWidth(i);
+            fixedH += GetFieldWidth(i);
         }
 
         var scrollVp = _viewportBodyHeight - fixedH;
-        if (scrollVp <= 0 || f >= Columns.Count)
+        if (scrollVp <= 0 || f >= Fields.Count)
         {
             return;
         }
@@ -96,9 +96,9 @@ public sealed partial class Griddo
         var contentBottom = _verticalOffset + scrollVp;
         var y = 0.0;
         var col = f;
-        while (col < Columns.Count)
+        while (col < Fields.Count)
         {
-            var ch = GetColumnWidth(col);
+            var ch = GetFieldWidth(col);
             if (y + ch > contentTop)
             {
                 break;
@@ -108,16 +108,16 @@ public sealed partial class Griddo
             col++;
         }
 
-        if (col >= Columns.Count)
+        if (col >= Fields.Count)
         {
             return;
         }
 
         var last = col;
         var cursor = y;
-        while (last < Columns.Count)
+        while (last < Fields.Count)
         {
-            cursor += GetColumnWidth(last);
+            cursor += GetFieldWidth(last);
             if (cursor >= contentBottom)
             {
                 break;
@@ -126,80 +126,80 @@ public sealed partial class Griddo
             last++;
         }
 
-        last = Math.Clamp(last, col, Columns.Count - 1);
+        last = Math.Clamp(last, col, Fields.Count - 1);
         for (var c = col; c <= last; c++)
         {
             onCol(c);
         }
     }
 
-    private void ForEachVisibleScrollRowForTranspose(Action<int> onRow)
+    private void ForEachVisibleScrollRecordForTranspose(Action<int> onRecord)
     {
-        if (Rows.Count == 0 || _viewportBodyWidth <= 0)
+        if (Records.Count == 0 || _viewportBodyWidth <= 0)
         {
             return;
         }
 
-        var h = GetRowHeight(0);
-        var f = GetEffectiveFixedRowCount();
-        for (var r = 0; r < f && r < Rows.Count; r++)
+        var h = GetRecordHeight(0);
+        var f = GetEffectiveFixedRecordCount();
+        for (var r = 0; r < f && r < Records.Count; r++)
         {
             if (r * h < _viewportBodyWidth)
             {
-                onRow(r);
+                onRecord(r);
             }
         }
 
         var fixedW = f * h;
         var scrollVp = _viewportBodyWidth - fixedW;
-        if (scrollVp <= 0 || f >= Rows.Count)
+        if (scrollVp <= 0 || f >= Records.Count)
         {
             return;
         }
 
         var first = f + (int)Math.Floor(_horizontalOffset / h);
         var last = f + (int)Math.Ceiling((_horizontalOffset + scrollVp) / h) - 1;
-        first = Math.Clamp(first, f, Rows.Count - 1);
-        last = Math.Clamp(last, f, Rows.Count - 1);
+        first = Math.Clamp(first, f, Records.Count - 1);
+        last = Math.Clamp(last, f, Records.Count - 1);
         for (var r = first; r <= last; r++)
         {
-            onRow(r);
+            onRecord(r);
         }
     }
 
-    private int HitTestTransposeRowFromBodyX(double bodyX)
+    private int HitTestTransposeRecordFromBodyX(double bodyX)
     {
-        if (Rows.Count == 0 || bodyX < 0)
+        if (Records.Count == 0 || bodyX < 0)
         {
             return -1;
         }
 
-        var h = GetRowHeight(0);
-        var f = GetEffectiveFixedRowCount();
+        var h = GetRecordHeight(0);
+        var f = GetEffectiveFixedRecordCount();
         var fixedW = f * h;
         if (bodyX < fixedW)
         {
             var r = (int)(bodyX / h);
-            return r >= 0 && r < Rows.Count ? r : -1;
+            return r >= 0 && r < Records.Count ? r : -1;
         }
 
         var scrollX = bodyX - fixedW + _horizontalOffset;
         var r2 = f + (int)(scrollX / h);
-        return r2 >= 0 && r2 < Rows.Count ? r2 : -1;
+        return r2 >= 0 && r2 < Records.Count ? r2 : -1;
     }
 
-    private int HitTestTransposeColumnFromBodyY(double bodyY)
+    private int HitTestTransposeFieldFromBodyY(double bodyY)
     {
-        if (Columns.Count == 0 || bodyY < 0)
+        if (Fields.Count == 0 || bodyY < 0)
         {
             return -1;
         }
 
-        var f = Math.Clamp(_fixedColumnCount, 0, Columns.Count);
+        var f = Math.Clamp(_fixedFieldCount, 0, Fields.Count);
         var y = 0.0;
         for (var c = 0; c < f; c++)
         {
-            var ch = GetColumnWidth(c);
+            var ch = GetFieldWidth(c);
             if (bodyY >= y && bodyY < y + ch)
             {
                 return c;
@@ -208,16 +208,16 @@ public sealed partial class Griddo
             y += ch;
         }
 
-        if (f >= Columns.Count)
+        if (f >= Fields.Count)
         {
             return -1;
         }
 
         var scrollY = bodyY - y + _verticalOffset;
         var acc = 0.0;
-        for (var c = f; c < Columns.Count; c++)
+        for (var c = f; c < Fields.Count; c++)
         {
-            var ch = GetColumnWidth(c);
+            var ch = GetFieldWidth(c);
             if (scrollY >= acc && scrollY < acc + ch)
             {
                 return c;
@@ -229,23 +229,23 @@ public sealed partial class Griddo
         return -1;
     }
 
-    private int HitTestTransposeColumnDividerBetweenBands(Point point)
+    private int HitTestTransposeFieldDividerBetweenBands(Point point)
     {
-        // Horizontal band boundaries: include the left column-header strip (same Y as body).
+        // In transposed mode, field-resize is only allowed from the left field-header strip.
         if (point.X < 0
-            || point.X > _rowHeaderWidth + _viewportBodyWidth
-            || point.Y < ScaledColumnHeaderHeight
-            || point.Y > ScaledColumnHeaderHeight + _viewportBodyHeight)
+            || point.X > _recordHeaderWidth
+            || point.Y < ScaledFieldHeaderHeight
+            || point.Y > ScaledFieldHeaderHeight + _viewportBodyHeight)
         {
             return -1;
         }
 
-        var bodyY = point.Y - ScaledColumnHeaderHeight;
+        var bodyY = point.Y - ScaledFieldHeaderHeight;
         var best = -1;
         var bestDist = double.PositiveInfinity;
-        for (var c = 0; c < Columns.Count; c++)
+        for (var c = 0; c < Fields.Count; c++)
         {
-            var boundary = GetTransposedColumnBodyTopRel(c) + GetColumnWidth(c);
+            var boundary = GetTransposedFieldBodyTopRel(c) + GetFieldWidth(c);
             var d = Math.Abs(bodyY - boundary);
             if (d > ScaledResizeGrip)
             {
@@ -262,24 +262,24 @@ public sealed partial class Griddo
         return best;
     }
 
-    private int HitTestTransposeRowDividerBetweenBands(Point point)
+    private int HitTestTransposeRecordDividerBetweenBands(Point point)
     {
-        // Vertical boundaries align with the top row-header strip (same X as body), not only the cell area.
+        // In transposed mode, record-resize is only allowed from the top record-header strip.
         if (point.Y < 0
-            || point.Y > ScaledColumnHeaderHeight + _viewportBodyHeight
-            || point.X < _rowHeaderWidth
-            || point.X > _rowHeaderWidth + _viewportBodyWidth)
+            || point.Y > ScaledFieldHeaderHeight
+            || point.X < _recordHeaderWidth
+            || point.X > _recordHeaderWidth + _viewportBodyWidth)
         {
             return -1;
         }
 
-        var bodyX = point.X - _rowHeaderWidth;
-        var h = GetRowHeight(0);
+        var bodyX = point.X - _recordHeaderWidth;
+        var h = GetRecordHeight(0);
         var best = -1;
         var bestDist = double.PositiveInfinity;
-        for (var r = 0; r < Rows.Count; r++)
+        for (var r = 0; r < Records.Count; r++)
         {
-            var sep = GetTransposedRowBodyLeftRel(r) + h;
+            var sep = GetTransposedRecordBodyLeftRel(r) + h;
             var d = Math.Abs(bodyX - sep);
             if (d > ScaledResizeGrip)
             {
