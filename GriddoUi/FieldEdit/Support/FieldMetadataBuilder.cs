@@ -5,8 +5,9 @@ using System.Linq;
 using System.Reflection;
 using Griddo.Fields;
 using Griddo.Grid;
+using GriddoUi.FieldEdit.Models;
 
-namespace GriddoUi.FieldEdit;
+namespace GriddoUi.FieldEdit.Support;
 
 /// <summary>
 /// Builds <see cref="FieldEditRecord"/> entries from CLR metadata.
@@ -108,6 +109,8 @@ public static class FieldMetadataBuilder
             BackgroundColor = col is IGriddoFieldColorView colorView2 ? colorView2.BackgroundColor : string.Empty,
             IsNumericProperty = IsNumericValueType(sampleRaw),
             IsDateTimeProperty = IsDateTimeValueType(sampleRaw),
+            IsEnumProperty = IsEnumValueType(sampleRaw),
+            IsFlagsEnumProperty = IsFlagsEnumValueType(sampleRaw),
             Description = col is IGriddoFieldDescriptionView descView ? descView.Description : string.Empty,
             Visible = visible,
             Fill = col.Fill,
@@ -315,6 +318,8 @@ public static class FieldMetadataBuilder
                 Description = description,
                 IsNumericProperty = IsNumericType(p.PropertyType),
                 IsDateTimeProperty = IsDateTimeType(p.PropertyType),
+                IsEnumProperty = IsEnumType(p.PropertyType),
+                IsFlagsEnumProperty = IsFlagsEnumType(p.PropertyType),
                 Visible = true,
                 Fill = false,
                 Width = 140,
@@ -357,6 +362,10 @@ public static class FieldMetadataBuilder
 
     private static bool IsDateTimeValueType(object? value) => value is not null && IsDateTimeType(value.GetType());
 
+    private static bool IsEnumValueType(object? value) => value is not null && IsEnumType(value.GetType());
+
+    private static bool IsFlagsEnumValueType(object? value) => value is not null && IsFlagsEnumType(value.GetType());
+
     private static bool IsNumericType(Type type)
     {
         var t = Nullable.GetUnderlyingType(type) ?? type;
@@ -376,5 +385,17 @@ public static class FieldMetadataBuilder
             || t == typeof(DateOnly)
             || t == typeof(TimeOnly)
             || t == typeof(TimeSpan);
+    }
+
+    private static bool IsEnumType(Type type)
+    {
+        var t = Nullable.GetUnderlyingType(type) ?? type;
+        return t.IsEnum;
+    }
+
+    private static bool IsFlagsEnumType(Type type)
+    {
+        var t = Nullable.GetUnderlyingType(type) ?? type;
+        return t.IsEnum && t.GetCustomAttribute<FlagsAttribute>() is not null;
     }
 }

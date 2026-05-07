@@ -1,7 +1,6 @@
-using System.Collections.Generic;
-using GriddoModelView;
+using Griddo.Hosting.Configuration;
 
-namespace GriddoTest.PlotHosting;
+namespace Griddo.Hosting.Plot;
 
 public interface IPlotFieldLayoutTarget
 {

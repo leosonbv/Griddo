@@ -1,7 +1,8 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using GriddoUi.FieldEdit.Models;
 
-namespace GriddoUi.FieldEdit;
+namespace GriddoUi.FieldEdit.Support;
 
 internal static class FontSummaryParser
 {

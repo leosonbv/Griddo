@@ -4,9 +4,10 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using Griddo.Fields;
 using Griddo.Editing;
-using GriddoModelView;
-using GriddoUi.FieldEdit;
-using GriddoTest.PlotHosting;
+using Griddo.Hosting.Configuration;
+using Griddo.Hosting.Html;
+using Griddo.Hosting.Plot;
+using GriddoUi.FieldEdit.Support;
 using WpfColorFontDialog;
 
 namespace GriddoTest.HtmlHosting;

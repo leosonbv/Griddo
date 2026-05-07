@@ -1,7 +1,6 @@
-using System.Collections.Generic;
-using GriddoModelView;
+using Griddo.Hosting.Configuration;
 
-namespace GriddoTest.HtmlHosting;
+namespace Griddo.Hosting.Html;
 
 public interface IHtmlFieldLayoutTarget
 {

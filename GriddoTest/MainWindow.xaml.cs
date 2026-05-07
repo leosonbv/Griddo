@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -7,15 +8,23 @@ using System.IO;
 using System.Net;
 using Griddo;
 using Griddo.Fields;
+using Griddo.Fields.Attributes;
 using Griddo.Editing;
 using Griddo.Grid;
+using Griddo.Hosting.Abstractions;
+using Griddo.Hosting.Configuration;
+using Griddo.Hosting.Html;
+using Griddo.Hosting.Plot;
 using Plotto.Charting.Controls;
 using Plotto.Charting.Core;
-using GriddoUi.FieldEdit;
+using GriddoUi.FieldEdit.Dialog;
+using GriddoUi.FieldEdit.Models;
+using GriddoUi.FieldEdit.Support;
 using GriddoModelView;
+using GriddoTest.StabilityHosting;
 using GriddoTest.Stores;
-using GriddoTest.PlotHosting;
-using GriddoTest.HtmlHosting;
+using GriddoTest.Stability;
+using System.Text;
 
 namespace GriddoTest;
 
@@ -29,7 +38,7 @@ public partial class MainWindow : Window
     private const string PrimarySource = "Primary";
     private const string AnalyticsSource = "Analytics";
     private readonly List<IGriddoFieldView> _allFields = [];
-    private ComposedHtmlFieldView? _htmlField;
+    private Griddo.Hosting.Html.ComposedHtmlFieldView? _htmlField;
     private readonly PropertyViewStore _viewStore = new(
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -40,6 +49,7 @@ public partial class MainWindow : Window
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Griddo",
             "grid-layouts.json"));
+    private string _lastPersistSignature = string.Empty;
 
     private readonly ChromatogramControl _plotConfigFallback = new()
     {
@@ -53,13 +63,19 @@ public partial class MainWindow : Window
         InitializeComponent();
         _viewStore.Load();
         _gridLayoutStore.Load();
+        var hasPersistedDemoLayout = _gridLayoutStore.TryGet(DemoGridLayoutKey, out _);
         ConfigureGrid();
         DemoGrid.FieldHeaderRightClick += (_, e) => OnFieldHeaderRightClick(DemoGrid, _allFields, e);
         DemoGrid.RecordHeaderRightClick += (_, e) => OnRecordHeaderRightClick(DemoGrid, _allFields, e);
         DemoGrid.CornerHeaderRightClick += (_, _) => OnCornerHeaderRightClick(DemoGrid, _allFields);
         DemoGrid.SortDescriptorsChanged += (_, _) => PersistGridLayoutFromCurrentGrid(DemoGrid, DemoGridLayoutKey, _allFields);
         DemoGrid.UniformRecordHeightChanged += (_, _) => PersistGridLayoutFromCurrentGrid(DemoGrid, DemoGridLayoutKey, _allFields);
-        DemoGrid.UniformRecordHeight = 132;
+        DemoGrid.Fields.CollectionChanged += OnDemoGridFieldsCollectionChanged;
+        DemoGrid.PreviewMouseUp += OnDemoGridPreviewMouseUpPersistLayout;
+        if (!hasPersistedDemoLayout)
+        {
+            DemoGrid.UniformRecordHeight = 132;
+        }
         DemoGrid.FixedFieldCount = 1;
         DemoGrid.ImmediateCellEditOnSingleClick = false;
         DemoGrid.HostedPlotDirectEditOnMouseDown = true;
@@ -103,6 +119,7 @@ public partial class MainWindow : Window
         var targetFields = indices.Select(i => targetGrid.Fields[i]).ToList();
         var selectedPlotTargets = targetFields.OfType<IPlotFieldLayoutTarget>().ToList();
         var selectedHtmlTargets = targetFields.OfType<IHtmlFieldLayoutTarget>().ToList();
+        var selectedStabilityTargets = targetFields.OfType<IStabilityFieldLayoutTarget>().ToList();
         var menu = new ContextMenu
         {
             PlacementTarget = targetGrid,
@@ -112,7 +129,12 @@ public partial class MainWindow : Window
         void PersistLiveLayout() => PersistGridLayoutFromCurrentGrid(targetGrid, layoutKey, fieldRegistry);
 
         var gridConfiguratorItem = new MenuItem { Header = "_Grid configurator…" };
-        gridConfiguratorItem.Click += (_, _) => OpenFieldConfigurator(targetGrid, fieldRegistry, layoutKey);
+        gridConfiguratorItem.Click += (_, _) => OpenFieldConfigurator(
+            targetGrid,
+            fieldRegistry,
+            layoutKey,
+            selectedGridFieldIndices: indices,
+            preferredCenterGridFieldIndex: e.FieldIndex);
         menu.Items.Add(gridConfiguratorItem);
         var frozenFieldsItem = new MenuItem
         {
@@ -159,7 +181,7 @@ public partial class MainWindow : Window
             plotSettingsItem.Click += (_, _) =>
             {
                 var seed = selectedPlotTargets[0];
-                var dialog = new PlotConfigurationDialog(
+                var dialog = new GriddoTest.PlotHosting.PlotConfigurationDialog(
                     seed,
                     _allFields,
                     previewApply: result =>
@@ -195,7 +217,7 @@ public partial class MainWindow : Window
             htmlSettingsItem.Click += (_, _) =>
             {
                 var seed = selectedHtmlTargets[0];
-                var dialog = new HtmlConfigurationDialog(
+                var dialog = new GriddoTest.HtmlHosting.HtmlConfigurationDialog(
                     seed,
                     _allFields,
                     previewApply: result =>
@@ -223,6 +245,42 @@ public partial class MainWindow : Window
                 PersistLiveLayout();
             };
             menu.Items.Add(htmlSettingsItem);
+        }
+        if (selectedStabilityTargets.Count > 0)
+        {
+            var stabilitySettingsItem = new MenuItem { Header = "Stability field settings..." };
+            stabilitySettingsItem.Click += (_, _) =>
+            {
+                var seed = selectedStabilityTargets[0];
+                var dialog = new StabilityConfigurationDialog(
+                    seed,
+                    _allFields,
+                    previewApply: result =>
+                    {
+                        foreach (var target in selectedStabilityTargets)
+                        {
+                            ApplyStabilityLayout(target, result);
+                        }
+
+                        targetGrid.RefreshHostedCells();
+                        targetGrid.InvalidateVisual();
+                    })
+                { Owner = this };
+                if (dialog.ShowDialog() != true || dialog.Result is null)
+                {
+                    return;
+                }
+
+                foreach (var target in selectedStabilityTargets)
+                {
+                    ApplyStabilityLayout(target, dialog.Result);
+                }
+
+                targetGrid.RefreshHostedCells();
+                targetGrid.InvalidateVisual();
+                PersistLiveLayout();
+            };
+            menu.Items.Add(stabilitySettingsItem);
         }
         menu.Items.Add(new Separator());
 
@@ -525,6 +583,60 @@ public partial class MainWindow : Window
         menu.IsOpen = true;
     }
 
+    private void OnDemoGridFieldsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == NotifyCollectionChangedAction.Move)
+        {
+            PersistGridLayoutFromCurrentGrid(DemoGrid, DemoGridLayoutKey, _allFields);
+        }
+    }
+
+    private void OnDemoGridPreviewMouseUpPersistLayout(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left)
+        {
+            return;
+        }
+
+        // Field/record divider drags commit on mouse-up but do not raise sort/height events.
+        // Persist once per effective layout change.
+        var signature = BuildLayoutSignature(DemoGrid, _allFields);
+        if (string.Equals(signature, _lastPersistSignature, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        PersistGridLayoutFromCurrentGrid(DemoGrid, DemoGridLayoutKey, _allFields);
+        _lastPersistSignature = BuildLayoutSignature(DemoGrid, _allFields);
+    }
+
+    private static string BuildLayoutSignature(global::Griddo.Grid.Griddo grid, IReadOnlyList<IGriddoFieldView> registry)
+    {
+        var sb = new StringBuilder(512);
+        sb.Append(grid.FixedFieldCount).Append('|')
+          .Append(grid.FixedRecordCount).Append('|')
+          .Append(grid.UniformRecordHeight.ToString("R", System.Globalization.CultureInfo.InvariantCulture)).Append('|');
+
+        for (var i = 0; i < grid.Fields.Count; i++)
+        {
+            var field = grid.Fields[i];
+            var sourceIndex = -1;
+            for (var r = 0; r < registry.Count; r++)
+            {
+                if (ReferenceEquals(registry[r], field))
+                {
+                    sourceIndex = r;
+                    break;
+                }
+            }
+
+            sb.Append(sourceIndex).Append(':')
+              .Append(grid.GetLogicalFieldWidth(i).ToString("R", System.Globalization.CultureInfo.InvariantCulture)).Append(';');
+        }
+
+        return sb.ToString();
+    }
+
     private void OnRecordHeaderRightClick(
         global::Griddo.Grid.Griddo targetGrid,
         IReadOnlyList<IGriddoFieldView> fieldRegistry,
@@ -589,7 +701,19 @@ public partial class MainWindow : Window
         var gridConfiguratorItem = new MenuItem { Header = "_Grid configurator…" };
         gridConfiguratorItem.Click += (_, _) => OpenFieldConfigurator(targetGrid, fieldRegistry, layoutKey);
         menu.Items.Add(gridConfiguratorItem);
+        var stabilityExamplesItem = new MenuItem { Header = "_Stability plot examples…" };
+        stabilityExamplesItem.Click += (_, _) => OpenStabilityExamples();
+        menu.Items.Add(stabilityExamplesItem);
         menu.IsOpen = true;
+    }
+
+    private void OpenStabilityExamples()
+    {
+        var wnd = new StabilityExamplesWindow
+        {
+            Owner = this
+        };
+        wnd.Show();
     }
 
     private static void ApplyFieldFrozenSelection(global::Griddo.Grid.Griddo grid, IReadOnlyList<int> selectedIndices, bool shouldFreeze)
@@ -830,6 +954,13 @@ public partial class MainWindow : Window
             width: 100,
             editor: GriddoCellEditors.Number));
 
+        RegisterField(GriddoNamedSourceFields.Create(
+            sourceObjectName: AnalyticsSource,
+            sourceMemberName: nameof(AnalyticsDemoSource.ScoreB),
+            header: "Score B",
+            width: 100,
+            editor: GriddoCellEditors.Number));
+
         RegisterField(new GriddoBoolFieldView(
             header: "Active",
             width: 72,
@@ -847,7 +978,31 @@ public partial class MainWindow : Window
             sourceMemberName: nameof(PrimaryDemoSource.Active),
             sourceObjectName: PrimarySource));
 
-        _htmlField = new ComposedHtmlFieldView(
+        RegisterField(new GriddoEnumFieldView<DemoSampleState>(
+            header: "State",
+            width: 120,
+            valueGetter: record => GetPrimarySource(record).SampleState,
+            valueSetter: (record, value) =>
+            {
+                GetPrimarySource(record).SampleState = value;
+                return true;
+            },
+            sourceMemberName: nameof(PrimaryDemoSource.SampleState),
+            sourceObjectName: PrimarySource));
+
+        RegisterField(new GriddoFlagsFieldView<DemoSampleFlags>(
+            header: "Flags",
+            width: 190,
+            valueGetter: record => GetPrimarySource(record).SampleFlags,
+            valueSetter: (record, value) =>
+            {
+                GetPrimarySource(record).SampleFlags = value;
+                return true;
+            },
+            sourceMemberName: nameof(PrimaryDemoSource.SampleFlags),
+            sourceObjectName: PrimarySource));
+
+        _htmlField = new Griddo.Hosting.Html.ComposedHtmlFieldView(
             header: "Html",
             width: 260,
             sourceObjectName: PrimarySource,
@@ -855,6 +1010,7 @@ public partial class MainWindow : Window
             allFieldsAccessor: () => _allFields);
         _htmlField.IsCategoryField = true;
         RegisterField(_htmlField);
+        _htmlField.SourceFieldIndex = _allFields.Count - 1;
 
         RegisterField(new GriddoFieldView(
             header: "Graphic",
@@ -865,21 +1021,57 @@ public partial class MainWindow : Window
             sourceMemberName: nameof(PrimaryDemoSource.Graphic),
             sourceObjectName: PrimarySource));
 
-        RegisterField(new HostedPlottoFieldView(
+        RegisterField(new HostedChromatogramFieldView(
             header: ChromatogramFieldHeader,
             width: 220,
-            plottoSeedGetter: record => GetAnalyticsSource(record).PlottoSeed,
+            signalProvider: new DemoChromatogramSignalProvider(),
             allFieldsAccessor: () => _allFields,
             sourceObjectName: AnalyticsSource,
             sourceMemberName: nameof(AnalyticsDemoSource.PlottoSeed)));
 
-        RegisterField(new HostedCalibrationPlottoFieldView(
+        RegisterField(new HostedCalibrationFieldView(
             header: CalibrationFieldHeader,
             width: 240,
-            seedGetter: record => GetAnalyticsSource(record).PlottoSeed,
+            signalProvider: new DemoCalibrationSignalProvider(),
             allFieldsAccessor: () => _allFields,
             sourceObjectName: AnalyticsSource,
             sourceMemberName: nameof(AnalyticsDemoSource.PlottoSeed)));
+
+        RegisterField(new HostedSpectrumFieldView(
+            header: "Spectrum",
+            width: 220,
+            signalProvider: new DemoSpectrumSignalProvider(),
+            allFieldsAccessor: () => _allFields,
+            sourceObjectName: AnalyticsSource,
+            sourceMemberName: nameof(AnalyticsDemoSource.PlottoSeed)));
+
+        var stabilityIntensity = new HostedStabilityFieldView(
+            header: "Stability intensity",
+            width: 230,
+            allFieldsAccessor: () => _allFields,
+            recordsAccessor: () => DemoGrid.Records.Cast<object>().ToList(),
+            sourceObjectName: AnalyticsSource,
+            sourceMemberName: nameof(AnalyticsDemoSource.PlottoSeed));
+        RegisterField(stabilityIntensity);
+
+        var stabilityConcentration = new HostedStabilityFieldView(
+            header: "Stability concentration",
+            width: 230,
+            allFieldsAccessor: () => _allFields,
+            recordsAccessor: () => DemoGrid.Records.Cast<object>().ToList(),
+            sourceObjectName: AnalyticsSource,
+            sourceMemberName: nameof(AnalyticsDemoSource.PlottoSeed));
+        RegisterField(stabilityConcentration);
+
+        var stabilityRt = new HostedStabilityFieldView(
+            header: "Stability RT",
+            width: 230,
+            allFieldsAccessor: () => _allFields,
+            recordsAccessor: () => DemoGrid.Records.Cast<object>().ToList(),
+            sourceObjectName: AnalyticsSource,
+            sourceMemberName: nameof(AnalyticsDemoSource.PlottoSeed));
+        RegisterField(stabilityRt);
+        ApplyDefaultStabilitySeries([stabilityIntensity, stabilityConcentration, stabilityRt]);
         if (_htmlField is not null && _htmlField.Segments.Count == 0)
         {
             _htmlField.Segments = _allFields
@@ -989,7 +1181,8 @@ public partial class MainWindow : Window
             },
         };
 
-        for (var i = 1; i <= 100; i++)
+        const int exampleRecordCount = 50_000;
+        for (var i = 1; i <= exampleRecordCount; i++)
         {
             var resultIndex = ((i - 1) / 12) % 3;
             var statusIndex = ((i - 1) / 4) % 3;
@@ -1014,6 +1207,8 @@ public partial class MainWindow : Window
                 ReviewStatusKey = statusKey,
                 ReviewStatusDisplay = statusDisplay,
                 Active = i % 5 == 0,
+                SampleState = (DemoSampleState)((i - 1) % 4),
+                SampleFlags = BuildSampleFlags(i),
                 HtmlSnippet = i % 3 == 0
                     ? $"<table><tr><th>R{i}</th><th>Q{i % 4}</th></tr><tr><td>{i * 2}</td><td><b>{Math.Round(i / 3.0, 2)}</b></td></tr></table>"
                     : $"<b>Record {i}</b> has <i>formatted</i> text",
@@ -1022,6 +1217,7 @@ public partial class MainWindow : Window
             var analytics = new AnalyticsDemoSource
             {
                 Score = Math.Round(40 + Random.Shared.NextDouble() * 60, 2),
+                ScoreB = Math.Round(20 + Random.Shared.NextDouble() * 90, 2),
                 PlottoSeed = i
             };
 
@@ -1039,7 +1235,7 @@ public partial class MainWindow : Window
 
     private void RegisterField(IGriddoFieldView field)
     {
-        if (field is ComposedHtmlFieldView htmlField)
+        if (field is Griddo.Hosting.Html.ComposedHtmlFieldView htmlField)
         {
             htmlField.SourceFieldIndex = _allFields.Count;
         }
@@ -1262,6 +1458,104 @@ public partial class MainWindow : Window
         return Math.Exp(-0.5 * z * z);
     }
 
+    private static DemoSampleFlags BuildSampleFlags(int i)
+    {
+        var flags = DemoSampleFlags.None;
+        if (i % 2 == 0) flags |= DemoSampleFlags.Duplicate;
+        if (i % 3 == 0) flags |= DemoSampleFlags.ManualReview;
+        if (i % 5 == 0) flags |= DemoSampleFlags.Outlier;
+        if (i % 7 == 0) flags |= DemoSampleFlags.BelowLoq;
+        return flags;
+    }
+
+    private void ApplyDefaultStabilitySeries(IReadOnlyList<HostedStabilityFieldView> targets)
+    {
+        var scoreIndex = _allFields.FindIndex(f => string.Equals(f.Header, "Score", StringComparison.OrdinalIgnoreCase));
+        var idIndex = _allFields.FindIndex(f => string.Equals(f.Header, "ID", StringComparison.OrdinalIgnoreCase));
+        if (scoreIndex < 0 && idIndex < 0)
+        {
+            return;
+        }
+
+        foreach (var target in targets)
+        {
+            if (target.Series.Count > 0)
+            {
+                continue;
+            }
+
+            var series = new List<StabilitySeriesConfiguration>();
+            if (scoreIndex >= 0)
+            {
+                series.Add(new StabilitySeriesConfiguration
+                {
+                    SourceFieldIndex = scoreIndex,
+                    Enabled = true,
+                    ShowLine = false,
+                    ShowMarker = true,
+                    ShowSdLines = true,
+                    Color = "#FF4A6FB8",
+                    AxisSide = StabilityAxisSide.Left
+                });
+            }
+
+            if (idIndex >= 0)
+            {
+                series.Add(new StabilitySeriesConfiguration
+                {
+                    SourceFieldIndex = idIndex,
+                    Enabled = false,
+                    ShowLine = true,
+                    ShowMarker = true,
+                    ShowSdLines = false,
+                    Color = "#FFB84A6F",
+                    AxisSide = StabilityAxisSide.Right
+                });
+            }
+
+            target.Series = series;
+        }
+    }
+
+    private sealed class DemoChromatogramSignalProvider : IChromatogramSignalProvider
+    {
+        public IReadOnlyList<SignalPoint> GetPoints(object recordSource)
+        {
+            var seed = GetAnalyticsSource(recordSource).PlottoSeed;
+            return CreateChromatogramPoints(seed).Select(static p => new SignalPoint(p.X, p.Y)).ToList();
+        }
+    }
+
+    private sealed class DemoCalibrationSignalProvider : ICalibrationSignalProvider
+    {
+        public IReadOnlyList<CalibrationSignalPoint> GetPoints(object recordSource)
+        {
+            var seed = GetAnalyticsSource(recordSource).PlottoSeed;
+            return CreateCalibrationPoints(seed).Select(static p => new CalibrationSignalPoint(p.X, p.Y, p.IsEnabled)).ToList();
+        }
+
+        public CalibrationFitMode GetFitMode(object recordSource)
+        {
+            var seed = GetAnalyticsSource(recordSource).PlottoSeed;
+            return (CalibrationFitMode)(Math.Abs(seed) % 4);
+        }
+    }
+
+    private sealed class DemoSpectrumSignalProvider : ISpectrumSignalProvider
+    {
+        public IReadOnlyList<SignalPoint> GetPoints(object recordSource)
+        {
+            var seed = GetAnalyticsSource(recordSource).PlottoSeed;
+            var points = CreateChromatogramPoints(seed).ToList();
+            for (var i = 0; i < points.Count; i++)
+            {
+                points[i] = new ChartPoint(points[i].X * 1000d, points[i].Y);
+            }
+
+            return points.Select(static p => new SignalPoint(p.X, p.Y)).ToList();
+        }
+    }
+
     /// <summary>
     /// Record-dependent mini drawings (~60×56 logical coords); scaled into the cell by Griddo.
     /// Cycles <see cref="PathMarkupVariants"/> so adjacent records usually differ.
@@ -1284,7 +1578,9 @@ public partial class MainWindow : Window
     private void OpenFieldConfigurator(
         global::Griddo.Grid.Griddo grid,
         IReadOnlyList<IGriddoFieldView> fieldRegistry,
-        string layoutKey)
+        string layoutKey,
+        IReadOnlyList<int>? selectedGridFieldIndices = null,
+        int preferredCenterGridFieldIndex = -1)
     {
         var records = FieldMetadataBuilder.BuildRecordsFromGrid(grid, fieldRegistry);
         var sourceIndexByField = fieldRegistry
@@ -1349,6 +1645,56 @@ public partial class MainWindow : Window
 
         // Persisted configurator state should not depend on which source grid opened the dialog.
         var dlg = new FieldConfigurator(records, frozenFields, frozenRecords, initialOptions) { Owner = this };
+        var selectedGridIndices = (selectedGridFieldIndices ?? grid.SelectedCells.Select(c => c.FieldIndex).ToList())
+            .Where(i => i >= 0 && i < grid.Fields.Count)
+            .Distinct()
+            .OrderBy(i => i)
+            .ToList();
+
+        var selectedSourceFieldIndices = selectedGridIndices
+            .Select(i =>
+            {
+                var selectedField = grid.Fields[i];
+                return sourceIndexByField.TryGetValue(selectedField, out var sourceIndex) ? sourceIndex : -1;
+            })
+            .Where(i => i >= 0)
+            .Distinct()
+            .OrderBy(i => i)
+            .ToList();
+        if (selectedSourceFieldIndices.Count == 0 && grid.CurrentCell.IsValid)
+        {
+            var currentGridField = grid.Fields[Math.Clamp(grid.CurrentCell.FieldIndex, 0, grid.Fields.Count - 1)];
+            if (sourceIndexByField.TryGetValue(currentGridField, out var currentSourceIndex))
+            {
+                selectedSourceFieldIndices.Add(currentSourceIndex);
+            }
+        }
+
+        var centerSourceIndex = -1;
+        if (preferredCenterGridFieldIndex >= 0 && preferredCenterGridFieldIndex < grid.Fields.Count)
+        {
+            var centeredGridField = grid.Fields[preferredCenterGridFieldIndex];
+            if (sourceIndexByField.TryGetValue(centeredGridField, out var preferredSourceIndex))
+            {
+                centerSourceIndex = preferredSourceIndex;
+            }
+        }
+
+        if (centerSourceIndex < 0 && grid.CurrentCell.IsValid)
+        {
+            var currentGridField = grid.Fields[Math.Clamp(grid.CurrentCell.FieldIndex, 0, grid.Fields.Count - 1)];
+            if (sourceIndexByField.TryGetValue(currentGridField, out var currentSourceIndex))
+            {
+                centerSourceIndex = currentSourceIndex;
+            }
+        }
+
+        if (centerSourceIndex < 0 && selectedSourceFieldIndices.Count > 0)
+        {
+            centerSourceIndex = selectedSourceFieldIndices[0];
+        }
+
+        dlg.SetInitialSourceFieldSelection(selectedSourceFieldIndices, centerSourceIndex);
         if (ReferenceEquals(fieldRegistry, _allFields))
         {
             ApplyPersistedGridLayoutForRegistry(dlg.ConfigFieldsGrid, dlg.FieldHeaderRegistry, ConfigFieldsGridLayoutKey);
@@ -1367,7 +1713,6 @@ public partial class MainWindow : Window
             PersistGridLayoutFromCurrentGrid(dlg.ConfigGeneralSettingsGrid, ConfigGeneralGridLayoutKey, dlg.GeneralFieldHeaderRegistry);
         };
         dlg.FieldHeaderMenuHandler = (g, registry, ev) => OnFieldHeaderRightClick(g, registry, ev);
-        grid.ClearCellSelection();
         dlg.ShowDialog();
     }
 
@@ -1664,6 +2009,32 @@ public partial class MainWindow : Window
                 })
                 .ToList();
         }
+        foreach (var stability in layout.StabilityFields)
+        {
+            if (stability.SourceFieldIndex < 0 || stability.SourceFieldIndex >= _allFields.Count)
+            {
+                continue;
+            }
+
+            if (_allFields[stability.SourceFieldIndex] is not IStabilityFieldLayoutTarget target)
+            {
+                continue;
+            }
+
+            target.Label = stability.Label ?? string.Empty;
+            target.Series = stability.Series
+                .Select(s => new StabilitySeriesConfiguration
+                {
+                    SourceFieldIndex = s.SourceFieldIndex,
+                    Enabled = s.Enabled,
+                    ShowSdLines = s.ShowSdLines,
+                    ShowLine = s.ShowLine,
+                    ShowMarker = s.ShowMarker,
+                    Color = s.Color ?? string.Empty,
+                    AxisSide = s.AxisSide
+                })
+                .ToList();
+        }
         var records = FieldMetadataBuilder.BuildRecordsFromGrid(grid, _allFields);
         ApplyPersistedRecordMetadata(records);
         var byIndex = layout.Fields.ToDictionary(c => c.SourceFieldIndex);
@@ -1804,6 +2175,31 @@ public partial class MainWindow : Window
                                 AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
                                 AddLineBreakAfter = s.AddLineBreakAfter,
                                 WordWrap = s.WordWrap
+                            })
+                            .ToList()
+                    };
+                })
+                .ToList(),
+            StabilityFields = _allFields
+                .Select((field, index) => (field, index))
+                .Where(static x => x.field is IStabilityFieldLayoutTarget)
+                .Select(x =>
+                {
+                    var s = (IStabilityFieldLayoutTarget)x.field;
+                    return new StabilityFieldConfiguration
+                    {
+                        SourceFieldIndex = x.index,
+                        Label = s.Label ?? string.Empty,
+                        Series = s.Series
+                            .Select(item => new StabilitySeriesConfiguration
+                            {
+                                SourceFieldIndex = item.SourceFieldIndex,
+                                Enabled = item.Enabled,
+                                ShowSdLines = item.ShowSdLines,
+                                ShowLine = item.ShowLine,
+                                ShowMarker = item.ShowMarker,
+                                Color = item.Color ?? string.Empty,
+                                AxisSide = item.AxisSide
                             })
                             .ToList()
                     };
@@ -2460,7 +2856,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private static void ApplyPlotLayout(IPlotFieldLayoutTarget target, PlotFieldDialogResult settings)
+    private static void ApplyPlotLayout(IPlotFieldLayoutTarget target, GriddoTest.PlotHosting.PlotFieldDialogResult settings)
     {
         target.TitleSelection = settings.TitleSelection ?? string.Empty;
         target.ShowTitle = settings.ShowTitle;
@@ -2510,6 +2906,23 @@ public partial class MainWindow : Window
             .ToList();
     }
 
+    private static void ApplyStabilityLayout(IStabilityFieldLayoutTarget target, StabilityFieldConfiguration settings)
+    {
+        target.Label = settings.Label ?? string.Empty;
+        target.Series = settings.Series
+            .Select(s => new StabilitySeriesConfiguration
+            {
+                SourceFieldIndex = s.SourceFieldIndex,
+                Enabled = s.Enabled,
+                ShowSdLines = s.ShowSdLines,
+                ShowLine = s.ShowLine,
+                ShowMarker = s.ShowMarker,
+                Color = s.Color ?? string.Empty,
+                AxisSide = s.AxisSide
+            })
+            .ToList();
+    }
+
     /// <summary>WPF path markup samples—triangle, circle, diamond, rect, hexagon, heart-ish, wave, etc.</summary>
     private static readonly string[] PathMarkupVariants =
     [
@@ -2549,12 +2962,41 @@ public sealed class PrimaryDemoSource
     public string ReviewStatusKey { get; set; } = string.Empty;
     public string ReviewStatusDisplay { get; set; } = string.Empty;
     public bool Active { get; set; }
+    public DemoSampleState SampleState { get; set; } = DemoSampleState.Pending;
+    public DemoSampleFlags SampleFlags { get; set; } = DemoSampleFlags.None;
     public string HtmlSnippet { get; set; } = string.Empty;
     public Geometry Graphic { get; set; } = Geometry.Empty;
+}
+
+public enum DemoSampleState
+{
+    [GriddoEnumColor("LightGray")]
+    Pending = 0,
+    [GriddoEnumColor("#FFDBF7E3")]
+    Accepted = 1,
+    [GriddoEnumColor("#FFFFE7A5")]
+    NeedsReview = 2,
+    [GriddoEnumColor("#FFFFD6D6")]
+    Rejected = 3
+}
+
+[Flags]
+public enum DemoSampleFlags
+{
+    None = 0,
+    [GriddoEnumColor("#FFFAD2D2")]
+    Outlier = 1 << 0,
+    [GriddoEnumColor("#FFD7EAFB")]
+    Duplicate = 1 << 1,
+    [GriddoEnumColor("#FFFCE1B7")]
+    BelowLoq = 1 << 2,
+    [GriddoEnumColor("#FFE6D8FB")]
+    ManualReview = 1 << 3
 }
 
 public sealed class AnalyticsDemoSource
 {
     public double Score { get; set; }
+    public double ScoreB { get; set; }
     public int PlottoSeed { get; set; }
 }

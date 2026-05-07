@@ -1,21 +1,17 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <RootNamespace>GriddoTest</RootNamespace>
-    <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.19041</TargetFramework>
-    <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
     <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Plotto\Plotto.csproj" />
     <ProjectReference Include="..\Griddo\Griddo.csproj" />
-    <ProjectReference Include="..\GriddoUi\GriddoUi.csproj" />
+    <ProjectReference Include="..\Plotto\Plotto.csproj" />
     <ProjectReference Include="..\GriddoModelView\GriddoModelView.csproj" />
-    <ProjectReference Include="..\Griddo.Hosting\Griddo.Hosting.csproj" />
   </ItemGroup>
 
 </Project>

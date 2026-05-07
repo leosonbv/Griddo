@@ -4,8 +4,9 @@ using System.Windows;
 using System.Windows.Controls;
 using Griddo.Fields;
 using Griddo.Editing;
-using GriddoModelView;
-using GriddoTest.HtmlHosting;
+using Griddo.Hosting.Configuration;
+using Griddo.Hosting.Html;
+using Griddo.Hosting.Plot;
 
 namespace GriddoTest.PlotHosting;
 

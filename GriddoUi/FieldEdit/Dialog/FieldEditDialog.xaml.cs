@@ -7,14 +7,19 @@ using System.Windows.Media;
 using Griddo.Fields;
 using Griddo.Editing;
 using Griddo.Grid;
+using Griddo.Primitives;
+using GriddoUi.FieldEdit.Models;
+using GriddoUi.FieldEdit.Support;
 using WpfColorFontDialog;
 
-namespace GriddoUi.FieldEdit;
+namespace GriddoUi.FieldEdit.Dialog;
 
 public partial class FieldConfigurator : Window
 {
     private readonly List<IGriddoFieldView> _fieldHeaderRegistry = [];
     private readonly List<IGriddoFieldView> _generalFieldHeaderRegistry = [];
+    private readonly List<int> _initialSelectedSourceFieldIndices = [];
+    private int _initialCenterSourceFieldIndex = -1;
     private int _fontFieldIndex = -1;
     private int _backColorFieldIndex = -1;
     private int _valueFieldIndex = -1;
@@ -59,6 +64,53 @@ public partial class FieldConfigurator : Window
             FieldGrid.FieldHeaderRightClick -= FieldGrid_FieldHeaderRightClick;
             GeneralPropertyGrid.FieldHeaderRightClick -= GeneralPropertyGrid_FieldHeaderRightClick;
         };
+        Loaded += (_, _) => ApplyInitialSourceFieldSelection();
+    }
+
+    public void SetInitialSourceFieldSelection(IReadOnlyList<int> selectedSourceFieldIndices, int centerSourceFieldIndex)
+    {
+        _initialSelectedSourceFieldIndices.Clear();
+        _initialSelectedSourceFieldIndices.AddRange(
+            selectedSourceFieldIndices
+                .Where(i => i >= 0)
+                .Distinct()
+                .OrderBy(i => i));
+        _initialCenterSourceFieldIndex = centerSourceFieldIndex;
+    }
+
+    private void ApplyInitialSourceFieldSelection()
+    {
+        if (_initialSelectedSourceFieldIndices.Count == 0)
+        {
+            return;
+        }
+
+        var bySourceField = FieldGrid.Records
+            .OfType<FieldEditRecord>()
+            .Select((record, index) => (record, index))
+            .ToDictionary(x => x.record.SourceFieldIndex, x => x.index);
+        var selectedRecordIndices = _initialSelectedSourceFieldIndices
+            .Where(bySourceField.ContainsKey)
+            .Select(source => bySourceField[source])
+            .Distinct()
+            .OrderBy(i => i)
+            .ToList();
+        if (selectedRecordIndices.Count == 0)
+        {
+            return;
+        }
+
+        FieldGrid.ClearCellSelection();
+        for (var i = 0; i < selectedRecordIndices.Count; i++)
+        {
+            FieldGrid.SelectEntireRecord(selectedRecordIndices[i], additive: i > 0);
+        }
+
+        var centerRecordIndex = bySourceField.TryGetValue(_initialCenterSourceFieldIndex, out var preferred)
+            ? preferred
+            : selectedRecordIndices[0];
+        FieldGrid.SelectEntireRecord(centerRecordIndex, additive: true);
+        FieldGrid.CenterCellInViewport(new GriddoCellAddress(centerRecordIndex, 0));
     }
 
     private void BuildGeneralPropertyGrid(FieldChooserGeneralOptions options, int frozenFields, int frozenRecords)

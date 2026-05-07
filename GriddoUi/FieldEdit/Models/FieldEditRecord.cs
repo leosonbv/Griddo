@@ -1,6 +1,7 @@
-namespace GriddoUi.FieldEdit;
+namespace GriddoUi.FieldEdit.Models;
 
 using Griddo.Fields;
+using GriddoUi.FieldEdit.Dialog;
 
 /// <summary>One editable record in <see cref="FieldConfigurator"/> (maps to a property on the data shape).</summary>
 public sealed class FieldEditRecord
@@ -32,6 +33,8 @@ public sealed class FieldEditRecord
     public string BackgroundColor { get; set; } = string.Empty;
     public bool IsNumericProperty { get; init; }
     public bool IsDateTimeProperty { get; init; }
+    public bool IsEnumProperty { get; init; }
+    public bool IsFlagsEnumProperty { get; init; }
     public int SortPriority { get; set; }
     public bool SortAscending { get; set; } = true;
 
@@ -61,6 +64,8 @@ public sealed class FieldEditRecord
         BackgroundColor = BackgroundColor,
         IsNumericProperty = IsNumericProperty,
         IsDateTimeProperty = IsDateTimeProperty,
+        IsEnumProperty = IsEnumProperty,
+        IsFlagsEnumProperty = IsFlagsEnumProperty,
         SortPriority = SortPriority,
         SortAscending = SortAscending,
         SampleDisplay = SampleDisplay,

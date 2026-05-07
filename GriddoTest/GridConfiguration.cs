@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Griddo.Hosting.Configuration;
 
 namespace GriddoModelView
 {
@@ -25,5 +26,6 @@ namespace GriddoModelView
         public List<FieldConfiguration> Fields { get; set; } = new();
         public List<PlotFieldConfiguration> PlotFields { get; set; } = new();
         public List<HtmlFieldConfiguration> HtmlFields { get; set; } = new();
+        public List<StabilityFieldConfiguration> StabilityFields { get; set; } = new();
     }
 }

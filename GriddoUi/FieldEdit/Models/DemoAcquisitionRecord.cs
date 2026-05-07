@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
-namespace GriddoUi.FieldEdit;
+namespace GriddoUi.FieldEdit.Models;
 
 /// <summary>Sample record type for the field chooser demo (metadata via data annotations).</summary>
 public sealed class DemoAcquisitionRecord

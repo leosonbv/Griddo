@@ -54,6 +54,15 @@ public interface IGriddoFieldColorView
     string BackgroundColor { get; set; }
 }
 
+/// <summary>
+/// Optional per-record color override for fields that derive colors from data values.
+/// </summary>
+public interface IGriddoDynamicFieldColorView
+{
+    string GetForegroundColor(object recordSource);
+    string GetBackgroundColor(object recordSource);
+}
+
 public interface IGriddoSizedImageValue
 {
     ImageSource GetImage(Size size);

@@ -1,4 +1,4 @@
-namespace GriddoUi.FieldEdit;
+namespace GriddoUi.FieldEdit.Models;
 
 public sealed class FieldChooserGeneralOptions
 {

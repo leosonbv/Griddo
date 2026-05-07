@@ -233,6 +233,8 @@ public sealed partial class Griddo
     private double MeasureAutoWidthForField(int fieldIndex, IReadOnlyCollection<int> sampledRecords)
     {
         var field = Fields[fieldIndex];
+        const double HtmlAutoWidthMaxDip = 420d;
+        const double HtmlAutoHeightMaxDip = 220d;
         if (field is IGriddoHostedFieldView)
         {
             return Math.Max(MinFieldWidth * ContentScale, GetFieldWidth(fieldIndex));
@@ -265,7 +267,7 @@ public sealed partial class Griddo
                     var renderedH = GriddoValuePainter.MeasureRenderedHeight(raw, typeface, fontSize, treatAsHtml: true);
                     if (renderedH > 0)
                     {
-                        maxH = Math.Max(maxH, renderedH + pad);
+                        maxH = Math.Max(maxH, Math.Min(renderedH, HtmlAutoHeightMaxDip * ContentScale) + pad);
                     }
 
                     continue;
@@ -299,10 +301,11 @@ public sealed partial class Griddo
 
             if (field.IsHtml)
             {
-                var renderedWidth = GriddoValuePainter.MeasureRenderedWidth(raw, typeface, fontSize, treatAsHtml: true);
-                if (renderedWidth > 0)
+                var previewWidth = MeasureHtmlAutoWidth(raw, typeface, fontSize);
+                if (previewWidth > 0)
                 {
-                    max = Math.Max(max, renderedWidth + pad);
+                    // Use compact plain-text preview width for HTML fields.
+                    max = Math.Max(max, Math.Min(previewWidth, HtmlAutoWidthMaxDip * ContentScale) + pad);
                 }
 
                 continue;
@@ -318,5 +321,85 @@ public sealed partial class Griddo
         }
 
         return max;
+    }
+
+    private static double MeasureHtmlAutoWidth(object? raw, Typeface typeface, double fontSize)
+    {
+        var html = raw?.ToString() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            return 0;
+        }
+
+        var text = ExtractHtmlPreviewText(html);
+        if (text.Length == 0)
+        {
+            return 0;
+        }
+
+        const int maxCharsPerLine = 42;
+        var max = 0d;
+        var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var line in lines)
+        {
+            var compact = string.Join(' ', line.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            if (compact.Length == 0)
+            {
+                continue;
+            }
+
+            var sample = compact.Length > maxCharsPerLine
+                ? compact[..maxCharsPerLine] + "..."
+                : compact;
+            max = Math.Max(max, MeasureTextWidth(sample, typeface, fontSize));
+        }
+
+        return max;
+    }
+
+    private static string ExtractHtmlPreviewText(string html)
+    {
+        var withBreaks = html
+            .Replace("<br>", "\n", StringComparison.OrdinalIgnoreCase)
+            .Replace("<br/>", "\n", StringComparison.OrdinalIgnoreCase)
+            .Replace("<br />", "\n", StringComparison.OrdinalIgnoreCase)
+            .Replace("</tr>", "\n", StringComparison.OrdinalIgnoreCase)
+            .Replace("</p>", "\n", StringComparison.OrdinalIgnoreCase)
+            .Replace("</div>", "\n", StringComparison.OrdinalIgnoreCase)
+            .Replace("</li>", "\n", StringComparison.OrdinalIgnoreCase)
+            .Replace("</td>", " ", StringComparison.OrdinalIgnoreCase)
+            .Replace("</th>", " ", StringComparison.OrdinalIgnoreCase);
+
+        var chars = new List<char>(withBreaks.Length);
+        var insideTag = false;
+        foreach (var ch in withBreaks)
+        {
+            if (ch == '<')
+            {
+                insideTag = true;
+                continue;
+            }
+
+            if (ch == '>')
+            {
+                insideTag = false;
+                continue;
+            }
+
+            if (!insideTag)
+            {
+                chars.Add(ch);
+            }
+        }
+
+        var plain = new string(chars.ToArray());
+        return plain
+            .Replace("&nbsp;", " ", StringComparison.OrdinalIgnoreCase)
+            .Replace("&lt;", "<", StringComparison.OrdinalIgnoreCase)
+            .Replace("&gt;", ">", StringComparison.OrdinalIgnoreCase)
+            .Replace("&amp;", "&", StringComparison.OrdinalIgnoreCase)
+            .Replace("&quot;", "\"", StringComparison.OrdinalIgnoreCase)
+            .Replace("&#39;", "'", StringComparison.OrdinalIgnoreCase)
+            .Trim();
     }
 }

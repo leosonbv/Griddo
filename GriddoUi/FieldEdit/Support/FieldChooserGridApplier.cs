@@ -2,8 +2,10 @@ using System.Collections.Generic;
 using System.Linq;
 using Griddo.Fields;
 using Griddo.Grid;
+using GriddoUi.FieldEdit.Dialog;
+using GriddoUi.FieldEdit.Models;
 
-namespace GriddoUi.FieldEdit;
+namespace GriddoUi.FieldEdit.Support;
 
 /// <summary>Applies <see cref="FieldConfigurator"/> results to a live <see cref="Griddo"/>.</summary>
 public static class FieldChooserGridApplier

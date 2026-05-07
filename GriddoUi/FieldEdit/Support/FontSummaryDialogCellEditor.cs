@@ -1,6 +1,6 @@
 using Griddo.Editing;
 
-namespace GriddoUi.FieldEdit;
+namespace GriddoUi.FieldEdit.Support;
 
 /// <summary>Dialog "..." button with free text (like <see cref="GriddoTextCellEditor"/>), but empty commit clears instead of sending the launch token.</summary>
 public sealed class FontSummaryDialogCellEditor : IGriddoDialogButtonCellEditor

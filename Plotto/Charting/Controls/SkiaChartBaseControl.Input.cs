@@ -284,6 +284,16 @@ public abstract partial class SkiaChartBaseControl
     {
     }
 
+    /// <summary>
+    /// Right-button double-click zoom behavior. Subclasses can override for chart-specific zoom-out.
+    /// Default fits viewport to all data.
+    /// </summary>
+    protected virtual void OnDoubleRightClickZoomOut(Point logicalPosition)
+    {
+        _ = logicalPosition;
+        FitViewportToAllData();
+    }
+
     // -------------------------------------------------------------------------
     // Mouse — helpers
     // -------------------------------------------------------------------------
@@ -303,7 +313,7 @@ public abstract partial class SkiaChartBaseControl
         }
 
         Focus();
-        FitViewportToAllData();
+        OnDoubleRightClickZoomOut(e.GetPosition(this));
         _rightZoomRubberPending = false;
         _isRightDragZoom = false;
         _isDragging = false;

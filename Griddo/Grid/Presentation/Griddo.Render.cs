@@ -21,7 +21,7 @@ public sealed partial class Griddo
         DrawScrollBarCorner(dc);
     }
 
-    private void DrawFieldHeader(DrawingContext dc, int col, double x, Typeface typeface)
+    private void DrawFieldHeader(DrawingContext dc, int col, double x, Typeface typeface, Rect? clipRect = null)
     {
         var width = GetFieldWidth(col);
         var rect = new Rect(x, 0, width, ScaledFieldHeaderHeight);
@@ -47,11 +47,17 @@ public sealed partial class Griddo
             1.0);
         headerText.SetFontWeight(FontWeights.Bold);
         headerText.TextAlignment = TextAlignment.Center;
-        headerText.MaxTextWidth = Math.Max(1, rect.Width - 8);
-        headerText.MaxTextHeight = Math.Max(1, rect.Height - 4);
+        var visibleRect = clipRect.HasValue ? Rect.Intersect(rect, clipRect.Value) : rect;
+        if (visibleRect.IsEmpty)
+        {
+            return;
+        }
+
+        headerText.MaxTextWidth = Math.Max(1, visibleRect.Width - 8);
+        headerText.MaxTextHeight = Math.Max(1, visibleRect.Height - 4);
         headerText.Trimming = TextTrimming.CharacterEllipsis;
-        var headerY = rect.Y + Math.Max(0, (rect.Height - headerText.Height) / 2);
-        dc.DrawText(headerText, new Point(rect.X + 4, headerY));
+        var headerY = visibleRect.Y + Math.Max(0, (visibleRect.Height - headerText.Height) / 2);
+        dc.DrawText(headerText, new Point(visibleRect.X + 4, headerY));
         DrawSortHeaderIndicator(dc, col, rect, typeface);
 
         if (_fixedFieldCount > 0 && col == _fixedFieldCount - 1)
@@ -144,7 +150,7 @@ public sealed partial class Griddo
 
         var cellView = ResolveCellPropertyView(recordData, col);
         var isHostedCellEditing = IsHostedCellInEditMode(address);
-        if ((!isMergedBandCellEarly || isMergedRenderCarrier) && TryGetFieldBackgroundBrush(col, cellView, out var fieldBackgroundBrush))
+        if ((!isMergedBandCellEarly || isMergedRenderCarrier) && TryGetFieldBackgroundBrush(col, recordData, cellView, out var fieldBackgroundBrush))
         {
             dc.DrawRectangle(fieldBackgroundBrush, null, mergedPaintRectEarly);
         }
@@ -244,7 +250,7 @@ public sealed partial class Griddo
 
         var fieldTypeface = ResolveFieldTypeface(col, typeface, cellView);
         var fieldFontSize = ResolveFieldFontSize(col, cellView);
-        var foregroundBrush = ResolveFieldForegroundBrush(col, cellView);
+        var foregroundBrush = ResolveFieldForegroundBrush(col, recordData, cellView);
         var underline = HasUnderlineStyle(col, cellView);
         var noWrap = HasNoWrapStyle(col, cellView);
 
@@ -379,7 +385,7 @@ public sealed partial class Griddo
         return EffectiveFontSize;
     }
 
-    private Brush ResolveFieldForegroundBrush(int col, GriddoCellPropertyView? cellView)
+    private Brush ResolveFieldForegroundBrush(int col, object recordData, GriddoCellPropertyView? cellView)
     {
         if (col < 0 || col >= Fields.Count)
         {
@@ -392,6 +398,12 @@ public sealed partial class Griddo
             return overrideBrush;
         }
 
+        if (Fields[col] is IGriddoDynamicFieldColorView dynamicColorView
+            && TryParseBrush(dynamicColorView.GetForegroundColor(recordData), out var dynamicBrush))
+        {
+            return dynamicBrush;
+        }
+
         if (Fields[col] is IGriddoFieldColorView colorView
             && TryParseBrush(colorView.ForegroundColor, out var brush))
         {
@@ -401,7 +413,7 @@ public sealed partial class Griddo
         return Brushes.Black;
     }
 
-    private bool TryGetFieldBackgroundBrush(int col, GriddoCellPropertyView? cellView, out Brush brush)
+    private bool TryGetFieldBackgroundBrush(int col, object recordData, GriddoCellPropertyView? cellView, out Brush brush)
     {
         brush = Brushes.Transparent;
         if (col < 0 || col >= Fields.Count)
@@ -413,6 +425,13 @@ public sealed partial class Griddo
             && TryParseBrush(cellView.BackgroundColor, out var overrideBrush))
         {
             brush = overrideBrush;
+            return true;
+        }
+
+        if (Fields[col] is IGriddoDynamicFieldColorView dynamicColorView
+            && TryParseBrush(dynamicColorView.GetBackgroundColor(recordData), out var dynamicBrush))
+        {
+            brush = dynamicBrush;
             return true;
         }
 
@@ -545,7 +564,7 @@ public sealed partial class Griddo
             {
                 for (var col = sCol; col <= eCol; col++)
                 {
-                    DrawFieldHeader(dc, col, x, typeface);
+                    DrawFieldHeader(dc, col, x, typeface, scrollClip);
                     x += GetFieldWidth(col);
                 }
             }
@@ -561,7 +580,7 @@ public sealed partial class Griddo
             var fx = _recordHeaderWidth;
             for (var col = 0; col < _fixedFieldCount; col++)
             {
-                DrawFieldHeader(dc, col, fx, typeface);
+                DrawFieldHeader(dc, col, fx, typeface, fixedClip);
                 fx += GetFieldWidth(col);
             }
 
@@ -685,7 +704,7 @@ public sealed partial class Griddo
         var fixedColsClipH = Math.Min(fixedColsH, bodyH);
         var scrollColHeadersH = Math.Max(0, bodyH - fixedColsH);
 
-        void DrawFieldHeaderCell(int col)
+        void DrawFieldHeaderCell(int col, Rect clipRect)
         {
             var rr = GetFieldHeaderRect(col);
             var headerBackground = (IsFieldHeaderMarkedSelected(col) && ShowFieldHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
@@ -706,11 +725,17 @@ public sealed partial class Griddo
                 1.0);
             headerText.SetFontWeight(FontWeights.Bold);
             headerText.TextAlignment = TextAlignment.Center;
-            headerText.MaxTextWidth = Math.Max(1, rr.Width - 8);
-            headerText.MaxTextHeight = Math.Max(1, rr.Height - 8);
+            var visibleRect = Rect.Intersect(rr, clipRect);
+            if (visibleRect.IsEmpty)
+            {
+                return;
+            }
+
+            headerText.MaxTextWidth = Math.Max(1, visibleRect.Width - 8);
+            headerText.MaxTextHeight = Math.Max(1, visibleRect.Height - 8);
             headerText.Trimming = TextTrimming.CharacterEllipsis;
-            var tx = rr.X + 4;
-            var ty = rr.Y + Math.Max(0, (rr.Height - headerText.Height) / 2);
+            var tx = visibleRect.X + 4;
+            var ty = visibleRect.Y + Math.Max(0, (visibleRect.Height - headerText.Height) / 2);
             dc.DrawText(headerText, new Point(tx, ty));
             DrawSortHeaderIndicator(dc, col, rr, typeface);
         }
@@ -722,7 +747,7 @@ public sealed partial class Griddo
             dc.PushClip(new RectangleGeometry(clipFixed));
             for (var col = 0; col < fCols && col < Fields.Count; col++)
             {
-                DrawFieldHeaderCell(col);
+                DrawFieldHeaderCell(col, clipFixed);
             }
 
             dc.Pop();
@@ -739,7 +764,7 @@ public sealed partial class Griddo
                     return;
                 }
 
-                DrawFieldHeaderCell(col);
+                DrawFieldHeaderCell(col, clipScroll);
             });
             dc.Pop();
         }

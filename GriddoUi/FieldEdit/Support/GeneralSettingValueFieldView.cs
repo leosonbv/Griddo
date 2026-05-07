@@ -2,8 +2,9 @@ using System.Globalization;
 using System.Windows;
 using Griddo.Fields;
 using Griddo.Editing;
+using GriddoUi.FieldEdit.Models;
 
-namespace GriddoUi.FieldEdit;
+namespace GriddoUi.FieldEdit.Support;
 
 /// <summary>Value field for <see cref="GeneralSettingRecord"/> records: unsigned int or bool (checkbox when bool).</summary>
 public sealed class GeneralSettingValueFieldView : IGriddoFieldView, IGriddoCheckboxToggleFieldView, IGriddoFieldDescriptionView

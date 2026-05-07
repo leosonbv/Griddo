@@ -150,7 +150,7 @@ public sealed partial class Griddo
         return field.FormatValue(value) ?? string.Empty;
     }
 
-    private void CenterCellInViewport(GriddoCellAddress cell)
+    public void CenterCellInViewport(GriddoCellAddress cell)
     {
         if (!cell.IsValid || Records.Count == 0 || Fields.Count == 0 || _viewportBodyWidth <= 0 || _viewportBodyHeight <= 0)
         {
