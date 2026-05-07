@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Windows;
 using System.Windows.Media;
@@ -49,13 +50,23 @@ public static class GriddoValuePainter
         var text = value?.ToString() ?? string.Empty;
         if (treatAsHtml || (autoDetectHtml && LooksLikeHtml(text)))
         {
-            if (LooksLikeHtmlTable(text))
+            drawingContext.PushClip(new RectangleGeometry(bounds));
+            try
             {
-                DrawHtmlTable(drawingContext, text, bounds, typeface, fontSize, foregroundBrush, verticalAlignment, noWrap, renderHtmlBackground);
-                return;
+                if (LooksLikeHtmlTable(text))
+                {
+                    DrawHtmlTable(drawingContext, text, bounds, typeface, fontSize, foregroundBrush, verticalAlignment, noWrap, renderHtmlBackground);
+                }
+                else
+                {
+                    DrawHtmlText(drawingContext, text, bounds, typeface, fontSize, foregroundBrush, alignment, verticalAlignment, noWrap, renderHtmlBackground);
+                }
+            }
+            finally
+            {
+                drawingContext.Pop();
             }
 
-            DrawHtmlText(drawingContext, text, bounds, typeface, fontSize, foregroundBrush, alignment, verticalAlignment, noWrap, renderHtmlBackground);
             return;
         }
 
@@ -290,34 +301,6 @@ public static class GriddoValuePainter
     private static bool LooksLikeHtmlTable(string value)
         => value.Contains("<table", StringComparison.OrdinalIgnoreCase);
 
-    private static string StripTags(string input)
-    {
-        var chars = new List<char>(input.Length);
-        var insideTag = false;
-
-        foreach (var ch in input)
-        {
-            if (ch == '<')
-            {
-                insideTag = true;
-                continue;
-            }
-
-            if (ch == '>')
-            {
-                insideTag = false;
-                continue;
-            }
-
-            if (!insideTag)
-            {
-                chars.Add(ch);
-            }
-        }
-
-        return new string(chars.ToArray()).Trim();
-    }
-
     private static void DrawHtmlText(
         DrawingContext drawingContext,
         string html,
@@ -330,10 +313,11 @@ public static class GriddoValuePainter
         bool noWrap = false,
         bool renderBackground = true)
     {
+        const double layoutMinSide = 512d;
+
         var formatted = BuildHtmlFormattedText(html, typeface, fontSize, foregroundBrush);
         if (formatted.Text.Length == 0)
         {
-            DrawTinyHtmlFallback(drawingContext, html, bounds, typeface, fontSize, foregroundBrush);
             return;
         }
 
@@ -350,34 +334,39 @@ public static class GriddoValuePainter
 
         const double padX = 4.0;
         const double padY = 2.0;
-        if (bounds.Width <= padX * 2 + 2 || bounds.Height <= padY * 2 + 2)
-        {
-            DrawTinyHtmlFallback(drawingContext, html, bounds, typeface, fontSize, foregroundBrush);
-            return;
-        }
-        // Fill cell width for wrapping; do not force full cell height—use natural height, then cap if needed.
-        formatted.MaxTextWidth = Math.Max(1, bounds.Width - padX * 2);
+        // Layout as if width/height were generous so typography is not shrunk/ellipsized solely because the rendered cell clip is narrow.
+        var layoutW = Math.Max(bounds.Width, layoutMinSide);
+        var layoutInnerW = layoutW - padX * 2;
+        formatted.MaxTextWidth = Math.Max(1, layoutInnerW);
         formatted.MaxLineCount = noWrap ? 1 : int.MaxValue;
 
-        var innerH = Math.Max(1, bounds.Height - padY * 2);
-        if (formatted.Height > innerH)
+        var innerAvailableH = bounds.Height - padY * 2;
+        if (innerAvailableH <= 1)
         {
-            formatted.MaxTextHeight = innerH;
-            formatted.Trimming = TextTrimming.CharacterEllipsis;
+            return;
         }
 
         double y;
-        switch (verticalAlignment)
+        if (formatted.Height <= innerAvailableH)
         {
-            case VerticalAlignment.Top:
-                y = bounds.Y + padY;
-                break;
-            case VerticalAlignment.Bottom:
-                y = bounds.Bottom - padY - formatted.Height;
-                break;
-            default:
-                y = bounds.Y + padY + Math.Max(0, (innerH - formatted.Height) / 2.0);
-                break;
+            switch (verticalAlignment)
+            {
+                case VerticalAlignment.Top:
+                    y = bounds.Y + padY;
+                    break;
+                case VerticalAlignment.Bottom:
+                    y = bounds.Bottom - padY - formatted.Height;
+                    break;
+                default:
+                    var innerHCenter = Math.Max(1, bounds.Height - padY * 2);
+                    y = bounds.Y + padY + Math.Max(0, (innerHCenter - formatted.Height) / 2.0);
+                    break;
+            }
+        }
+        else
+        {
+            // Overflow: preserve full intrinsic line layout; clipping shows top of content.
+            y = bounds.Y + padY;
         }
 
         drawingContext.DrawText(formatted, new Point(bounds.X + padX, y));
@@ -675,6 +664,7 @@ public static class GriddoValuePainter
         var fieldCount = records.Max(r => r.Count);
         if (fieldCount <= 0)
         {
+            DrawHtmlText(drawingContext, html, bounds, typeface, fontSize, foregroundBrush, TextAlignment.Left, VerticalAlignment.Center);
             return;
         }
 
@@ -683,14 +673,6 @@ public static class GriddoValuePainter
         const double cellPadY = 1.0;
         const double minColWidth = 28.0;
         var cellFont = Math.Max(4, fontSize - 1);
-
-        var availW = Math.Max(0, bounds.Width - tableMargin * 2);
-        var availH = Math.Max(0, bounds.Height - tableMargin * 2);
-        if (availW < 6 || availH < 6)
-        {
-            DrawTinyHtmlFallback(drawingContext, html, bounds, typeface, fontSize, foregroundBrush);
-            return;
-        }
 
         var colWidths = new double[fieldCount];
         for (var col = 0; col < fieldCount; col++)
@@ -715,19 +697,7 @@ public static class GriddoValuePainter
             colWidths[col] = Math.Max(minColWidth, maxIntrinsic + cellPadX * 2);
         }
 
-        var naturalTableWidth = colWidths.Sum();
-        if (naturalTableWidth > availW && naturalTableWidth > 0)
-        {
-            var sx = availW / naturalTableWidth;
-            for (var c = 0; c < fieldCount; c++)
-            {
-                colWidths[c] *= sx;
-            }
-
-        }
-
         var tableLeft = bounds.X + tableMargin;
-        var maxTableHeight = availH;
 
         var recordHeights = new double[records.Count];
         for (var record = 0; record < records.Count; record++)
@@ -755,28 +725,25 @@ public static class GriddoValuePainter
         }
 
         var naturalTotalHeight = recordHeights.Sum();
-        var yStart = bounds.Y + tableMargin;
-        if (naturalTotalHeight <= maxTableHeight)
+
+        var innerCellTop = bounds.Y + tableMargin;
+        var innerCellBottom = bounds.Bottom - tableMargin;
+        var innerCellHeight = innerCellBottom - innerCellTop;
+        var yStart = innerCellTop;
+        var fitsVertically = innerCellHeight > 2 && naturalTotalHeight <= innerCellHeight;
+        if (fitsVertically)
         {
-            var slack = maxTableHeight - naturalTotalHeight;
+            var slack = innerCellHeight - naturalTotalHeight;
             switch (verticalAlignment)
             {
                 case VerticalAlignment.Bottom:
-                    yStart += slack;
+                    yStart = innerCellTop + slack;
                     break;
                 case VerticalAlignment.Top:
                     break;
                 default:
-                    yStart += slack / 2.0;
+                    yStart = innerCellTop + slack / 2.0;
                     break;
-            }
-        }
-        else
-        {
-            var scale = maxTableHeight / naturalTotalHeight;
-            for (var i = 0; i < recordHeights.Length; i++)
-            {
-                recordHeights[i] *= scale;
             }
         }
 
@@ -807,9 +774,7 @@ public static class GriddoValuePainter
                 {
                     var formatted = BuildHtmlFormattedText(cellText, typeface, cellFont, foregroundBrush);
                     formatted.MaxTextWidth = Math.Max(1, innerRect.Width);
-                    formatted.MaxTextHeight = Math.Max(1, innerRect.Height);
                     formatted.MaxLineCount = noWrap ? 1 : int.MaxValue;
-                    formatted.Trimming = TextTrimming.CharacterEllipsis;
                     drawingContext.DrawText(formatted, new Point(innerRect.X, innerRect.Y));
                 }
                 else
@@ -823,9 +788,7 @@ public static class GriddoValuePainter
                         foregroundBrush,
                         1.0);
                     formatted.MaxTextWidth = Math.Max(1, innerRect.Width);
-                    formatted.MaxTextHeight = Math.Max(1, innerRect.Height);
                     formatted.MaxLineCount = noWrap ? 1 : int.MaxValue;
-                    formatted.Trimming = TextTrimming.CharacterEllipsis;
                     drawingContext.DrawText(formatted, new Point(innerRect.X, innerRect.Y));
                 }
                 cellX += cw;
@@ -833,65 +796,6 @@ public static class GriddoValuePainter
 
             currentY += recordH;
         }
-    }
-
-    private static void DrawTinyHtmlFallback(
-        DrawingContext drawingContext,
-        string html,
-        Rect bounds,
-        Typeface typeface,
-        double fontSize,
-        Brush foregroundBrush)
-    {
-        if (bounds.Width <= 0 || bounds.Height <= 0)
-        {
-            return;
-        }
-
-        var preview = ExtractHtmlPreview(html);
-        if (string.IsNullOrWhiteSpace(preview))
-        {
-            preview = "\u2026";
-        }
-
-        var formatted = new FormattedText(
-            preview,
-            CultureInfo.CurrentCulture,
-            FlowDirection.LeftToRight,
-            typeface,
-            Math.Max(4, fontSize - 1),
-            foregroundBrush,
-            1.0)
-        {
-            MaxTextWidth = Math.Max(1, bounds.Width - 2),
-            MaxTextHeight = Math.Max(1, bounds.Height - 1),
-            MaxLineCount = 1,
-            Trimming = TextTrimming.CharacterEllipsis
-        };
-
-        var y = bounds.Y + Math.Max(0, (bounds.Height - formatted.Height) / 2);
-        drawingContext.DrawText(formatted, new Point(bounds.X + 1, y));
-    }
-
-    private static string ExtractHtmlPreview(string html)
-    {
-        var runs = ParseHtmlRuns(html);
-        if (runs.Count == 0)
-        {
-            return string.Empty;
-        }
-
-        var sb = new StringBuilder();
-        foreach (var run in runs)
-        {
-            sb.Append(run.Text);
-            if (sb.Length >= 120)
-            {
-                break;
-            }
-        }
-
-        return sb.ToString().Trim();
     }
 
     private static List<List<string>> ParseHtmlTable(string html)
