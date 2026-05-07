@@ -6,6 +6,7 @@ using SkiaSharp.Views.WPF;
 using Plotto.Charting.Core;
 using Plotto.Charting.Geometry;
 using Plotto.Charting.Services;
+using Plotto.Charting.Viewport;
 
 namespace Plotto.Charting.Controls;
 
@@ -52,7 +53,7 @@ public abstract partial class SkiaChartBaseControl : SKElement
     /// <summary>Slightly above typical OS double-click time so the second click is recognized before the menu opens.</summary>
     private const int DeferredContextMenuDelayMs = 450;
 
-    private readonly ChartViewportWheelClamp _viewportWheelClamp = new();
+    private readonly SeriesViewportInteractionClamp _viewportWheelClamp = new();
 
     protected SkiaChartBaseControl()
     {

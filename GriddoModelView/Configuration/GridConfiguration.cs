@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace GriddoModelView;
+namespace GriddoModelView.Configuration;
 
 /// <summary>
 /// Volledige configuratie van één Griddo-tabel (lay-out, frozen kolommen, etc.)

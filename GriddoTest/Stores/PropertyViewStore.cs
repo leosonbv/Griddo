@@ -2,8 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using GriddoModelView;
 
-namespace GriddoModelView
+namespace GriddoTest.Stores
 {
     public sealed class PropertyViewStore
     {

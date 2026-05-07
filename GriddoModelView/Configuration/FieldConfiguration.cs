@@ -1,4 +1,4 @@
-namespace GriddoModelView;
+namespace GriddoModelView.Configuration;
 
 /// <summary>
 /// Configuratie van één kolom in een Griddo-tabel

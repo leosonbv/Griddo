@@ -6,9 +6,10 @@ using Griddo.Fields;
 using Griddo.Editing;
 using GriddoModelView;
 using GriddoUi.FieldEdit;
+using GriddoTest.PlotHosting;
 using WpfColorFontDialog;
 
-namespace GriddoTest;
+namespace GriddoTest.HtmlHosting;
 
 public partial class HtmlConfigurationDialog : Window
 {

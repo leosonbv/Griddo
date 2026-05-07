@@ -1,9 +1,9 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using GriddoModelView.Configuration;
 
-namespace GriddoModelView;
+namespace GriddoModelView.Stores;
 
 /// <summary>
 /// Eenvoudige JSON-store voor PropertyViewConfiguration (globale metadata)

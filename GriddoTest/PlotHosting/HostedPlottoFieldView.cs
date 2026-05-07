@@ -11,7 +11,7 @@ using Griddo.Fields;
 using Griddo.Editing;
 using GriddoModelView;
 
-namespace GriddoTest;
+namespace GriddoTest.PlotHosting;
 
 public sealed class HostedPlottoFieldView : IGriddoHostedFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldDescriptionView, IPlotFieldLayoutTarget
 {

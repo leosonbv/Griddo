@@ -1,16 +1,16 @@
 using Plotto.Charting.Core;
 
-namespace Plotto.Charting.Services;
+namespace Plotto.Charting.Viewport;
 
 /// <summary>
-/// Wheel / pan viewport limits derived from plot point extents (SRP: X clamp band + Y floor rule, no WPF).
+/// Wheel / pan viewport limits derived from plot point extents (X clamp band + Y rules).
 /// </summary>
-public sealed class ChartViewportWheelClamp
+public sealed class SeriesViewportInteractionClamp
 {
     private double _zoomClampXMin;
     private double _zoomClampXMax;
 
-    /// <summary>Refreshes the X-only outer zoom limits from current series (e.g. before applying a rubber-band zoom).</summary>
+    /// <summary>Refreshes the X-only outer zoom limits from current series (e.g. before rubber-band zoom).</summary>
     public void ResyncXClampFromPoints(IReadOnlyList<ChartPoint> points)
     {
         if (points.Count == 0)
@@ -45,8 +45,6 @@ public sealed class ChartViewportWheelClamp
         viewport.XMax = xmax + xMargin;
         viewport.YMin = ymin - yMargin;
         viewport.YMax = ymax + yMargin;
-        // Keep Y viewport non-negative when the series never goes below zero (e.g. intensity),
-        // so axis ticks are not mostly filtered out by non-negative label policy.
         if (ymin >= -1e-12)
         {
             viewport.YMin = Math.Max(0d, viewport.YMin);

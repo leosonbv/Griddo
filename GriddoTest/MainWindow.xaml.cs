@@ -13,6 +13,9 @@ using Plotto.Charting.Controls;
 using Plotto.Charting.Core;
 using GriddoUi.FieldEdit;
 using GriddoModelView;
+using GriddoTest.Stores;
+using GriddoTest.PlotHosting;
+using GriddoTest.HtmlHosting;
 
 namespace GriddoTest;
 

@@ -5,8 +5,9 @@ using System.Windows.Controls;
 using Griddo.Fields;
 using Griddo.Editing;
 using GriddoModelView;
+using GriddoTest.HtmlHosting;
 
-namespace GriddoTest;
+namespace GriddoTest.PlotHosting;
 
 public partial class PlotConfigurationDialog : Window
 {

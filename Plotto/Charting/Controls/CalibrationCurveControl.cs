@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
 using SkiaSharp;
+using Plotto.Charting.Axes;
 using Plotto.Charting.Core;
 using Plotto.Charting.Geometry;
 using Plotto.Charting.Rendering;
@@ -330,21 +331,21 @@ public class CalibrationCurveControl : SkiaChartBaseControl
             var minGap = 0f;
             var maxXTickCount = Math.Clamp((int)(plotRect.Width / Math.Max(10f * zs, axisFontHeight * 0.9f)), 2, 120);
             var bestXTickRequest = 2;
-            var xTicks = ChartAxisLabels.GetRoundedTicks(Viewport.XMin, Viewport.XMax, bestXTickRequest);
+            var xTicks = NiceAxisTickGrid.Generate(Viewport.XMin, Viewport.XMax, bestXTickRequest);
             for (var candidateTickCount = 3; candidateTickCount <= maxXTickCount; candidateTickCount++)
             {
-                var candidateTicks = ChartAxisLabels.GetRoundedTicks(Viewport.XMin, Viewport.XMax, candidateTickCount, out var candStep);
+                var candidateTicks = NiceAxisTickGrid.Generate(Viewport.XMin, Viewport.XMax, candidateTickCount, out var candStep);
                 var lastRight = float.NegativeInfinity;
                 var overlaps = false;
                 foreach (var candidateTick in candidateTicks)
                 {
-                    if (!ChartAxisLabels.ShouldDrawTickLabel(candidateTick))
+                    if (!NonNegativeAxisTickPolicy.AllowsLabel(candidateTick))
                     {
                         continue;
                     }
 
                     var x = ToPixelX(candidateTick, plotRect);
-                    var label = ChartAxisLabels.FormatRoundedTick(candidateTick, candStep, AxisLabelPrecisionX, null, AxisLabelFormatX);
+                    var label = AxisTickLabelFormatter.FormatSnappedToGrid(candidateTick, candStep, AxisLabelPrecisionX, null, AxisLabelFormatX);
                     var width = AxisFont.MeasureText(label);
                     var left = x - (width * 0.5f);
                     left = Math.Clamp(left, plotRect.Left, plotRect.Right - width);
@@ -366,18 +367,18 @@ public class CalibrationCurveControl : SkiaChartBaseControl
                 bestXTickRequest = candidateTickCount;
             }
 
-            xTicks = ChartAxisLabels.GetRoundedTicks(Viewport.XMin, Viewport.XMax, bestXTickRequest, out var xStep);
+            xTicks = NiceAxisTickGrid.Generate(Viewport.XMin, Viewport.XMax, bestXTickRequest, out var xStep);
             var lastLabelRight = float.NegativeInfinity;
             foreach (var tick in xTicks)
             {
-                if (!ChartAxisLabels.ShouldDrawTickLabel(tick))
+                if (!NonNegativeAxisTickPolicy.AllowsLabel(tick))
                 {
                     continue;
                 }
 
                 var x = ToPixelX(tick, plotRect);
                 canvas.DrawLine(x, plotRect.Bottom, x, plotRect.Bottom + xTickLength, AxisStrokePaint);
-                var label = ChartAxisLabels.FormatRoundedTick(tick, xStep, AxisLabelPrecisionX, null, AxisLabelFormatX);
+                var label = AxisTickLabelFormatter.FormatSnappedToGrid(tick, xStep, AxisLabelPrecisionX, null, AxisLabelFormatX);
                 var width = AxisFont.MeasureText(label);
                 var left = x - (width * 0.5f);
                 left = Math.Clamp(left, plotRect.Left, plotRect.Right - width);
@@ -397,15 +398,15 @@ public class CalibrationCurveControl : SkiaChartBaseControl
             var yMinGap = 3f * zs;
             var maxYTickCount = Math.Clamp((int)(plotRect.Height / Math.Max(10f * zs, axisFontHeight * 0.9f)), 2, 120);
             var bestYTickRequest = 2;
-            var yTicks = ChartAxisLabels.GetRoundedTicks(Viewport.YMin, Viewport.YMax, bestYTickRequest);
+            var yTicks = NiceAxisTickGrid.Generate(Viewport.YMin, Viewport.YMax, bestYTickRequest);
             for (var candidateTickCount = 3; candidateTickCount <= maxYTickCount; candidateTickCount++)
             {
-                var candidateTicks = ChartAxisLabels.GetRoundedTicks(Viewport.YMin, Viewport.YMax, candidateTickCount, out _);
+                var candidateTicks = NiceAxisTickGrid.Generate(Viewport.YMin, Viewport.YMax, candidateTickCount, out _);
                 var lastTopProbe = float.PositiveInfinity;
                 var overlaps = false;
                 foreach (var candidateTick in candidateTicks)
                 {
-                    if (!ChartAxisLabels.ShouldDrawTickLabel(candidateTick))
+                    if (!NonNegativeAxisTickPolicy.AllowsLabel(candidateTick))
                     {
                         continue;
                     }
@@ -432,11 +433,11 @@ public class CalibrationCurveControl : SkiaChartBaseControl
                 bestYTickRequest = candidateTickCount;
             }
 
-            yTicks = ChartAxisLabels.GetRoundedTicks(Viewport.YMin, Viewport.YMax, bestYTickRequest, out var yStep);
+            yTicks = NiceAxisTickGrid.Generate(Viewport.YMin, Viewport.YMax, bestYTickRequest, out var yStep);
             var lastLabelTop = float.PositiveInfinity;
             foreach (var tick in yTicks)
             {
-                if (!ChartAxisLabels.ShouldDrawTickLabel(tick))
+                if (!NonNegativeAxisTickPolicy.AllowsLabel(tick))
                 {
                     continue;
                 }
@@ -451,7 +452,7 @@ public class CalibrationCurveControl : SkiaChartBaseControl
                     continue;
                 }
 
-                var label = ChartAxisLabels.FormatRoundedTick(tick, yStep, AxisLabelPrecisionY, null, AxisLabelFormatY);
+                var label = AxisTickLabelFormatter.FormatSnappedToGrid(tick, yStep, AxisLabelPrecisionY, null, AxisLabelFormatY);
                 canvas.DrawText(label, yTickRight, baseline, SKTextAlign.Right, AxisFont, AxisLabelPaint);
                 lastLabelTop = top;
             }

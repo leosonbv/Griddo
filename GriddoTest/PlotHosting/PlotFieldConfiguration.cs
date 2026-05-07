@@ -27,8 +27,8 @@ namespace GriddoModelView
         public int YAxisLabelPrecision { get; set; }
         public string XAxisLabelFormat { get; set; } = string.Empty;
         public string YAxisLabelFormat { get; set; } = string.Empty;
-        public double AxisFontSize { get; set; } = 10d;
-        public double TitleFontSize { get; set; } = 11d;
+        public double AxisFontSize { get; set; } = 14d;
+        public double TitleFontSize { get; set; } = 14d;
         public bool ChromatogramShowPeaks { get; set; }
         public bool CalibrationShowRegression { get; set; }
         public bool SpectrumNormalizeIntensity { get; set; }

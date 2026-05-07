@@ -1,9 +1,7 @@
-using System;
-
-namespace GriddoModelView;
+namespace GriddoModelView.Configuration;
 
 /// <summary>
-/// Globale metadata voor hoe een property van een domeinmodel 
+/// Globale metadata voor hoe een property van een domeinmodel
 /// (bijv. HplcPeak.Concentration) weergegeven moet worden in Griddo.
 /// Voor consistente chemische quantificatie.
 /// </summary>

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using GriddoModelView;
 
-namespace GriddoTest;
+namespace GriddoTest.HtmlHosting;
 
 public interface IHtmlFieldLayoutTarget
 {
