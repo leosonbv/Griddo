@@ -508,18 +508,16 @@ public partial class FieldConfigurator : Window
         }
 
         var fc = record.IntValue;
-        if (fc < 0)
+        if (!GeneralSettingsValidationService.TryValidateFrozenFields(fc, FieldGrid.Records.Count, out frozenFields, out var error))
         {
             System.Windows.MessageBox.Show(
                 this,
-                "Frozen fields must be a non-negative integer.",
+                error,
                 Title,
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return false;
         }
-
-        frozenFields = Math.Min(fc, FieldGrid.Records.Count);
         return true;
     }
 
@@ -533,18 +531,16 @@ public partial class FieldConfigurator : Window
         }
 
         var fr = record.IntValue;
-        if (fr < 0)
+        if (!GeneralSettingsValidationService.TryValidateFrozenRecords(fr, out frozenRecords, out var error))
         {
             System.Windows.MessageBox.Show(
                 this,
-                "Frozen records must be a non-negative integer.",
+                error,
                 Title,
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return false;
         }
-
-        frozenRecords = fr;
         return true;
     }
 
@@ -558,18 +554,16 @@ public partial class FieldConfigurator : Window
         }
 
         var vr = record.IntValue;
-        if (vr < 0 || vr > 10)
+        if (!GeneralSettingsValidationService.TryValidateVisibleRecords(vr, out visibleRecords, out var error))
         {
             System.Windows.MessageBox.Show(
                 this,
-                "Visible records must be an integer between 0 and 10.",
+                error,
                 Title,
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return false;
         }
-
-        visibleRecords = vr;
         return true;
     }
 
@@ -583,20 +577,16 @@ public partial class FieldConfigurator : Window
         }
 
         var rh = record.IntValue;
-        var minRecordThickness = (int)Math.Ceiling(global::Griddo.Grid.Griddo.GetDefaultMinimumRecordThickness());
-        if (rh < minRecordThickness || rh > 400)
+        if (!GeneralSettingsValidationService.TryValidateRecordThickness(rh, IsGeneralLayoutTransposed(), out recordThickness, out var error))
         {
-            var axisLabel = IsGeneralLayoutTransposed() ? "width" : "height";
             System.Windows.MessageBox.Show(
                 this,
-                $"Record {axisLabel} must be an integer between {minRecordThickness} and 400.",
+                error,
                 Title,
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return false;
         }
-
-        recordThickness = rh;
         return true;
     }
 

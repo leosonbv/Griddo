@@ -11,6 +11,7 @@ public enum StabilityAxisSide
 public sealed class StabilitySeriesConfiguration
 {
     public int SourceFieldIndex { get; set; } = -1;
+    public string SourceFieldKey { get; set; } = string.Empty;
     public bool Enabled { get; set; }
     public bool ShowSdLines { get; set; } = true;
     public bool ShowLine { get; set; }
@@ -22,6 +23,7 @@ public sealed class StabilitySeriesConfiguration
 public sealed class StabilityFieldConfiguration
 {
     public int SourceFieldIndex { get; set; }
+    public string SourceFieldKey { get; set; } = string.Empty;
     public string Label { get; set; } = string.Empty;
     public List<StabilitySeriesConfiguration> Series { get; set; } = [];
 }

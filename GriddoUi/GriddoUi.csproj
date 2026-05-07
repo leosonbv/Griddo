@@ -10,7 +10,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Griddo.Abstractions\Griddo.Abstractions.csproj" />
     <ProjectReference Include="..\Griddo\Griddo.csproj" />
+    <ProjectReference Include="..\Griddo.Hosting\Griddo.Hosting.csproj" />
     <PackageReference Include="WpfColorFontDialog" Version="1.0.9" />
   </ItemGroup>
 

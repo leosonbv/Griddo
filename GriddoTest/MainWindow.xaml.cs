@@ -20,9 +20,10 @@ using Plotto.Charting.Core;
 using GriddoUi.FieldEdit.Dialog;
 using GriddoUi.FieldEdit.Models;
 using GriddoUi.FieldEdit.Support;
+using GriddoUi.Hosting.Html;
+using GriddoUi.Hosting.Plot;
+using GriddoUi.Hosting.Stability;
 using GriddoModelView;
-using GriddoTest.StabilityHosting;
-using GriddoTest.Stores;
 using GriddoTest.Stability;
 using System.Text;
 
@@ -181,7 +182,7 @@ public partial class MainWindow : Window
             plotSettingsItem.Click += (_, _) =>
             {
                 var seed = selectedPlotTargets[0];
-                var dialog = new GriddoTest.PlotHosting.PlotConfigurationDialog(
+                var dialog = new PlotConfigurationDialog(
                     seed,
                     _allFields,
                     previewApply: result =>
@@ -217,7 +218,7 @@ public partial class MainWindow : Window
             htmlSettingsItem.Click += (_, _) =>
             {
                 var seed = selectedHtmlTargets[0];
-                var dialog = new GriddoTest.HtmlHosting.HtmlConfigurationDialog(
+                var dialog = new HtmlConfigurationDialog(
                     seed,
                     _allFields,
                     previewApply: result =>
@@ -1941,12 +1942,13 @@ public partial class MainWindow : Window
 
         foreach (var plot in layout.PlotFields)
         {
-            if (plot.SourceFieldIndex < 0 || plot.SourceFieldIndex >= _allFields.Count)
+            var targetIndex = ResolveSourceFieldIndex(plot.SourceFieldKey, plot.SourceFieldIndex);
+            if (targetIndex < 0 || targetIndex >= _allFields.Count)
             {
                 continue;
             }
 
-            if (_allFields[plot.SourceFieldIndex] is not IPlotFieldLayoutTarget target)
+            if (_allFields[targetIndex] is not IPlotFieldLayoutTarget target)
             {
                 continue;
             }
@@ -1984,12 +1986,13 @@ public partial class MainWindow : Window
         }
         foreach (var html in layout.HtmlFields)
         {
-            if (html.SourceFieldIndex < 0 || html.SourceFieldIndex >= _allFields.Count)
+            var targetIndex = ResolveSourceFieldIndex(html.SourceFieldKey, html.SourceFieldIndex);
+            if (targetIndex < 0 || targetIndex >= _allFields.Count)
             {
                 continue;
             }
 
-            if (_allFields[html.SourceFieldIndex] is not IHtmlFieldLayoutTarget target)
+            if (_allFields[targetIndex] is not IHtmlFieldLayoutTarget target)
             {
                 continue;
             }
@@ -2011,12 +2014,13 @@ public partial class MainWindow : Window
         }
         foreach (var stability in layout.StabilityFields)
         {
-            if (stability.SourceFieldIndex < 0 || stability.SourceFieldIndex >= _allFields.Count)
+            var targetIndex = ResolveSourceFieldIndex(stability.SourceFieldKey, stability.SourceFieldIndex);
+            if (targetIndex < 0 || targetIndex >= _allFields.Count)
             {
                 continue;
             }
 
-            if (_allFields[stability.SourceFieldIndex] is not IStabilityFieldLayoutTarget target)
+            if (_allFields[targetIndex] is not IStabilityFieldLayoutTarget target)
             {
                 continue;
             }
@@ -2106,6 +2110,7 @@ public partial class MainWindow : Window
             Fields = records.Select(r => new FieldConfiguration
             {
                 SourceFieldIndex = r.SourceFieldIndex,
+                SourceFieldKey = ResolvePropertyViewKeyForRecord(r),
                 Fill = r.Fill,
                 Visible = r.Visible,
                 Width = r.Width,
@@ -2121,12 +2126,14 @@ public partial class MainWindow : Window
                     return new PlotFieldConfiguration
                     {
                         SourceFieldIndex = x.index,
+                        SourceFieldKey = ResolvePropertyViewKeyForSourceField(x.index, (x.field as IGriddoFieldSourceMember)?.SourceMemberName ?? string.Empty),
                         TitleSelection = p.TitleSelection ?? string.Empty,
                         ShowTitle = p.ShowTitle,
                         TitleSegments = p.TitleSegments
                             .Select(s => new PlotTitleSegmentConfiguration
                             {
                                 SourceFieldIndex = s.SourceFieldIndex,
+                                SourceFieldKey = ResolvePropertyViewKeyForSourceField(s.SourceFieldIndex, GetSourceMemberNameOrEmpty(s.SourceFieldIndex)),
                                 Enabled = s.Enabled,
                                 AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
                                 AddLineBreakAfter = s.AddLineBreakAfter,
@@ -2163,6 +2170,7 @@ public partial class MainWindow : Window
                     return new HtmlFieldConfiguration
                     {
                         SourceFieldIndex = x.index,
+                        SourceFieldKey = ResolvePropertyViewKeyForSourceField(x.index, (x.field as IGriddoFieldSourceMember)?.SourceMemberName ?? string.Empty),
                         IsCategoryField = h.IsCategoryField,
                         FontFamilyName = h.FontFamilyName ?? string.Empty,
                         FontSize = Math.Max(0, h.FontSize),
@@ -2171,6 +2179,7 @@ public partial class MainWindow : Window
                             .Select(s => new HtmlFieldSegmentConfiguration
                             {
                                 SourceFieldIndex = s.SourceFieldIndex,
+                                SourceFieldKey = ResolvePropertyViewKeyForSourceField(s.SourceFieldIndex, GetSourceMemberNameOrEmpty(s.SourceFieldIndex)),
                                 Enabled = s.Enabled,
                                 AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
                                 AddLineBreakAfter = s.AddLineBreakAfter,
@@ -2189,11 +2198,13 @@ public partial class MainWindow : Window
                     return new StabilityFieldConfiguration
                     {
                         SourceFieldIndex = x.index,
+                        SourceFieldKey = ResolvePropertyViewKeyForSourceField(x.index, (x.field as IGriddoFieldSourceMember)?.SourceMemberName ?? string.Empty),
                         Label = s.Label ?? string.Empty,
                         Series = s.Series
                             .Select(item => new StabilitySeriesConfiguration
                             {
                                 SourceFieldIndex = item.SourceFieldIndex,
+                                SourceFieldKey = ResolvePropertyViewKeyForSourceField(item.SourceFieldIndex, GetSourceMemberNameOrEmpty(item.SourceFieldIndex)),
                                 Enabled = item.Enabled,
                                 ShowSdLines = item.ShowSdLines,
                                 ShowLine = item.ShowLine,
@@ -2368,6 +2379,33 @@ public partial class MainWindow : Window
         }
 
         return ResolveSourcePropertyName(record);
+    }
+
+    private string GetSourceMemberNameOrEmpty(int sourceFieldIndex)
+    {
+        if (sourceFieldIndex < 0 || sourceFieldIndex >= _allFields.Count)
+        {
+            return string.Empty;
+        }
+
+        return (_allFields[sourceFieldIndex] as IGriddoFieldSourceMember)?.SourceMemberName ?? string.Empty;
+    }
+
+    private int ResolveSourceFieldIndex(string? sourceFieldKey, int fallbackIndex)
+    {
+        if (!string.IsNullOrWhiteSpace(sourceFieldKey))
+        {
+            for (var i = 0; i < _allFields.Count; i++)
+            {
+                var key = ResolvePropertyViewKeyForSourceField(i, GetSourceMemberNameOrEmpty(i));
+                if (string.Equals(key, sourceFieldKey, StringComparison.Ordinal))
+                {
+                    return i;
+                }
+            }
+        }
+
+        return fallbackIndex;
     }
 
     private string ResolvePropertyViewKeyForSourceField(int sourceFieldIndex, string sourceMemberName)
@@ -2856,7 +2894,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private static void ApplyPlotLayout(IPlotFieldLayoutTarget target, GriddoTest.PlotHosting.PlotFieldDialogResult settings)
+    private static void ApplyPlotLayout(IPlotFieldLayoutTarget target, PlotFieldDialogResult settings)
     {
         target.TitleSelection = settings.TitleSelection ?? string.Empty;
         target.ShowTitle = settings.ShowTitle;

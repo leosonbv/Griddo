@@ -9,9 +9,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Griddo.Abstractions\Griddo.Abstractions.csproj" />
     <ProjectReference Include="..\Griddo\Griddo.csproj" />
+    <ProjectReference Include="..\Plotto.Abstractions\Plotto.Abstractions.csproj" />
+    <ProjectReference Include="..\Plotto.Core\Plotto.Core.csproj" />
     <ProjectReference Include="..\Plotto\Plotto.csproj" />
-    <ProjectReference Include="..\GriddoModelView\GriddoModelView.csproj" />
   </ItemGroup>
 
 </Project>

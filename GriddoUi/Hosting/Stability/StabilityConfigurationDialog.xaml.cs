@@ -7,7 +7,7 @@ using Griddo.Hosting.Configuration;
 using Griddo.Hosting.Html;
 using Griddo.Hosting.Plot;
 
-namespace GriddoTest.StabilityHosting;
+namespace GriddoUi.Hosting.Stability;
 
 public partial class StabilityConfigurationDialog : Window
 {

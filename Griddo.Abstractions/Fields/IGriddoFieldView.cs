@@ -27,10 +27,6 @@ public interface IGriddoFieldDescriptionView
     string Description { get; set; }
 }
 
-/// <summary>
-/// Optional field contract to provide a dedicated key used by grid sorting.
-/// Useful when displayed values differ from logical grouping/sort values.
-/// </summary>
 public interface IGriddoFieldSortValueView
 {
     object? GetSortValue(object recordSource);
@@ -54,9 +50,6 @@ public interface IGriddoFieldColorView
     string BackgroundColor { get; set; }
 }
 
-/// <summary>
-/// Optional per-record color override for fields that derive colors from data values.
-/// </summary>
 public interface IGriddoDynamicFieldColorView
 {
     string GetForegroundColor(object recordSource);

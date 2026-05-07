@@ -5,12 +5,14 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Plotto.Charting.Core;
 using Plotto.Charting.Geometry;
+using Plotto.Core.Interaction;
 using SkiaSharp;
 
 namespace Plotto.Charting.Controls;
 
 public abstract partial class SkiaChartBaseControl
 {
+    private readonly IChartWheelZoomPolicy _wheelZoomPolicy = new ChartWheelZoomPolicy();
     // Squared movement in surface pixels before a right-click becomes a drag-zoom (4px radius).
     private const float RightDragRubberActivationDistSquared = 16f;
 
@@ -77,10 +79,12 @@ public abstract partial class SkiaChartBaseControl
 
     private void ProcessWheelZoom(Point pivot, int delta)
     {
-        var factor = delta > 0 ? 0.9 : 1.1;
+        var factor = _wheelZoomPolicy.GetZoomFactor(delta);
         var mod = Keyboard.Modifiers;
-        var wheelZoomsX = mod.HasFlag(ModifierKeys.Control) && !mod.HasFlag(ModifierKeys.Shift);
-        if (wheelZoomsX || IsPointerOverXAxisScrollZone(pivot))
+        if (_wheelZoomPolicy.ShouldZoomXAxis(
+            mod.HasFlag(ModifierKeys.Control),
+            mod.HasFlag(ModifierKeys.Shift),
+            IsPointerOverXAxisScrollZone(pivot)))
         {
             ZoomXAt(pivot, factor);
         }

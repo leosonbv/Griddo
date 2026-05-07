@@ -11,6 +11,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Plotto.Abstractions\Plotto.Abstractions.csproj" />
+    <ProjectReference Include="..\Plotto.Core\Plotto.Core.csproj" />
     <PackageReference Include="SkiaSharp.Views.WPF" Version="4.147.0-preview.1.1" />
   </ItemGroup>
 

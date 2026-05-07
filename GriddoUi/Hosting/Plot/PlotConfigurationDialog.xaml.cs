@@ -8,7 +8,7 @@ using Griddo.Hosting.Configuration;
 using Griddo.Hosting.Html;
 using Griddo.Hosting.Plot;
 
-namespace GriddoTest.PlotHosting;
+namespace GriddoUi.Hosting.Plot;
 
 public partial class PlotConfigurationDialog : Window
 {

@@ -1,57 +1,64 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
-using GriddoModelView.Configuration;
+namespace GriddoModelView;
 
-namespace GriddoModelView.Stores;
-
-/// <summary>
-/// Eenvoudige JSON-store voor PropertyViewConfiguration (globale metadata)
-/// </summary>
 public sealed class PropertyViewStore
 {
     private readonly string _filePath;
-    private readonly Dictionary<string, PropertyViewConfiguration> _cache = new();
+    private readonly Dictionary<string, PropertyViewConfiguration> _items = new(StringComparer.OrdinalIgnoreCase);
 
     public PropertyViewStore(string filePath)
     {
         _filePath = filePath;
-        Load();
     }
 
-    public void Set(PropertyViewConfiguration config)
+    public void Load()
     {
-        string key = $"{config.SourceClassName}.{config.PropertyName}";
-        _cache[key] = config;
-    }
+        if (!File.Exists(_filePath))
+        {
+            return;
+        }
 
-    public bool TryGet(string sourceClassName, string propertyName, out PropertyViewConfiguration? config)
-    {
-        string key = $"{sourceClassName}.{propertyName}";
-        return _cache.TryGetValue(key, out config);
+        try
+        {
+            var json = File.ReadAllText(_filePath);
+            var list = JsonSerializer.Deserialize<List<PropertyViewConfiguration>>(json) ?? new();
+            _items.Clear();
+            foreach (var item in list)
+            {
+                var key = $"{item.SourceClassName}|{item.PropertyName}";
+                _items[key] = item;
+            }
+        }
+        catch
+        {
+        }
     }
 
     public void Save()
     {
-        var options = new JsonSerializerOptions { WriteIndented = true };
-        string json = JsonSerializer.Serialize(_cache.Values, options);
-        File.WriteAllText(_filePath, json);
-    }
-
-    private void Load()
-    {
-        if (!File.Exists(_filePath)) return;
-
         try
         {
-            string json = File.ReadAllText(_filePath);
-            var list = JsonSerializer.Deserialize<List<PropertyViewConfiguration>>(json) ?? new();
-            foreach (var item in list)
-            {
-                string key = $"{item.SourceClassName}.{item.PropertyName}";
-                _cache[key] = item;
-            }
+            Directory.CreateDirectory(Path.GetDirectoryName(_filePath)!);
+            var list = new List<PropertyViewConfiguration>(_items.Values);
+            var json = JsonSerializer.Serialize(list, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(_filePath, json);
         }
-        catch { /* ignore corrupt file */ }
+        catch
+        {
+        }
+    }
+
+    public void Set(PropertyViewConfiguration config)
+    {
+        var key = $"{config.SourceClassName}|{config.PropertyName}";
+        _items[key] = config;
+    }
+
+    public bool TryGet(string sourceClassName, string propertyName, out PropertyViewConfiguration config)
+    {
+        var key = $"{sourceClassName}|{propertyName}";
+        return _items.TryGetValue(key, out config!);
     }
 }

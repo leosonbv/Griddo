@@ -1,54 +1,64 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
-using GriddoModelView.Configuration;
+namespace GriddoModelView;
 
-namespace GriddoModelView.Stores;
-
-/// <summary>
-/// Eenvoudige JSON-store voor GridConfiguration (per-tabel lay-outs)
-/// </summary>
 public sealed class GridConfigurationStore
 {
     private readonly string _filePath;
-    private readonly Dictionary<string, GridConfiguration> _cache = new();
+    private readonly Dictionary<string, GridConfiguration> _items = new(StringComparer.OrdinalIgnoreCase);
 
     public GridConfigurationStore(string filePath)
     {
         _filePath = filePath;
-        Load();
     }
 
-    public void Set(GridConfiguration config)
+    public void Load()
     {
-        _cache[config.Key] = config;
-    }
+        if (!File.Exists(_filePath))
+        {
+            return;
+        }
 
-    public bool TryGet(string key, out GridConfiguration? config)
-    {
-        return _cache.TryGetValue(key, out config);
+        try
+        {
+            var json = File.ReadAllText(_filePath);
+            var list = JsonSerializer.Deserialize<List<GridConfiguration>>(json) ?? new();
+            _items.Clear();
+            foreach (var item in list)
+            {
+                _items[item.Key] = item;
+            }
+        }
+        catch
+        {
+        }
     }
 
     public void Save()
     {
-        var options = new JsonSerializerOptions { WriteIndented = true };
-        string json = JsonSerializer.Serialize(_cache.Values, options);
-        File.WriteAllText(_filePath, json);
-    }
-
-    private void Load()
-    {
-        if (!File.Exists(_filePath)) return;
-
         try
         {
-            string json = File.ReadAllText(_filePath);
-            var list = JsonSerializer.Deserialize<List<GridConfiguration>>(json) ?? new();
-            foreach (var item in list)
-            {
-                _cache[item.Key] = item;
-            }
+            Directory.CreateDirectory(Path.GetDirectoryName(_filePath)!);
+            var list = new List<GridConfiguration>(_items.Values);
+            var json = JsonSerializer.Serialize(list, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(_filePath, json);
         }
-        catch { /* ignore corrupt file */ }
+        catch
+        {
+        }
+    }
+
+    public void Set(GridConfiguration config)
+    {
+        if (!string.IsNullOrWhiteSpace(config.Key))
+        {
+            _items[config.Key] = config;
+        }
+    }
+
+    public bool TryGet(string key, out GridConfiguration config)
+    {
+        return _items.TryGetValue(key, out config!);
     }
 }

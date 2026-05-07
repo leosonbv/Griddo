@@ -10,7 +10,7 @@ using Griddo.Hosting.Plot;
 using GriddoUi.FieldEdit.Support;
 using WpfColorFontDialog;
 
-namespace GriddoTest.HtmlHosting;
+namespace GriddoUi.Hosting.Html;
 
 public partial class HtmlConfigurationDialog : Window
 {

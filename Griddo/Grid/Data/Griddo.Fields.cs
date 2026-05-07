@@ -1,5 +1,6 @@
 using System.Windows.Media;
 using System.Windows.Threading;
+using Griddo.Core.Layout;
 using Griddo.Fields;
 
 namespace Griddo.Grid;
@@ -19,10 +20,12 @@ public sealed partial class Griddo
     private double GetFieldBaseWidth(int fieldIndex)
     {
         var field = Fields[fieldIndex];
-        var logical = _fieldWidthOverrides.TryGetValue(field, out var o)
-            ? o
-            : field.Width;
-        return Math.Max(MinFieldWidth, logical) * ContentScale;
+        return GridFieldWidthService.ResolveFieldBaseWidth(
+            field.Width,
+            _fieldWidthOverrides.TryGetValue(field, out var o),
+            o,
+            MinFieldWidth,
+            ContentScale);
     }
 
     private double GetFillFieldWidth()
@@ -43,9 +46,12 @@ public sealed partial class Griddo
         }
 
         var viewportAlongFieldAxis = IsBodyTransposed ? _viewportBodyHeight : _viewportBodyWidth;
-        var remaining = Math.Max(0, viewportAlongFieldAxis - nonFillWidth);
-        var perFill = remaining / fillCount;
-        return Math.Max(MinFieldWidth * ContentScale, perFill);
+        return GridFieldWidthService.ResolveFillFieldWidth(
+            fillCount,
+            nonFillWidth,
+            viewportAlongFieldAxis,
+            MinFieldWidth,
+            ContentScale);
     }
 
     private void SetFieldWidth(int fieldIndex, double screenPixelWidth)
