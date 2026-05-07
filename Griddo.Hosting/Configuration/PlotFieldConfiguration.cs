@@ -2,7 +2,7 @@ namespace Griddo.Hosting.Configuration;
 
 public sealed class PlotTitleSegmentConfiguration
 {
-    public int SourceFieldIndex { get; set; }
+    public int SourceFieldIndex { get; set; } = -1;
     public string SourceFieldKey { get; set; } = string.Empty;
     public bool Enabled { get; set; }
     public string AbbreviatedHeaderOverride { get; set; } = string.Empty;
@@ -12,7 +12,7 @@ public sealed class PlotTitleSegmentConfiguration
 
 public sealed class PlotFieldConfiguration
 {
-    public int SourceFieldIndex { get; set; }
+    public int SourceFieldIndex { get; set; } = -1;
     public string SourceFieldKey { get; set; } = string.Empty;
     public string TitleSelection { get; set; } = string.Empty;
     public bool ShowTitle { get; set; } = true;

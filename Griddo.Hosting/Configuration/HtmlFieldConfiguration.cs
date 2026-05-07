@@ -2,7 +2,8 @@ namespace Griddo.Hosting.Configuration;
 
 public sealed class HtmlFieldSegmentConfiguration
 {
-    public int SourceFieldIndex { get; set; }
+    /// <summary>-1 means "resolved via <see cref="SourceFieldKey"/>" only; avoids colliding keyed segments at implicit index 0.</summary>
+    public int SourceFieldIndex { get; set; } = -1;
     public string SourceFieldKey { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     public string AbbreviatedHeaderOverride { get; set; } = string.Empty;
@@ -12,7 +13,7 @@ public sealed class HtmlFieldSegmentConfiguration
 
 public sealed class HtmlFieldConfiguration
 {
-    public int SourceFieldIndex { get; set; }
+    public int SourceFieldIndex { get; set; } = -1;
     public string SourceFieldKey { get; set; } = string.Empty;
     public bool IsTable { get; set; } = true;
     public bool IsCategoryField { get; set; }

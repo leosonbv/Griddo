@@ -65,7 +65,10 @@ public partial class HtmlConfigurationDialog : Window
             fontSize: seed.FontSize,
             fontStyleName: seed.FontStyleName));
 
-        var savedByIndex = seed.Segments.ToDictionary(s => s.SourceFieldIndex);
+        var savedByIndex = seed.Segments
+            .Where(s => s.SourceFieldIndex >= 0)
+            .GroupBy(s => s.SourceFieldIndex)
+            .ToDictionary(g => g.Key, g => g.First());
         var savedByKey = seed.Segments
             .Where(s => !string.IsNullOrWhiteSpace(s.SourceFieldKey))
             .GroupBy(s => s.SourceFieldKey, StringComparer.OrdinalIgnoreCase)
@@ -81,7 +84,7 @@ public partial class HtmlConfigurationDialog : Window
         }
 
         var configuredOrder = seed.Segments
-            .Select(s => s.SourceFieldIndex)
+            .Select(s => ResolveEffectiveSourceFieldIndex(s, allFields))
             .Where(i => i >= 0 && i < allFields.Count && !excluded.Contains(i))
             .Distinct()
             .ToList();
@@ -196,6 +199,27 @@ public partial class HtmlConfigurationDialog : Window
         public bool WordWrap { get; set; } = true;
         public string Header { get; set; } = string.Empty;
         public string SourceAbbreviatedHeader { get; set; } = string.Empty;
+    }
+
+    private static int ResolveEffectiveSourceFieldIndex(
+        HtmlFieldSegmentConfiguration segment,
+        IReadOnlyList<IGriddoFieldView> allFields)
+    {
+        if (!string.IsNullOrWhiteSpace(segment.SourceFieldKey))
+        {
+            for (var i = 0; i < allFields.Count; i++)
+            {
+                var key = ResolveSourceFieldKey(allFields[i], i);
+                if (string.Equals(key, segment.SourceFieldKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        return segment.SourceFieldIndex;
     }
 
     private static string ResolveSourceFieldKey(IGriddoFieldView field, int sourceFieldIndex)

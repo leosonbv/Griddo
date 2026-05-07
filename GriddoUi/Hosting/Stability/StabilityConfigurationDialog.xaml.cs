@@ -48,7 +48,10 @@ public partial class StabilityConfigurationDialog : Window
         GeneralGrid.Records.Clear();
         GeneralGrid.Records.Add(new StabilityGeneralSettingRecord { Label = "Plot label", Value = seed.Label ?? string.Empty });
 
-        var savedByIndex = seed.Series.ToDictionary(s => s.SourceFieldIndex);
+        var savedByIndex = seed.Series
+            .Where(s => s.SourceFieldIndex >= 0)
+            .GroupBy(s => s.SourceFieldIndex)
+            .ToDictionary(g => g.Key, g => g.First());
         var excluded = new HashSet<int>();
         for (var sourceFieldIndex = 0; sourceFieldIndex < allFields.Count; sourceFieldIndex++)
         {
