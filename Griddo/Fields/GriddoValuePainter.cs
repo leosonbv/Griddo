@@ -333,6 +333,7 @@ public static class GriddoValuePainter
         var formatted = BuildHtmlFormattedText(html, typeface, fontSize, foregroundBrush);
         if (formatted.Text.Length == 0)
         {
+            DrawTinyHtmlFallback(drawingContext, html, bounds, typeface, fontSize, foregroundBrush);
             return;
         }
 
@@ -349,6 +350,11 @@ public static class GriddoValuePainter
 
         const double padX = 4.0;
         const double padY = 2.0;
+        if (bounds.Width <= padX * 2 + 2 || bounds.Height <= padY * 2 + 2)
+        {
+            DrawTinyHtmlFallback(drawingContext, html, bounds, typeface, fontSize, foregroundBrush);
+            return;
+        }
         // Fill cell width for wrapping; do not force full cell height—use natural height, then cap if needed.
         formatted.MaxTextWidth = Math.Max(1, bounds.Width - padX * 2);
         formatted.MaxLineCount = noWrap ? 1 : int.MaxValue;
@@ -672,7 +678,7 @@ public static class GriddoValuePainter
             return;
         }
 
-        const double tableMargin = 5.0;
+        var tableMargin = Math.Min(5.0, Math.Min(bounds.Width, bounds.Height) * 0.1);
         const double cellPadX = 2.0;
         const double cellPadY = 1.0;
         const double minColWidth = 28.0;
@@ -680,6 +686,11 @@ public static class GriddoValuePainter
 
         var availW = Math.Max(0, bounds.Width - tableMargin * 2);
         var availH = Math.Max(0, bounds.Height - tableMargin * 2);
+        if (availW < 6 || availH < 6)
+        {
+            DrawTinyHtmlFallback(drawingContext, html, bounds, typeface, fontSize, foregroundBrush);
+            return;
+        }
 
         var colWidths = new double[fieldCount];
         for (var col = 0; col < fieldCount; col++)
@@ -822,6 +833,65 @@ public static class GriddoValuePainter
 
             currentY += recordH;
         }
+    }
+
+    private static void DrawTinyHtmlFallback(
+        DrawingContext drawingContext,
+        string html,
+        Rect bounds,
+        Typeface typeface,
+        double fontSize,
+        Brush foregroundBrush)
+    {
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return;
+        }
+
+        var preview = ExtractHtmlPreview(html);
+        if (string.IsNullOrWhiteSpace(preview))
+        {
+            preview = "\u2026";
+        }
+
+        var formatted = new FormattedText(
+            preview,
+            CultureInfo.CurrentCulture,
+            FlowDirection.LeftToRight,
+            typeface,
+            Math.Max(4, fontSize - 1),
+            foregroundBrush,
+            1.0)
+        {
+            MaxTextWidth = Math.Max(1, bounds.Width - 2),
+            MaxTextHeight = Math.Max(1, bounds.Height - 1),
+            MaxLineCount = 1,
+            Trimming = TextTrimming.CharacterEllipsis
+        };
+
+        var y = bounds.Y + Math.Max(0, (bounds.Height - formatted.Height) / 2);
+        drawingContext.DrawText(formatted, new Point(bounds.X + 1, y));
+    }
+
+    private static string ExtractHtmlPreview(string html)
+    {
+        var runs = ParseHtmlRuns(html);
+        if (runs.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var sb = new StringBuilder();
+        foreach (var run in runs)
+        {
+            sb.Append(run.Text);
+            if (sb.Length >= 120)
+            {
+                break;
+            }
+        }
+
+        return sb.ToString().Trim();
     }
 
     private static List<List<string>> ParseHtmlTable(string html)
