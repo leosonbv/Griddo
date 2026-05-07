@@ -65,7 +65,13 @@ public partial class PlotConfigurationDialog : Window
     {
         _rows.Clear();
         TitleFieldsGrid.Records.Clear();
-        var savedByIndex = _initial.TitleSegments.ToDictionary(s => s.SourceFieldIndex);
+        var savedByKey = _initial.TitleSegments
+            .Where(s => !string.IsNullOrWhiteSpace(s.SourceFieldKey))
+            .GroupBy(s => s.SourceFieldKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        var savedByIndex = _initial.TitleSegments
+            .GroupBy(s => s.SourceFieldIndex)
+            .ToDictionary(g => g.Key, g => g.First());
         var excluded = new HashSet<int>();
         for (var sourceFieldIndex = 0; sourceFieldIndex < _allFields.Count; sourceFieldIndex++)
         {
@@ -77,7 +83,7 @@ public partial class PlotConfigurationDialog : Window
         }
 
         var configuredOrder = _initial.TitleSegments
-            .Select(s => s.SourceFieldIndex)
+            .Select(ResolveSourceFieldIndex)
             .Where(i => i >= 0 && i < _allFields.Count && !excluded.Contains(i))
             .Distinct()
             .ToList();
@@ -90,10 +96,15 @@ public partial class PlotConfigurationDialog : Window
         {
             var field = _allFields[sourceFieldIndex];
 
-            var saved = savedByIndex.TryGetValue(sourceFieldIndex, out var hit) ? hit : null;
+            var sourceFieldKey = ResolveSourceFieldKey(sourceFieldIndex);
+            var saved =
+                (!string.IsNullOrWhiteSpace(sourceFieldKey) && savedByKey.TryGetValue(sourceFieldKey, out var byKey))
+                    ? byKey
+                    : (savedByIndex.TryGetValue(sourceFieldIndex, out var byIndex) ? byIndex : null);
             var row = new PlotTitleFieldEditRecord
             {
                 SourceFieldIndex = sourceFieldIndex,
+                SourceFieldKey = sourceFieldKey,
                 Enabled = saved?.Enabled ?? false,
                 Header = field.Header ?? string.Empty,
                 AbbreviatedHeader = saved?.AbbreviatedHeaderOverride ?? string.Empty,
@@ -155,6 +166,7 @@ public partial class PlotConfigurationDialog : Window
             .Select(r => new PlotTitleSegmentConfiguration
             {
                 SourceFieldIndex = r.SourceFieldIndex,
+                SourceFieldKey = r.SourceFieldKey ?? string.Empty,
                 Enabled = r.Enabled,
                 AbbreviatedHeaderOverride = r.AbbreviatedHeader ?? string.Empty,
                 AddLineBreakAfter = r.AddLineBreakAfter,
@@ -219,6 +231,38 @@ public partial class PlotConfigurationDialog : Window
         }
 
         return Math.Clamp(fallback, min, max);
+    }
+
+    private int ResolveSourceFieldIndex(PlotTitleSegmentConfiguration segment)
+    {
+        if (!string.IsNullOrWhiteSpace(segment.SourceFieldKey))
+        {
+            for (var i = 0; i < _allFields.Count; i++)
+            {
+                if (string.Equals(ResolveSourceFieldKey(i), segment.SourceFieldKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    return i;
+                }
+            }
+        }
+
+        return segment.SourceFieldIndex;
+    }
+
+    private string ResolveSourceFieldKey(int sourceFieldIndex)
+    {
+        if (sourceFieldIndex < 0 || sourceFieldIndex >= _allFields.Count)
+        {
+            return string.Empty;
+        }
+
+        var field = _allFields[sourceFieldIndex];
+        if (field is IGriddoFieldSourceMember sourceMember && !string.IsNullOrWhiteSpace(sourceMember.SourceMemberName))
+        {
+            return sourceMember.SourceMemberName;
+        }
+
+        return !string.IsNullOrWhiteSpace(field.Header) ? field.Header : sourceFieldIndex.ToString(CultureInfo.InvariantCulture);
     }
 
     private void BuildTitleFieldGridFields()
@@ -411,6 +455,7 @@ public partial class PlotConfigurationDialog : Window
     private sealed class PlotTitleFieldEditRecord
     {
         public int SourceFieldIndex { get; set; }
+        public string SourceFieldKey { get; set; } = string.Empty;
         public bool Enabled { get; set; }
         public string Header { get; set; } = string.Empty;
         public string AbbreviatedHeader { get; set; } = string.Empty;

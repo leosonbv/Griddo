@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Reflection;
 using Griddo.Editing;
 using Griddo.Fields;
 using Griddo.Hosting.Abstractions;
@@ -84,7 +85,9 @@ public sealed class HostedSpectrumFieldView : IGriddoHostedFieldView, IGriddoFie
             return;
         }
 
-        chart.Points = _signalProvider.GetPoints(recordSource).Select(static p => new ChartPoint(p.X, p.Y)).ToList();
+        var points = _signalProvider.GetPoints(recordSource);
+        var pointsValue = BuildRuntimePointsValue(points);
+        chart.SetValue(SkiaChartBaseControl.PointsProperty, pointsValue);
         ApplyChartSettings(chart, recordSource);
     }
 
@@ -169,5 +172,26 @@ public sealed class HostedSpectrumFieldView : IGriddoHostedFieldView, IGriddoFie
         chart.TitleFontSize = TitleFontSize;
         chart.ShowXAxis = ShowXAxis;
         chart.ShowYAxis = ShowYAxis;
+    }
+
+    private static object BuildRuntimePointsValue(IReadOnlyList<SignalPoint> points)
+    {
+        var propertyType = SkiaChartBaseControl.PointsProperty.PropertyType;
+        var pointType = propertyType.IsGenericType
+            ? propertyType.GetGenericArguments()[0]
+            : typeof(ChartPoint);
+        var ctor = pointType.GetConstructor(BindingFlags.Public | BindingFlags.Instance, null, [typeof(double), typeof(double)], null);
+        if (ctor is null)
+        {
+            return Array.Empty<ChartPoint>();
+        }
+
+        var array = Array.CreateInstance(pointType, points.Count);
+        for (var i = 0; i < points.Count; i++)
+        {
+            array.SetValue(ctor.Invoke([points[i].X, points[i].Y]), i);
+        }
+
+        return array;
     }
 }

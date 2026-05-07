@@ -27,12 +27,13 @@ internal static class PlotTitleHtmlBuilder
         var rows = new List<string>(segments.Count);
         foreach (var segment in segments)
         {
-            if (segment.SourceFieldIndex < 0 || segment.SourceFieldIndex >= allFields.Count)
+            var sourceFieldIndex = ResolveSourceFieldIndex(allFields, segment);
+            if (sourceFieldIndex < 0 || sourceFieldIndex >= allFields.Count)
             {
                 continue;
             }
 
-            var field = allFields[segment.SourceFieldIndex];
+            var field = allFields[sourceFieldIndex];
             var label = string.IsNullOrWhiteSpace(segment.AbbreviatedHeaderOverride)
                 ? (field.Header ?? string.Empty)
                 : segment.AbbreviatedHeaderOverride;
@@ -53,6 +54,34 @@ internal static class PlotTitleHtmlBuilder
             : "<table style='border-collapse:collapse;border:none'><tbody>"
               + string.Join(string.Empty, rows)
               + "</tbody></table>";
+    }
+
+    private static int ResolveSourceFieldIndex(IReadOnlyList<IGriddoFieldView> allFields, PlotTitleSegmentConfiguration segment)
+    {
+        if (!string.IsNullOrWhiteSpace(segment.SourceFieldKey))
+        {
+            for (var i = 0; i < allFields.Count; i++)
+            {
+                if (string.Equals(ResolveFieldKey(allFields[i], i), segment.SourceFieldKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        return segment.SourceFieldIndex;
+    }
+
+    private static string ResolveFieldKey(IGriddoFieldView field, int fieldIndex)
+    {
+        if (field is IGriddoFieldSourceMember sourceMember && !string.IsNullOrWhiteSpace(sourceMember.SourceMemberName))
+        {
+            return sourceMember.SourceMemberName;
+        }
+
+        return !string.IsNullOrWhiteSpace(field.Header) ? field.Header : fieldIndex.ToString(CultureInfo.InvariantCulture);
     }
 
     private static string BuildStyledText(string text, IGriddoFieldView field)
