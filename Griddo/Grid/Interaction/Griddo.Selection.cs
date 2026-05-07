@@ -349,6 +349,29 @@ public sealed partial class Griddo
         InvalidateVisual();
     }
 
+    /// <summary>
+    /// Sets the current body cell and replaces the selection with that single cell (no header selection).
+    /// Used when reloading grid data while restoring focus to a logical row/column.
+    /// </summary>
+    public void SetBodyCellNavigationTarget(int recordIndex, int fieldIndex)
+    {
+        if (Records.Count == 0 || Fields.Count == 0)
+        {
+            return;
+        }
+
+        ClearHeaderFocus();
+        ClearHeaderAuxiliarySelectionState();
+        _hasKeyboardSelectionAnchor = false;
+        _isEditing = false;
+        recordIndex = Math.Clamp(recordIndex, 0, Records.Count - 1);
+        fieldIndex = Math.Clamp(fieldIndex, 0, Fields.Count - 1);
+        _currentCell = new GriddoCellAddress(recordIndex, fieldIndex);
+        _selectedCells.Clear();
+        _selectedCells.Add(_currentCell);
+        InvalidateVisual();
+    }
+
     /// <summary>Moves all selected records up (<paramref name="direction"/> = -1) or down (+1), matching record-header drag behavior.</summary>
     /// <returns>True if a move was applied.</returns>
     public bool TryMoveSelectedRecordsStep(int direction)
