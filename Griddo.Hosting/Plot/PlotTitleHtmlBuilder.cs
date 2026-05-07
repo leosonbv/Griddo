@@ -45,8 +45,7 @@ internal static class PlotTitleHtmlBuilder
                 rendered = rendered.Replace(" ", "\u00A0", StringComparison.Ordinal);
             }
 
-            var breakBefore = segment.AddLineBreakAfter ? " data-break-before='1'" : string.Empty;
-            rows.Add($"<tr{breakBefore}><td><b>{WebUtility.HtmlEncode(label)}</b></td><td>{rendered}</td></tr>");
+            rows.Add($"<tr><td><b>{WebUtility.HtmlEncode(label)}</b></td><td>{rendered}</td></tr>");
         }
 
         return rows.Count == 0

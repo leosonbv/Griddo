@@ -3,7 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:grid="clr-namespace:Griddo.Grid;assembly=Griddo"
-    Title="HTML field configurator"
+    Title="Field configurator"
     Width="960"
     Height="620"
     MinWidth="780"

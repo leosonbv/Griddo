@@ -2000,11 +2000,13 @@ public partial class MainWindow : Window
             target.FontFamilyName = html.FontFamilyName ?? string.Empty;
             target.FontSize = Math.Max(0, html.FontSize);
             target.FontStyleName = html.FontStyleName ?? string.Empty;
+            target.IsTable = html.IsTable;
             target.IsCategoryField = html.IsCategoryField;
             target.Segments = html.Segments
                 .Select(s => new HtmlFieldSegmentConfiguration
                 {
                     SourceFieldIndex = s.SourceFieldIndex,
+                    SourceFieldKey = s.SourceFieldKey ?? string.Empty,
                     Enabled = s.Enabled,
                     AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
                     AddLineBreakAfter = s.AddLineBreakAfter,
@@ -2171,6 +2173,7 @@ public partial class MainWindow : Window
                     {
                         SourceFieldIndex = x.index,
                         SourceFieldKey = ResolvePropertyViewKeyForSourceField(x.index, (x.field as IGriddoFieldSourceMember)?.SourceMemberName ?? string.Empty),
+                        IsTable = h.IsTable,
                         IsCategoryField = h.IsCategoryField,
                         FontFamilyName = h.FontFamilyName ?? string.Empty,
                         FontSize = Math.Max(0, h.FontSize),
@@ -2486,6 +2489,7 @@ public partial class MainWindow : Window
         public string ForegroundColor { get; set; } = string.Empty;
         public string BackgroundColor { get; set; } = string.Empty;
         public bool NoWrap { get; set; }
+        public bool IsTable { get; set; } = true;
         public bool IsCategoryField { get; set; }
         public bool Fill { get; set; }
         public bool IsHtml => true;
@@ -2928,6 +2932,7 @@ public partial class MainWindow : Window
 
     private static void ApplyHtmlLayout(IHtmlFieldLayoutTarget target, HtmlFieldConfiguration settings)
     {
+        target.IsTable = settings.IsTable;
         target.IsCategoryField = settings.IsCategoryField;
         target.FontFamilyName = settings.FontFamilyName ?? string.Empty;
         target.FontSize = Math.Max(0, settings.FontSize);
@@ -2936,6 +2941,7 @@ public partial class MainWindow : Window
             .Select(s => new HtmlFieldSegmentConfiguration
             {
                 SourceFieldIndex = s.SourceFieldIndex,
+                SourceFieldKey = s.SourceFieldKey ?? string.Empty,
                 Enabled = s.Enabled,
                 AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
                 AddLineBreakAfter = s.AddLineBreakAfter,

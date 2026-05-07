@@ -41,7 +41,9 @@ public partial class HtmlConfigurationDialog : Window
 
     private void UpdateMoveButtonsVisibility()
     {
-        var show = MainTabs.SelectedIndex == 0;
+        // On initial open SelectedIndex can be -1 before tab selection settles;
+        // keep move buttons visible by default in that startup state.
+        var show = MainTabs.SelectedIndex <= 0;
         var visibility = show ? Visibility.Visible : Visibility.Collapsed;
         MoveUpButton.Visibility = visibility;
         MoveDownButton.Visibility = visibility;
@@ -54,6 +56,7 @@ public partial class HtmlConfigurationDialog : Window
     private void SeedFrom(IHtmlFieldLayoutTarget seed, IReadOnlyList<IGriddoFieldView> allFields)
     {
         GeneralGrid.Records.Clear();
+        GeneralGrid.Records.Add(new HtmlGeneralSettingRecord(HtmlGeneralSettingKind.Table, seed.IsTable));
         GeneralGrid.Records.Add(new HtmlGeneralSettingRecord(HtmlGeneralSettingKind.CategoryField, seed.IsCategoryField));
         GeneralGrid.Records.Add(new HtmlGeneralSettingRecord(
             HtmlGeneralSettingKind.Font,
@@ -63,6 +66,10 @@ public partial class HtmlConfigurationDialog : Window
             fontStyleName: seed.FontStyleName));
 
         var savedByIndex = seed.Segments.ToDictionary(s => s.SourceFieldIndex);
+        var savedByKey = seed.Segments
+            .Where(s => !string.IsNullOrWhiteSpace(s.SourceFieldKey))
+            .GroupBy(s => s.SourceFieldKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         var excluded = new HashSet<int>();
         for (var sourceFieldIndex = 0; sourceFieldIndex < allFields.Count; sourceFieldIndex++)
         {
@@ -86,12 +93,16 @@ public partial class HtmlConfigurationDialog : Window
         foreach (var sourceFieldIndex in orderedSourceIndices)
         {
             var field = allFields[sourceFieldIndex];
+            var sourceFieldKey = ResolveSourceFieldKey(field, sourceFieldIndex);
 
             var sourceTitle = field is IGriddoFieldTitleView tv ? tv.AbbreviatedHeader : string.Empty;
-            var saved = savedByIndex.TryGetValue(sourceFieldIndex, out var hit) ? hit : null;
+            var saved = savedByKey.TryGetValue(sourceFieldKey, out var hitByKey)
+                ? hitByKey
+                : savedByIndex.TryGetValue(sourceFieldIndex, out var hitByIndex) ? hitByIndex : null;
             var row = new HtmlSegmentEditRecord
             {
                 SourceFieldIndex = sourceFieldIndex,
+                SourceFieldKey = sourceFieldKey,
                 Enabled = saved?.Enabled ?? false,
                 AbbreviatedHeader = saved?.AbbreviatedHeaderOverride ?? string.Empty,
                 AddLineBreakAfter = saved?.AddLineBreakAfter ?? true,
@@ -106,6 +117,9 @@ public partial class HtmlConfigurationDialog : Window
 
     private HtmlFieldConfiguration BuildResult()
     {
+        var isTable = GeneralGrid.Records
+            .OfType<HtmlGeneralSettingRecord>()
+            .FirstOrDefault(r => r.Setting == HtmlGeneralSettingKind.Table)?.BoolValue ?? true;
         var isCategoryField = GeneralGrid.Records
             .OfType<HtmlGeneralSettingRecord>()
             .FirstOrDefault(r => r.Setting == HtmlGeneralSettingKind.CategoryField)?.BoolValue ?? false;
@@ -114,6 +128,7 @@ public partial class HtmlConfigurationDialog : Window
             .FirstOrDefault(r => r.Setting == HtmlGeneralSettingKind.Font);
         return new HtmlFieldConfiguration
         {
+            IsTable = isTable,
             IsCategoryField = isCategoryField,
             FontFamilyName = font?.FontFamilyName ?? string.Empty,
             FontSize = Math.Max(0, font?.FontSize ?? 0),
@@ -123,6 +138,7 @@ public partial class HtmlConfigurationDialog : Window
                 .Select(r => new HtmlFieldSegmentConfiguration
                 {
                     SourceFieldIndex = r.SourceFieldIndex,
+                    SourceFieldKey = r.SourceFieldKey ?? string.Empty,
                     Enabled = r.Enabled,
                     AbbreviatedHeaderOverride = r.AbbreviatedHeader ?? string.Empty,
                     AddLineBreakAfter = r.AddLineBreakAfter,
@@ -173,12 +189,23 @@ public partial class HtmlConfigurationDialog : Window
     private sealed class HtmlSegmentEditRecord
     {
         public int SourceFieldIndex { get; set; }
+        public string SourceFieldKey { get; set; } = string.Empty;
         public bool Enabled { get; set; }
         public string AbbreviatedHeader { get; set; } = string.Empty;
         public bool AddLineBreakAfter { get; set; } = true;
         public bool WordWrap { get; set; } = true;
         public string Header { get; set; } = string.Empty;
         public string SourceAbbreviatedHeader { get; set; } = string.Empty;
+    }
+
+    private static string ResolveSourceFieldKey(IGriddoFieldView field, int sourceFieldIndex)
+    {
+        if (field is IGriddoFieldSourceMember sourceMember && !string.IsNullOrWhiteSpace(sourceMember.SourceMemberName))
+        {
+            return sourceMember.SourceMemberName;
+        }
+
+        return !string.IsNullOrWhiteSpace(field.Header) ? field.Header : sourceFieldIndex.ToString();
     }
 
     private void BuildSegmentGridFields()
@@ -293,6 +320,7 @@ public partial class HtmlConfigurationDialog : Window
 
     private enum HtmlGeneralSettingKind
     {
+        Table,
         CategoryField,
         Font
     }
@@ -315,7 +343,7 @@ public partial class HtmlConfigurationDialog : Window
         public IGriddoCellEditor Editor => _editor;
 
         public bool IsCheckboxCell(object recordSource)
-            => recordSource is HtmlGeneralSettingRecord { Setting: HtmlGeneralSettingKind.CategoryField };
+            => recordSource is HtmlGeneralSettingRecord { Setting: HtmlGeneralSettingKind.CategoryField or HtmlGeneralSettingKind.Table };
 
         public object? GetValue(object recordSource)
         {
@@ -334,7 +362,7 @@ public partial class HtmlConfigurationDialog : Window
                 return false;
             }
 
-            if (record.Setting == HtmlGeneralSettingKind.CategoryField)
+            if (record.Setting == HtmlGeneralSettingKind.CategoryField || record.Setting == HtmlGeneralSettingKind.Table)
             {
                 if (value is bool b)
                 {
@@ -386,6 +414,7 @@ public partial class HtmlConfigurationDialog : Window
         public string FontStyleName { get; set; } = string.Empty;
         public string DisplayName => Setting switch
         {
+            HtmlGeneralSettingKind.Table => "Table",
             HtmlGeneralSettingKind.CategoryField => "Category field",
             HtmlGeneralSettingKind.Font => "Font",
             _ => Setting.ToString()

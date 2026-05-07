@@ -14,6 +14,7 @@ public sealed class HtmlFieldConfiguration
 {
     public int SourceFieldIndex { get; set; }
     public string SourceFieldKey { get; set; } = string.Empty;
+    public bool IsTable { get; set; } = true;
     public bool IsCategoryField { get; set; }
     public string FontFamilyName { get; set; } = string.Empty;
     public double FontSize { get; set; }

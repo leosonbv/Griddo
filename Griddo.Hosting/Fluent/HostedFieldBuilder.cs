@@ -50,6 +50,7 @@ public sealed class HostedFieldBuilder
     {
         var config = new HtmlFieldConfiguration
         {
+            IsTable = target.IsTable,
             IsCategoryField = target.IsCategoryField,
             FontFamilyName = target.FontFamilyName,
             FontSize = target.FontSize,
@@ -57,6 +58,7 @@ public sealed class HostedFieldBuilder
             Segments = target.Segments
         };
         configure(config);
+        target.IsTable = config.IsTable;
         target.IsCategoryField = config.IsCategoryField;
         target.FontFamilyName = config.FontFamilyName;
         target.FontSize = config.FontSize;

@@ -40,6 +40,7 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
     public string FontFamilyName { get; set; } = string.Empty;
     public double FontSize { get; set; }
     public string FontStyleName { get; set; } = string.Empty;
+    public bool IsTable { get; set; } = true;
     public bool NoWrap { get; set; }
     public bool IsCategoryField { get; set; }
     public List<HtmlFieldSegmentConfiguration> Segments { get; set; } = [];
@@ -57,15 +58,16 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
             return string.Empty;
         }
 
-        var rows = new List<string>(enabled.Count);
+        var pairs = new List<(HtmlFieldSegmentConfiguration Segment, string Label, string Rendered)>(enabled.Count);
         foreach (var segment in enabled)
         {
-            if (segment.SourceFieldIndex < 0 || segment.SourceFieldIndex >= fields.Count)
+            var sourceFieldIndex = ResolveSourceFieldIndex(segment, fields);
+            if (sourceFieldIndex < 0 || sourceFieldIndex >= fields.Count)
             {
                 continue;
             }
 
-            var field = fields[segment.SourceFieldIndex];
+            var field = fields[sourceFieldIndex];
             if (ReferenceEquals(field, this))
             {
                 continue;
@@ -84,17 +86,80 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
                 rendered = rendered.Replace(" ", "\u00A0", StringComparison.Ordinal);
             }
 
-            var breakBefore = segment.AddLineBreakAfter ? " data-break-before='1'" : string.Empty;
-            rows.Add($"<tr{breakBefore}><td><b>{WebUtility.HtmlEncode(header)}</b></td><td>{rendered}</td></tr>");
+            pairs.Add((segment, header, rendered));
         }
 
-        if (rows.Count == 0)
+        if (pairs.Count == 0)
         {
             return string.Empty;
         }
 
         var style = BuildSelfStyle();
+        if (!IsTable)
+        {
+            return BuildDivLikeMarkup(pairs, style);
+        }
+
+        var rows = pairs
+            .Select(p => $"<tr><td><b>{WebUtility.HtmlEncode(p.Label)}</b></td><td>{p.Rendered}</td></tr>")
+            .ToList();
         return $"<table style='border-collapse:collapse;border:none;{style}'><tbody>{string.Join(string.Empty, rows)}</tbody></table>";
+    }
+
+    private static string BuildDivLikeMarkup(
+        IReadOnlyList<(HtmlFieldSegmentConfiguration Segment, string Label, string Rendered)> pairs,
+        string style)
+    {
+        var chunks = new List<string>(pairs.Count);
+        for (var i = 0; i < pairs.Count; i++)
+        {
+            var pair = pairs[i];
+            chunks.Add($"<span><b>{WebUtility.HtmlEncode(pair.Label)}</b>: {pair.Rendered}</span>");
+            if (i >= pairs.Count - 1)
+            {
+                continue;
+            }
+
+            chunks.Add(pair.Segment.AddLineBreakAfter ? "<br/>" : " &middot; ");
+        }
+
+        return $"<div style='{style}'>{string.Concat(chunks)}</div>";
+    }
+
+    private static int ResolveSourceFieldIndex(HtmlFieldSegmentConfiguration segment, IReadOnlyList<IGriddoFieldView> fields)
+    {
+        if (!string.IsNullOrWhiteSpace(segment.SourceFieldKey))
+        {
+            // Keyed segments are order-independent by design. If a key cannot be resolved
+            // (e.g. field hidden/removed), skip it instead of falling back to an index.
+            return FindFieldIndexByKey(fields, segment.SourceFieldKey);
+        }
+
+        return segment.SourceFieldIndex;
+    }
+
+    private static int FindFieldIndexByKey(IReadOnlyList<IGriddoFieldView> fields, string sourceFieldKey)
+    {
+        for (var i = 0; i < fields.Count; i++)
+        {
+            var key = GetFieldKey(fields[i]);
+            if (string.Equals(key, sourceFieldKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static string GetFieldKey(IGriddoFieldView field)
+    {
+        if (field is IGriddoFieldSourceMember sourceMember && !string.IsNullOrWhiteSpace(sourceMember.SourceMemberName))
+        {
+            return sourceMember.SourceMemberName;
+        }
+
+        return field.Header ?? string.Empty;
     }
 
     public bool TrySetValue(object recordSource, object? value) => false;

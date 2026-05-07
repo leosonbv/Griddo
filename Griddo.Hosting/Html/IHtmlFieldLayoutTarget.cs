@@ -4,6 +4,7 @@ namespace Griddo.Hosting.Html;
 
 public interface IHtmlFieldLayoutTarget
 {
+    bool IsTable { get; set; }
     bool IsCategoryField { get; set; }
     string FontFamilyName { get; set; }
     double FontSize { get; set; }
