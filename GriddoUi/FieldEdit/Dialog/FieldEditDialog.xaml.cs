@@ -158,6 +158,7 @@ public partial class FieldConfigurator : Window
         AddGeneralSetting(GeneralSettingKind.FrozenFields, GeneralSettingValueKind.UnsignedInt, 2, "Frozen", "Frozen", "Frozen fields", intValue: fc);
         AddGeneralSetting(GeneralSettingKind.FrozenRecords, GeneralSettingValueKind.UnsignedInt, 2, "Frozen", "Frozen", "Frozen records", intValue: Math.Max(0, frozenRecords));
         AddGeneralSetting(GeneralSettingKind.ShowSelectionColor, GeneralSettingValueKind.Boolean, 3, "Selection", "Selection", "Cell selection", boolValue: options.ShowSelectionColor);
+        AddGeneralSetting(GeneralSettingKind.HideSelectionWhenNoFocus, GeneralSettingValueKind.Boolean, 3, "Selection", "Selection", "Hide selection when no focus", boolValue: options.HideSelectionWhenNoFocus);
         AddGeneralSetting(GeneralSettingKind.ShowRecordSelectionColor, GeneralSettingValueKind.Boolean, 3, "Selection", "Selection", "Record headers", boolValue: options.ShowRecordSelectionColor);
         AddGeneralSetting(GeneralSettingKind.ShowColSelectionColor, GeneralSettingValueKind.Boolean, 3, "Selection", "Selection", "Field headers", boolValue: options.ShowColSelectionColor);
         AddGeneralSetting(GeneralSettingKind.ShowCurrentCellRect, GeneralSettingValueKind.Boolean, 3, "Selection", "Selection", "Current cell", boolValue: options.ShowCurrentCellRect);
@@ -599,6 +600,7 @@ public partial class FieldConfigurator : Window
             RecordThickness = recordThickness,
             VisibleRecordCount = visibleRecords,
             ShowSelectionColor = GeneralRecord(GeneralSettingKind.ShowSelectionColor)?.BoolValue ?? true,
+            HideSelectionWhenNoFocus = GeneralRecord(GeneralSettingKind.HideSelectionWhenNoFocus)?.BoolValue ?? false,
             ShowCurrentCellRect = GeneralRecord(GeneralSettingKind.ShowCurrentCellRect)?.BoolValue ?? true,
             ShowRecordSelectionColor = GeneralRecord(GeneralSettingKind.ShowRecordSelectionColor)?.BoolValue ?? true,
             ShowColSelectionColor = GeneralRecord(GeneralSettingKind.ShowColSelectionColor)?.BoolValue ?? true,

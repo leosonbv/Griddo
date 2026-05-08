@@ -9,10 +9,20 @@ namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
+    private bool ShouldShowSelectionVisuals()
+    {
+        return !HideSelectionWhenGridLosesFocus || IsKeyboardFocusWithin;
+    }
+
+    private Brush ResolveHeaderForeground(bool isSelected)
+    {
+        return isSelected ? HeaderSelectionForeground : HeaderForeground;
+    }
+
     protected override void OnRender(DrawingContext dc)
     {
         SyncHostedCells();
-        dc.DrawRectangle(Brushes.White, null, new Rect(0, 0, ActualWidth, ActualHeight));
+        dc.DrawRectangle(BodyBackground, null, new Rect(0, 0, ActualWidth, ActualHeight));
         DrawHeaders(dc);
         DrawBody(dc);
         DrawEditingText(dc);
@@ -25,7 +35,8 @@ public sealed partial class Griddo
     {
         var width = GetFieldWidth(col);
         var rect = new Rect(x, 0, width, ScaledFieldHeaderHeight);
-        var headerBackground = (IsFieldHeaderMarkedSelected(col) && ShowFieldHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
+        var isSelectedHeader = ShouldShowSelectionVisuals() && IsFieldHeaderMarkedSelected(col) && ShowFieldHeaderSelectionColoring;
+        var headerBackground = isSelectedHeader ? HeaderSelectionBackground : HeaderBackground;
         dc.DrawRectangle(headerBackground, null, rect);
         var pen = new Pen(GridLineBrush, GridPenThickness);
         // Top edge of header strip is drawn once in DrawOuterWorksheetFrame (matches DrawLine rasterization for scroll fields).
@@ -43,9 +54,9 @@ public sealed partial class Griddo
             FlowDirection.LeftToRight,
             typeface,
             EffectiveFontSize,
-            Brushes.Black,
+            ResolveHeaderForeground(isSelectedHeader),
             1.0);
-        headerText.SetFontWeight(FontWeights.Bold);
+        headerText.SetFontWeight(HeaderFontWeight);
         headerText.TextAlignment = TextAlignment.Center;
         var visibleRect = clipRect.HasValue ? Rect.Intersect(rect, clipRect.Value) : rect;
         if (visibleRect.IsEmpty)
@@ -161,7 +172,7 @@ public sealed partial class Griddo
         }
 
         var isSelectedVisual = false;
-        if ((!isMergedBandCellEarly || isMergedRenderCarrier) && !isHostedCellEditing && ShowCellSelectionColoring)
+        if ((!isMergedBandCellEarly || isMergedRenderCarrier) && !isHostedCellEditing && ShowCellSelectionColoring && ShouldShowSelectionVisuals())
         {
             var drawSelection = _selectedCells.Contains(address);
             if (!IsBodyTransposed && Fields[col] is IGriddoRecordMergeBandView)
@@ -389,7 +400,7 @@ public sealed partial class Griddo
     {
         if (col < 0 || col >= Fields.Count)
         {
-            return Brushes.Black;
+            return BodyForeground;
         }
 
         if (cellView is { ForegroundColor.Length: > 0 }
@@ -410,7 +421,7 @@ public sealed partial class Griddo
             return brush;
         }
 
-        return Brushes.Black;
+        return BodyForeground;
     }
 
     private bool TryGetFieldBackgroundBrush(int col, object recordData, GriddoCellPropertyView? cellView, out Brush brush)
@@ -598,7 +609,8 @@ public sealed partial class Griddo
                 var recordHeight = GetRecordHeight(record);
                 var y = ScaledFieldHeaderHeight + GetRecordBodyTopRel(record);
                 var rect = new Rect(0, y, _recordHeaderWidth, recordHeight);
-                var recordHeaderBackground = (IsRecordHeaderMarkedSelected(record) && ShowRecordHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
+                var isSelectedRecordHeader = ShouldShowSelectionVisuals() && IsRecordHeaderMarkedSelected(record) && ShowRecordHeaderSelectionColoring;
+                var recordHeaderBackground = isSelectedRecordHeader ? HeaderSelectionBackground : HeaderBackground;
                 dc.DrawRectangle(recordHeaderBackground, null, rect);
                 // Top + bottom only; outer x=0 edge is one DrawLine in DrawOuterWorksheetFrame (avoids path vs line mismatch).
                 dc.DrawLine(recordHeaderPen, new Point(rect.Left, rect.Top), new Point(rect.Right, rect.Top));
@@ -612,7 +624,7 @@ public sealed partial class Griddo
                         visibleRect,
                         typeface,
                         EffectiveFontSize,
-                        Brushes.Black,
+                        ResolveHeaderForeground(isSelectedRecordHeader),
                         underline: false,
                         treatAsHtml: false,
                         autoDetectHtml: false,
@@ -642,7 +654,8 @@ public sealed partial class Griddo
         void DrawRecordHeaderStripCell(int record, Rect clipIntersect)
         {
             var rr = GetRecordHeaderRect(record);
-            var recordHeaderBackground = (IsRecordHeaderMarkedSelected(record) && ShowRecordHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
+            var isSelectedRecordHeader = ShouldShowSelectionVisuals() && IsRecordHeaderMarkedSelected(record) && ShowRecordHeaderSelectionColoring;
+            var recordHeaderBackground = isSelectedRecordHeader ? HeaderSelectionBackground : HeaderBackground;
             dc.DrawRectangle(recordHeaderBackground, null, rr);
             var pen = new Pen(GridLineBrush, GridPenThickness);
             dc.DrawLine(pen, rr.TopLeft, rr.BottomLeft);
@@ -656,7 +669,7 @@ public sealed partial class Griddo
                     visibleRect,
                     typeface,
                     EffectiveFontSize,
-                    Brushes.Black,
+                    ResolveHeaderForeground(isSelectedRecordHeader),
                     underline: false,
                     treatAsHtml: false,
                     autoDetectHtml: false,
@@ -707,7 +720,8 @@ public sealed partial class Griddo
         void DrawFieldHeaderCell(int col, Rect clipRect)
         {
             var rr = GetFieldHeaderRect(col);
-            var headerBackground = (IsFieldHeaderMarkedSelected(col) && ShowFieldHeaderSelectionColoring) ? SelectionBackground : HeaderBackground;
+            var isSelectedHeader = ShouldShowSelectionVisuals() && IsFieldHeaderMarkedSelected(col) && ShowFieldHeaderSelectionColoring;
+            var headerBackground = isSelectedHeader ? HeaderSelectionBackground : HeaderBackground;
             dc.DrawRectangle(headerBackground, null, rr);
             var pen = new Pen(GridLineBrush, GridPenThickness);
             dc.DrawLine(pen, rr.TopLeft, rr.TopRight);
@@ -721,9 +735,9 @@ public sealed partial class Griddo
                 FlowDirection.LeftToRight,
                 typeface,
                 EffectiveFontSize,
-                Brushes.Black,
+                ResolveHeaderForeground(isSelectedHeader),
                 1.0);
-            headerText.SetFontWeight(FontWeights.Bold);
+            headerText.SetFontWeight(HeaderFontWeight);
             headerText.TextAlignment = TextAlignment.Center;
             var visibleRect = Rect.Intersect(rr, clipRect);
             if (visibleRect.IsEmpty)
@@ -1104,6 +1118,11 @@ public sealed partial class Griddo
             return;
         }
 
+        if (!ShouldShowSelectionVisuals())
+        {
+            return;
+        }
+
         var baseRect = GetCellRect(_currentCell.RecordIndex, _currentCell.FieldIndex);
         var rect = GetMergedRecordCellRect(_currentCell.RecordIndex, _currentCell.FieldIndex, baseRect);
         if (rect.IsEmpty)
@@ -1191,7 +1210,7 @@ public sealed partial class Griddo
 
         var typeface = new Typeface("Segoe UI");
         var fontSize = EffectiveFontSize;
-        dc.DrawRectangle(Brushes.White, null, fullEditRect);
+        dc.DrawRectangle(BodyBackground, null, fullEditRect);
         if (TryGetInlineDialogButtonRect(fullEditRect, out var dialogButtonRect))
         {
             dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(240, 240, 240)), new Pen(Brushes.Gray, 1), dialogButtonRect);
@@ -1201,7 +1220,7 @@ public sealed partial class Griddo
                 FlowDirection.LeftToRight,
                 typeface,
                 Math.Max(9, fontSize * 0.9),
-                Brushes.Black,
+                BodyForeground,
                 1.0);
             var buttonTextX = dialogButtonRect.X + Math.Max(0, (dialogButtonRect.Width - buttonText.Width) / 2);
             var buttonTextY = dialogButtonRect.Y + Math.Max(0, (dialogButtonRect.Height - buttonText.Height) / 2);
@@ -1210,7 +1229,7 @@ public sealed partial class Griddo
         var verticalAlignment = VerticalAlignment.Center;
         var underline = _currentCell.IsValid && HasUnderlineStyle(_currentCell.FieldIndex, null);
         // Edit mode should show the literal source text (including HTML markup), not rendered HTML.
-        GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, underline, false, false, field.ContentAlignment, verticalAlignment);
+        GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, BodyForeground, underline, false, false, field.ContentAlignment, verticalAlignment);
 
         var displayText = _editSession.Buffer;
         var editText = new FormattedText(
@@ -1219,7 +1238,7 @@ public sealed partial class Griddo
             FlowDirection.LeftToRight,
             typeface,
             fontSize,
-            Brushes.Black,
+            BodyForeground,
             1.0);
         editText.TextAlignment = field.ContentAlignment;
         editText.MaxTextWidth = Math.Max(1, editContentRect.Width - 8);
@@ -1235,7 +1254,7 @@ public sealed partial class Griddo
             FlowDirection.LeftToRight,
             typeface,
             fontSize,
-            Brushes.Black,
+            BodyForeground,
             1.0);
         var contentWidth = Math.Max(1, editContentRect.Width - 8);
         var totalTextWidth = Math.Min(editText.WidthIncludingTrailingWhitespace, contentWidth);
@@ -1258,7 +1277,7 @@ public sealed partial class Griddo
                 {
                     dc.PushClip(new RectangleGeometry(editContentRect));
                     dc.DrawGeometry(new SolidColorBrush(Color.FromArgb(120, 102, 178, 255)), null, selectionGeometry);
-                    GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, underline, false, false, field.ContentAlignment, verticalAlignment);
+                    GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, BodyForeground, underline, false, false, field.ContentAlignment, verticalAlignment);
                     dc.Pop();
                 }
             }
@@ -1272,7 +1291,7 @@ public sealed partial class Griddo
                     FlowDirection.LeftToRight,
                     typeface,
                     fontSize,
-                    Brushes.Black,
+                    BodyForeground,
                     1.0).WidthIncludingTrailingWhitespace;
                 var selectedWidth = new FormattedText(
                     selectedText,
@@ -1280,7 +1299,7 @@ public sealed partial class Griddo
                     FlowDirection.LeftToRight,
                     typeface,
                     fontSize,
-                    Brushes.Black,
+                    BodyForeground,
                     1.0).WidthIncludingTrailingWhitespace;
                 var selectionX = Math.Clamp(textStartX + Math.Min(beforeWidth, contentWidth), editContentRect.X + 2, editContentRect.Right - 2);
                 var selectionRight = Math.Clamp(selectionX + Math.Min(selectedWidth, contentWidth), editContentRect.X + 2, editContentRect.Right - 2);
@@ -1288,7 +1307,7 @@ public sealed partial class Griddo
                 {
                     var selectionRect = new Rect(selectionX, caretOriginY, selectionRight - selectionX, Math.Max(1, editText.Height));
                     dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(120, 102, 178, 255)), null, selectionRect);
-                    GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, Brushes.Black, underline, false, false, field.ContentAlignment, verticalAlignment);
+                    GriddoValuePainter.Paint(dc, _editSession.Buffer, editContentRect, typeface, fontSize, BodyForeground, underline, false, false, field.ContentAlignment, verticalAlignment);
                 }
             }
         }
@@ -1309,7 +1328,7 @@ public sealed partial class Griddo
         caretBottom = Math.Clamp(caretBottom, caretTop + 1, editContentRect.Bottom - 1);
         if (caretBottom > caretTop)
         {
-            dc.DrawLine(new Pen(Brushes.Black, 1), new Point(caretX, caretTop), new Point(caretX, caretBottom));
+            dc.DrawLine(new Pen(BodyForeground, 1), new Point(caretX, caretTop), new Point(caretX, caretBottom));
         }
 
         dc.Pop();

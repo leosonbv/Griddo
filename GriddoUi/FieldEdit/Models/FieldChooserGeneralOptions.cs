@@ -5,6 +5,7 @@ public sealed class FieldChooserGeneralOptions
     public int RecordThickness { get; set; } = 24;
     public int VisibleRecordCount { get; set; }
     public bool ShowSelectionColor { get; set; } = true;
+    public bool HideSelectionWhenNoFocus { get; set; }
     public bool ShowCurrentCellRect { get; set; } = true;
     public bool ShowRecordSelectionColor { get; set; } = true;
     public bool ShowColSelectionColor { get; set; } = true;
@@ -19,6 +20,7 @@ public sealed class FieldChooserGeneralOptions
         RecordThickness = RecordThickness,
         VisibleRecordCount = VisibleRecordCount,
         ShowSelectionColor = ShowSelectionColor,
+        HideSelectionWhenNoFocus = HideSelectionWhenNoFocus,
         ShowCurrentCellRect = ShowCurrentCellRect,
         ShowRecordSelectionColor = ShowRecordSelectionColor,
         ShowColSelectionColor = ShowColSelectionColor,

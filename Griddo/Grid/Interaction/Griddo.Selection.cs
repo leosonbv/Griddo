@@ -43,6 +43,12 @@ public sealed partial class Griddo
             return false;
         }
 
+        ApplyKeyboardNavigationTarget(target, isShiftPressed);
+        return true;
+    }
+
+    private void ApplyKeyboardNavigationTarget(GriddoCellAddress target, bool isShiftPressed)
+    {
         if (isShiftPressed)
         {
             if (!_hasKeyboardSelectionAnchor)
@@ -56,7 +62,7 @@ public sealed partial class Griddo
             _currentCell = target;
             SelectRange(_keyboardSelectionAnchor, _currentCell, additive: false);
             InvalidateVisual();
-            return true;
+            return;
         }
 
         ClearHeaderFocus();
@@ -66,7 +72,6 @@ public sealed partial class Griddo
         _selectedCells.Clear();
         _selectedCells.Add(_currentCell);
         InvalidateVisual();
-        return true;
     }
 
     private void ApplyDragSelection()

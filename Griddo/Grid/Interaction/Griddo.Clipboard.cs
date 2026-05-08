@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Windows;
@@ -19,6 +20,17 @@ public sealed partial class Griddo
         }
 
         CopySelectedCellsToClipboard();
+    }
+
+    public void CopyToClipboardWithHeaders()
+    {
+        if (_isEditing)
+        {
+            CopyEditBufferToClipboard();
+            return;
+        }
+
+        CopySelectedCellsToClipboard(includeHeaders: true);
     }
 
     public void PasteFromClipboard()
@@ -51,6 +63,29 @@ public sealed partial class Griddo
         }
 
         ClearSelectedCells();
+    }
+
+    public void ExportSelectionToExcel()
+    {
+        if (_selectedCells.Count == 0)
+        {
+            return;
+        }
+
+        if (!TryBuildClipboardPayload(includeHeaders: true, out var tsv, out _))
+        {
+            return;
+        }
+
+        var tempFile = Path.Combine(
+            Path.GetTempPath(),
+            $"griddo-export-{DateTime.Now:yyyyMMdd-HHmmss-fff}.tsv");
+        File.WriteAllText(tempFile, tsv, Encoding.UTF8);
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = tempFile,
+            UseShellExecute = true
+        });
     }
 
     private void CutSelectedCellsToClipboard()
@@ -97,11 +132,32 @@ public sealed partial class Griddo
         }
     }
 
-    private void CopySelectedCellsToClipboard()
+    private void CopySelectedCellsToClipboard(bool includeHeaders = false)
     {
-        if (_selectedCells.Count == 0)
+        if (!TryBuildClipboardPayload(includeHeaders, out var tsv, out var cfHtml))
         {
             return;
+        }
+
+        var dataObject = new DataObject();
+        dataObject.SetText(tsv, TextDataFormat.UnicodeText);
+        dataObject.SetText(tsv, TextDataFormat.Text);
+
+        // CF_HTML offsets are UTF-8 byte counts; pass UTF-8 bytes so Excel gets valid HTML Format (string path can mis-encode).
+        var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        var htmlBytes = utf8.GetBytes(cfHtml);
+        dataObject.SetData(DataFormats.Html, new MemoryStream(htmlBytes, writable: false));
+
+        System.Windows.Clipboard.SetDataObject(dataObject, copy: true);
+    }
+
+    private bool TryBuildClipboardPayload(bool includeHeaders, out string tsv, out string cfHtml)
+    {
+        tsv = string.Empty;
+        cfHtml = string.Empty;
+        if (_selectedCells.Count == 0)
+        {
+            return false;
         }
 
         var minRecord = _selectedCells.Min(c => c.RecordIndex);
@@ -110,52 +166,52 @@ public sealed partial class Griddo
         var maxCol = _selectedCells.Max(c => c.FieldIndex);
 
         var lines = new List<string>();
-        for (var record = minRecord; record <= maxRecord; record++)
-        {
-            var values = new List<string>();
-            for (var col = minCol; col <= maxCol; col++)
-            {
-                var address = new GriddoCellAddress(record, col);
-                if (!_selectedCells.Contains(address))
-                {
-                    values.Add(string.Empty);
-                    continue;
-                }
-
-                var value = GetClipboardCellText(Fields[col], Records[record]);
-                values.Add(value.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' '));
-            }
-
-            lines.Add(string.Join('\t', values));
-        }
-
         var tableHtml = new StringBuilder();
         tableHtml.Append(
             "<table border=\"1\" cellspacing=\"0\" cellpadding=\"4\" style=\"border-collapse:collapse;font-family:Segoe UI,sans-serif;font-size:")
             .Append(EffectiveFontSize.ToString(CultureInfo.InvariantCulture))
             .Append("px\">");
 
+        if (includeHeaders)
+        {
+            var headerValues = new List<string>();
+            tableHtml.Append("<tr>");
+            for (var col = minCol; col <= maxCol; col++)
+            {
+                var header = Fields[col].Header ?? string.Empty;
+                var flatHeader = header.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ');
+                headerValues.Add(flatHeader);
+                tableHtml.Append("<th style=\"text-align:left\">")
+                    .Append(GriddoClipboardHtml.EscapeCellText(flatHeader))
+                    .Append("</th>");
+            }
+
+            tableHtml.Append("</tr>");
+            lines.Add(string.Join('\t', headerValues));
+        }
+
         for (var record = minRecord; record <= maxRecord; record++)
         {
+            var values = new List<string>();
             tableHtml.Append("<tr>");
             for (var col = minCol; col <= maxCol; col++)
             {
                 var address = new GriddoCellAddress(record, col);
                 if (!_selectedCells.Contains(address))
                 {
+                    values.Add(string.Empty);
                     tableHtml.Append("<td></td>");
                     continue;
                 }
 
                 var field = Fields[col];
+                var value = GetClipboardCellText(field, Records[record]);
+                var flat = value.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ');
+                values.Add(flat);
+
                 var cellRect = GetCellRect(record, col);
                 var cw = Math.Max(1, (int)Math.Round(cellRect.Width));
                 var ch = Math.Max(1, (int)Math.Round(cellRect.Height));
-
-                var flat = GetClipboardCellText(field, Records[record])
-                    .Replace('\t', ' ')
-                    .Replace('\r', ' ')
-                    .Replace('\n', ' ');
 
                 if (field is IGriddoHostedFieldView hosted
                     && hosted.TryGetClipboardHtmlFragment(
@@ -193,23 +249,13 @@ public sealed partial class Griddo
             }
 
             tableHtml.Append("</tr>");
+            lines.Add(string.Join('\t', values));
         }
 
         tableHtml.Append("</table>");
-
-        var tsv = string.Join(Environment.NewLine, lines);
-        var cfHtml = GriddoClipboardHtml.EncodeHtmlFragment(tableHtml.ToString());
-
-        var dataObject = new DataObject();
-        dataObject.SetText(tsv, TextDataFormat.UnicodeText);
-        dataObject.SetText(tsv, TextDataFormat.Text);
-
-        // CF_HTML offsets are UTF-8 byte counts; pass UTF-8 bytes so Excel gets valid HTML Format (string path can mis-encode).
-        var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-        var htmlBytes = utf8.GetBytes(cfHtml);
-        dataObject.SetData(DataFormats.Html, new MemoryStream(htmlBytes, writable: false));
-
-        System.Windows.Clipboard.SetDataObject(dataObject, copy: true);
+        tsv = string.Join(Environment.NewLine, lines);
+        cfHtml = GriddoClipboardHtml.EncodeHtmlFragment(tableHtml.ToString());
+        return true;
     }
 
     private static string GetClipboardCellText(IGriddoFieldView field, object recordSource)

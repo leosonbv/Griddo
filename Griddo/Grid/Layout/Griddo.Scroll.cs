@@ -35,7 +35,8 @@ public sealed partial class Griddo
     }
 
     /// <summary>
-    /// When <see cref="VisibleRecordCount"/> is set, vertical scroll offset must be a multiple of record height so the top visible scroll record aligns with the body band (resize no longer leaves a partial record at the top).
+    /// Keep vertical scroll offset aligned to full record-height steps so the top visible row border
+    /// always lands on the top edge of the scroll viewport.
     /// </summary>
     private double HarmonizeVerticalScrollOffset(double offsetPx)
     {
@@ -44,7 +45,7 @@ public sealed partial class Griddo
             return Math.Clamp(offsetPx, 0, _verticalScrollBar.Maximum);
         }
 
-        if (_visibleRecordCount <= 0 || Records.Count == 0 || _viewportBodyHeight <= 0)
+        if (Records.Count == 0 || _viewportBodyHeight <= 0)
         {
             return Math.Clamp(offsetPx, 0, _verticalScrollBar.Maximum);
         }
@@ -109,11 +110,13 @@ public sealed partial class Griddo
         _horizontalScrollBar.LargeChange = horizontalLargeChange;
         _horizontalScrollBar.SmallChange = 16;
         _horizontalScrollBar.Maximum = maxHorizontal;
+        _horizontalScrollBar.ViewportSize = Math.Max(1, horizontalLargeChange);
         _horizontalScrollBar.Visibility = ShowHorizontalScrollBar ? Visibility.Visible : Visibility.Collapsed;
 
         _verticalScrollBar.LargeChange = verticalLargeChange;
         _verticalScrollBar.SmallChange = verticalSmallChange;
         _verticalScrollBar.Maximum = maxVertical;
+        _verticalScrollBar.ViewportSize = Math.Max(1, verticalLargeChange);
         _verticalScrollBar.Visibility = ShowVerticalScrollBar ? Visibility.Visible : Visibility.Collapsed;
 
         SetHorizontalOffset(_horizontalOffset);
@@ -174,7 +177,7 @@ public sealed partial class Griddo
 
     private void SetVerticalOffset(double value)
     {
-        var clamped = Math.Clamp(value, 0, _verticalScrollBar.Maximum);
+        var clamped = HarmonizeVerticalScrollOffset(value);
         if (Math.Abs(clamped - _verticalOffset) < double.Epsilon)
         {
             return;
@@ -197,7 +200,13 @@ public sealed partial class Griddo
 
     private void OnVerticalScrollChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        _verticalOffset = e.NewValue;
+        var harmonized = HarmonizeVerticalScrollOffset(e.NewValue);
+        _verticalOffset = harmonized;
+        if (Math.Abs(e.NewValue - harmonized) > double.Epsilon && Math.Abs(_verticalScrollBar.Value - harmonized) > double.Epsilon)
+        {
+            _verticalScrollBar.Value = harmonized;
+        }
+
         InvalidateVisual();
     }
 }

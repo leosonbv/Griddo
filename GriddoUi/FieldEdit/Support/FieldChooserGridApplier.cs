@@ -172,6 +172,7 @@ public static class FieldChooserGridApplier
             grid.UniformRecordHeight = Math.Max(minRecordThickness, generalOptions.RecordThickness);
             grid.VisibleRecordCount = generalOptions.VisibleRecordCount;
             grid.ShowCellSelectionColoring = generalOptions.ShowSelectionColor;
+            grid.HideSelectionWhenGridLosesFocus = generalOptions.HideSelectionWhenNoFocus;
             grid.ShowCurrentCellColor = generalOptions.ShowCurrentCellRect;
             grid.ShowRecordHeaderSelectionColoring = generalOptions.ShowRecordSelectionColor;
             grid.ShowFieldHeaderSelectionColoring = generalOptions.ShowColSelectionColor;

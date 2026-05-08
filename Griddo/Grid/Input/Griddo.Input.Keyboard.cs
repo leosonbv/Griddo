@@ -1,3 +1,4 @@
+using System;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -53,13 +54,15 @@ public sealed partial class Griddo
         var isHostedEditing = IsCurrentHostedCellInEditMode();
 
         if (TryHandleFindOpenChord(e, isCtrlPressed)
-            || TryHandleFindNextF3(e, isShiftPressed)
+            || TryHandleFindNextF3(e, isShiftPressed, isCtrlPressed)
             || TryHandleClearFindOnEscape(e)
+            || TryHandleClipboardCopyWithHeaders(e, isCtrlPressed, isShiftPressed)
             || TryHandleClipboardCopy(e, isCtrlPressed)
             || TryHandleClipboardPaste(e, isCtrlPressed, isShiftPressed)
             || TryHandleClipboardCut(e, isCtrlPressed, isShiftPressed)
             || TryHandleFillDown(e, isCtrlPressed, isHostedEditing)
             || TryHandleIncrementalDown(e, isCtrlPressed, isHostedEditing)
+            || TryHandleExportToExcel(e, isCtrlPressed, isShiftPressed)
             || TryHandleEnterWhileEditingOrHosted(e, isShiftPressed, isHostedEditing)
             || TryHandleEscapeWhileEditingOrHosted(e, isHostedEditing)
             || TryHandleTabWhileEditingOrHosted(e, isShiftPressed, isHostedEditing)
@@ -101,6 +104,19 @@ public sealed partial class Griddo
         }
 
         base.OnLostKeyboardFocus(e);
+        if (HideSelectionWhenGridLosesFocus)
+        {
+            InvalidateVisual();
+        }
+    }
+
+    protected override void OnGotKeyboardFocus(KeyboardFocusChangedEventArgs e)
+    {
+        base.OnGotKeyboardFocus(e);
+        if (HideSelectionWhenGridLosesFocus)
+        {
+            InvalidateVisual();
+        }
     }
 
     private static bool IsVisualDescendantOf(DependencyObject? node, DependencyObject ancestor)
@@ -145,12 +161,14 @@ public sealed partial class Griddo
         return true;
     }
 
-    private bool TryHandleFindNextF3(KeyEventArgs e, bool isShiftPressed)
+    private bool TryHandleFindNextF3(KeyEventArgs e, bool isShiftPressed, bool isCtrlPressed)
     {
         if (e.Key != Key.F3)
         {
             return false;
         }
+
+        var findForward = !(isShiftPressed || isCtrlPressed);
 
         if (string.IsNullOrWhiteSpace(_findText))
         {
@@ -163,12 +181,12 @@ public sealed partial class Griddo
             _findText = prompted;
             AddFindHistory(prompted);
             RebuildFindMatches();
-            FindNextMatch(forward: !isShiftPressed, fromCurrentMatch: false);
+            FindNextMatch(forward: findForward, fromCurrentMatch: false);
         }
         else
         {
             RebuildFindMatches();
-            FindNextMatch(forward: !isShiftPressed, fromCurrentMatch: true);
+            FindNextMatch(forward: findForward, fromCurrentMatch: true);
         }
 
         InvalidateVisual();
@@ -215,6 +233,26 @@ public sealed partial class Griddo
         return true;
     }
 
+    private bool TryHandleClipboardCopyWithHeaders(KeyEventArgs e, bool isCtrlPressed, bool isShiftPressed)
+    {
+        if (!isCtrlPressed || !isShiftPressed || e.Key != Key.C)
+        {
+            return false;
+        }
+
+        if (_isEditing)
+        {
+            CopyEditBufferToClipboard();
+        }
+        else
+        {
+            CopyToClipboardWithHeaders();
+        }
+
+        e.Handled = true;
+        return true;
+    }
+
     private bool TryHandleClipboardPaste(KeyEventArgs e, bool isCtrlPressed, bool isShiftPressed)
     {
         if (!((isCtrlPressed && e.Key == Key.V) || (isShiftPressed && e.Key == Key.Insert)))
@@ -251,6 +289,18 @@ public sealed partial class Griddo
             CutSelectedCellsToClipboard();
         }
 
+        e.Handled = true;
+        return true;
+    }
+
+    private bool TryHandleExportToExcel(KeyEventArgs e, bool isCtrlPressed, bool isShiftPressed)
+    {
+        if (!isCtrlPressed || isShiftPressed || e.Key != Key.E || _isEditing)
+        {
+            return false;
+        }
+
+        ExportSelectionToExcel();
         e.Handled = true;
         return true;
     }
@@ -471,6 +521,11 @@ public sealed partial class Griddo
             return true;
         }
 
+        if (TryHandlePageNavigation(e, isCtrlPressed, isShiftPressed))
+        {
+            return true;
+        }
+
         if (HandleCellKeyboardNavigation(e.Key, isCtrlPressed, isShiftPressed))
         {
             e.Handled = true;
@@ -478,6 +533,78 @@ public sealed partial class Griddo
         }
 
         return false;
+    }
+
+    private bool TryHandlePageNavigation(KeyEventArgs e, bool isCtrlPressed, bool isShiftPressed)
+    {
+        if (e.Key != Key.PageUp && e.Key != Key.PageDown)
+        {
+            return false;
+        }
+
+        if (Records.Count == 0 || Fields.Count == 0)
+        {
+            e.Handled = true;
+            return true;
+        }
+
+        var direction = e.Key == Key.PageUp ? -1 : 1;
+        var target = isCtrlPressed
+            ? GetHorizontalPageNavigationTarget(direction)
+            : GetVerticalPageNavigationTarget(direction);
+
+        ApplyKeyboardNavigationTarget(target, isShiftPressed);
+        e.Handled = true;
+        return true;
+    }
+
+    private GriddoCellAddress GetVerticalPageNavigationTarget(int direction)
+    {
+        var recordHeight = Math.Max(1, GetRecordHeight(0));
+        var viewportRecords = (int)Math.Floor(Math.Max(1, GetScrollRecordsViewportHeight()) / recordHeight);
+        var recordStep = Math.Max(1, viewportRecords);
+        var targetRecord = Math.Clamp(_currentCell.RecordIndex + direction * recordStep, 0, Records.Count - 1);
+
+        var pageDelta = Math.Max(1, _verticalScrollBar.LargeChange);
+        SetVerticalOffset(_verticalOffset + direction * pageDelta);
+
+        return new GriddoCellAddress(targetRecord, _currentCell.FieldIndex);
+    }
+
+    private GriddoCellAddress GetHorizontalPageNavigationTarget(int direction)
+    {
+        var targetField = GetHorizontalPageTargetField(direction);
+        var pageDelta = Math.Max(1, _horizontalScrollBar.LargeChange);
+        SetHorizontalOffset(_horizontalOffset + direction * pageDelta);
+        return new GriddoCellAddress(_currentCell.RecordIndex, targetField);
+    }
+
+    private int GetHorizontalPageTargetField(int direction)
+    {
+        if (direction < 0)
+        {
+            var widthBudget = Math.Max(1, GetScrollViewportWidth());
+            var consumed = 0.0;
+            var field = _currentCell.FieldIndex;
+            while (field > 0 && consumed < widthBudget)
+            {
+                field--;
+                consumed += GetFieldWidth(field);
+            }
+
+            return Math.Clamp(field, 0, Fields.Count - 1);
+        }
+
+        var forwardBudget = Math.Max(1, GetScrollViewportWidth());
+        var forwardConsumed = 0.0;
+        var targetField = _currentCell.FieldIndex;
+        while (targetField < Fields.Count - 1 && forwardConsumed < forwardBudget)
+        {
+            targetField++;
+            forwardConsumed += GetFieldWidth(targetField);
+        }
+
+        return Math.Clamp(targetField, 0, Fields.Count - 1);
     }
 
     private bool TryHandleF2OrDeleteOutsideEdit(KeyEventArgs e)

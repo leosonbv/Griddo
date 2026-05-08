@@ -13,6 +13,7 @@ public enum GeneralSettingKind
     ShowVerticalScrollBar,
     TransposeLayout,
     ShowSelectionColor,
+    HideSelectionWhenNoFocus,
     ShowRecordSelectionColor,
     ShowColSelectionColor,
     ShowCurrentCellRect,

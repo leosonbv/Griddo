@@ -45,7 +45,7 @@ public abstract partial class SkiaChartBaseControl
 
     private void DrawChart(SKCanvas canvas, int width, int height)
     {
-        canvas.Clear(SKColors.Transparent);
+        canvas.Clear(ChartBackgroundColor);
 
         if (width <= 0 || height <= 0)
         {
@@ -81,6 +81,10 @@ public abstract partial class SkiaChartBaseControl
 
         canvas.Save();
         canvas.ClipRect(plotRect);
+        using (var plotBackgroundPaint = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = false, Color = PlotBackgroundColor })
+        {
+            canvas.DrawRect(plotRect, plotBackgroundPaint);
+        }
 
         if (Points.Count > 0)
         {
@@ -132,7 +136,7 @@ public abstract partial class SkiaChartBaseControl
         using var textPaint = new SKPaint
         {
             IsAntialias = true,
-            Color = SKColors.Black
+            Color = TitleForegroundColor
         };
         using var backgroundPaint = new SKPaint
         {
@@ -167,12 +171,12 @@ public abstract partial class SkiaChartBaseControl
                 if (segment.HasHeader)
                 {
                     using var headerFont = new SKFont(ResolveTypeface(segment.HeaderStyle), metrics.FontSize);
-                    textPaint.Color = SKColors.Black;
+                    textPaint.Color = TitleForegroundColor;
                     canvas.DrawText(segment.HeaderText, x, baselineY, SKTextAlign.Left, headerFont, textPaint);
                 }
 
                 using var valueFont = new SKFont(ResolveTypeface(segment.ValueStyle), metrics.FontSize);
-                textPaint.Color = segment.ValueForegroundColor ?? SKColors.Black;
+                textPaint.Color = segment.ValueForegroundColor ?? TitleForegroundColor;
                 var valueX = x + segment.ValueOffsetX;
                 canvas.DrawText(segment.ValueText, valueX, baselineY, SKTextAlign.Left, valueFont, textPaint);
                 x += segment.Width + (12f * PlotUiScale);

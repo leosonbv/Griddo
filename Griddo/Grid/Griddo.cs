@@ -15,6 +15,23 @@ namespace Griddo.Grid;
 
 public sealed partial class Griddo : FrameworkElement
 {
+    private static GriddoThemeKind _defaultTheme = GriddoThemeKind.Vs2013LightTheme;
+    private static event Action<GriddoThemeKind>? DefaultThemeChanged;
+    public static GriddoThemeKind DefaultTheme
+    {
+        get => _defaultTheme;
+        set
+        {
+            if (_defaultTheme == value)
+            {
+                return;
+            }
+
+            _defaultTheme = value;
+            DefaultThemeChanged?.Invoke(value);
+        }
+    }
+
     private enum HeaderFocusKind : byte
     {
         None,
@@ -30,6 +47,8 @@ public sealed partial class Griddo : FrameworkElement
     private const double MinRecordTextPadding = 4;
     private const double ResizeGripSize = 4;
     private const double ScrollBarSize = 14;
+    private const double ScrollBarButtonSizeScale = 2.0;
+    private const double ScrollBarThumbMinSizeScale = 2.0;
     private const double CurrentCellBorderThickness = 1.0;
     private const double HostedCellInsetX = 2.0;
     private const double HostedCellInsetY = 1.5;
@@ -186,6 +205,10 @@ public sealed partial class Griddo : FrameworkElement
             Orientation = Orientation.Horizontal,
             Minimum = 0
         };
+        _horizontalScrollBar.Resources[SystemParameters.HorizontalScrollBarButtonWidthKey] =
+            SystemParameters.HorizontalScrollBarButtonWidth * ScrollBarButtonSizeScale;
+        _horizontalScrollBar.Resources[SystemParameters.HorizontalScrollBarThumbWidthKey] =
+            SystemParameters.HorizontalScrollBarThumbWidth * ScrollBarThumbMinSizeScale;
         _horizontalScrollBar.ValueChanged += OnHorizontalScrollChanged;
 
         _children.Add(_scrollHostCanvas);
@@ -195,6 +218,10 @@ public sealed partial class Griddo : FrameworkElement
             Orientation = Orientation.Vertical,
             Minimum = 0
         };
+        _verticalScrollBar.Resources[SystemParameters.VerticalScrollBarButtonHeightKey] =
+            SystemParameters.VerticalScrollBarButtonHeight * ScrollBarButtonSizeScale;
+        _verticalScrollBar.Resources[SystemParameters.VerticalScrollBarThumbHeightKey] =
+            SystemParameters.VerticalScrollBarThumbHeight * ScrollBarThumbMinSizeScale;
         _verticalScrollBar.ValueChanged += OnVerticalScrollChanged;
 
         _children.Add(_horizontalScrollBar);
@@ -217,6 +244,7 @@ public sealed partial class Griddo : FrameworkElement
         _children.Add(_fixedHostCanvas);
 
         _children.Add(_scaleFeedbackLayer);
+        CellContextMenu = BuildDefaultBodyCellContextMenu();
 
         Records.CollectionChanged += OnGridCollectionChanged;
         Fields.CollectionChanged += OnGridCollectionChanged;
@@ -226,8 +254,40 @@ public sealed partial class Griddo : FrameworkElement
         _fieldHeaderToolTip.Closed += FieldHeaderToolTipOnClosed;
         ToolTip = _fieldHeaderToolTip;
         ToolTipService.SetBetweenShowDelay(this, 0);
+        Loaded += OnLoadedThemeRegistration;
+        Unloaded += OnUnloadedThemeRegistration;
         Loaded += OnLoadedRequestFocus;
         IsVisibleChanged += OnIsVisibleChangedRequestFocus;
+        ApplyTheme(_theme);
+    }
+
+    private void OnLoadedThemeRegistration(object sender, RoutedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        DefaultThemeChanged -= HandleDefaultThemeChanged;
+        DefaultThemeChanged += HandleDefaultThemeChanged;
+        if (_theme != DefaultTheme)
+        {
+            ApplyTheme(DefaultTheme);
+        }
+    }
+
+    private void OnUnloadedThemeRegistration(object sender, RoutedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        DefaultThemeChanged -= HandleDefaultThemeChanged;
+    }
+
+    private void HandleDefaultThemeChanged(GriddoThemeKind theme)
+    {
+        if (_theme == theme)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() => ApplyTheme(theme)));
     }
 
     private void OnLoadedRequestFocus(object sender, RoutedEventArgs e)
@@ -381,7 +441,13 @@ public sealed partial class Griddo : FrameworkElement
 
     public Brush GridLineBrush { get; set; } = Brushes.LightGray;
     public Brush HeaderBackground { get; set; } = new SolidColorBrush(Color.FromRgb(245, 245, 245));
+    public Brush HeaderForeground { get; set; } = Brushes.Black;
+    public Brush HeaderSelectionForeground { get; set; } = Brushes.White;
+    public FontWeight HeaderFontWeight { get; set; } = FontWeights.Bold;
+    public Brush BodyBackground { get; set; } = Brushes.White;
+    public Brush BodyForeground { get; set; } = Brushes.Black;
     public Brush SelectionBackground { get; set; } = new SolidColorBrush(Color.FromArgb(120, 102, 178, 255));
+    public Brush HeaderSelectionBackground { get; set; } = new SolidColorBrush(Color.FromArgb(160, 102, 178, 255));
     public Brush CurrentCellBorderBrush { get; set; } = Brushes.DodgerBlue;
     public Brush FindMatchBackground { get; set; } = new SolidColorBrush(Color.FromArgb(170, 255, 235, 120));
     private bool _showFieldHeaderSelectionColoring = true;
@@ -389,8 +455,38 @@ public sealed partial class Griddo : FrameworkElement
     private bool _showHorizontalScrollBar = true;
     private bool _showVerticalScrollBar = true;
     private bool _immediateCellEditOnSingleClick;
+    private bool _hideSelectionWhenGridLosesFocus;
+    private GriddoThemeKind _theme = DefaultTheme;
     public bool ShowCellSelectionColoring { get; set; } = true;
+    public bool HideSelectionWhenGridLosesFocus
+    {
+        get => _hideSelectionWhenGridLosesFocus;
+        set
+        {
+            if (_hideSelectionWhenGridLosesFocus == value)
+            {
+                return;
+            }
+
+            _hideSelectionWhenGridLosesFocus = value;
+            InvalidateVisual();
+        }
+    }
     public bool ShowSortingIndicators { get; set; } = true;
+    public GriddoThemeKind Theme
+    {
+        get => _theme;
+        set
+        {
+            if (_theme == value)
+            {
+                return;
+            }
+
+            ApplyTheme(value);
+        }
+    }
+
     public bool ShowHeaderSelectionColoring
     {
         get => ShowFieldHeaderSelectionColoring && ShowRecordHeaderSelectionColoring;
@@ -468,6 +564,48 @@ public sealed partial class Griddo : FrameworkElement
     {
         get => _immediateCellEditOnSingleClick;
         set => _immediateCellEditOnSingleClick = value;
+    }
+
+    public void ApplyTheme(GriddoThemeKind theme)
+    {
+        _theme = theme;
+        switch (theme)
+        {
+            case GriddoThemeKind.Vs2013DarkTheme:
+                GridLineBrush = new SolidColorBrush(Color.FromRgb(62, 62, 66));
+                HeaderBackground = new SolidColorBrush(Color.FromRgb(45, 45, 48));
+                HeaderForeground = new SolidColorBrush(Color.FromRgb(241, 241, 241));
+                HeaderSelectionForeground = Brushes.White;
+                HeaderFontWeight = FontWeights.Normal;
+                BodyBackground = new SolidColorBrush(Color.FromRgb(37, 37, 38));
+                BodyForeground = new SolidColorBrush(Color.FromRgb(241, 241, 241));
+                SelectionBackground = new SolidColorBrush(Color.FromArgb(95, 0, 122, 204));
+                HeaderSelectionBackground = new SolidColorBrush(Color.FromRgb(0, 122, 204));
+                CurrentCellBorderBrush = new SolidColorBrush(Color.FromRgb(160, 210, 255));
+                FindMatchBackground = new SolidColorBrush(Color.FromArgb(170, 180, 160, 70));
+                break;
+            case GriddoThemeKind.Vs2013LightTheme:
+            default:
+                GridLineBrush = new SolidColorBrush(Color.FromRgb(217, 217, 217));
+                HeaderBackground = new SolidColorBrush(Color.FromRgb(240, 240, 240));
+                HeaderForeground = Brushes.Black;
+                HeaderSelectionForeground = Brushes.White;
+                HeaderFontWeight = FontWeights.Normal;
+                BodyBackground = Brushes.White;
+                BodyForeground = Brushes.Black;
+                SelectionBackground = new SolidColorBrush(Color.FromArgb(120, 102, 178, 255));
+                HeaderSelectionBackground = new SolidColorBrush(Color.FromRgb(0, 122, 204));
+                CurrentCellBorderBrush = Brushes.DodgerBlue;
+                FindMatchBackground = new SolidColorBrush(Color.FromArgb(170, 255, 235, 120));
+                break;
+        }
+
+        _horizontalScrollBar.Background = HeaderBackground;
+        _horizontalScrollBar.Foreground = HeaderForeground;
+        _verticalScrollBar.Background = HeaderBackground;
+        _verticalScrollBar.Foreground = HeaderForeground;
+
+        InvalidateVisual();
     }
 
     /// <summary>Pen stroke for the right edge of the last fixed field only (freeze boundary before scrollable fields).</summary>

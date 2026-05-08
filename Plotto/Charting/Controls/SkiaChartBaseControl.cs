@@ -12,6 +12,22 @@ namespace Plotto.Charting.Controls;
 
 public abstract partial class SkiaChartBaseControl : SKElement
 {
+    private static PlottoThemeKind _defaultTheme = PlottoThemeKind.Vs2013LightTheme;
+    private static event Action<PlottoThemeKind>? DefaultThemeChanged;
+    public static PlottoThemeKind DefaultTheme
+    {
+        get => _defaultTheme;
+        set
+        {
+            if (_defaultTheme == value)
+            {
+                return;
+            }
+
+            _defaultTheme = value;
+            DefaultThemeChanged?.Invoke(value);
+        }
+    }
     /// <summary>Default plot stroke; matches <see cref="CalibrationCurveControl"/> fit line.</summary>
     private readonly SKPaint _linePaint = new()
     {
@@ -54,6 +70,10 @@ public abstract partial class SkiaChartBaseControl : SKElement
     private const int DeferredContextMenuDelayMs = 450;
 
     private readonly SeriesViewportInteractionClamp _viewportWheelClamp = new();
+    private PlottoThemeKind _theme = DefaultTheme;
+    protected SKColor ChartBackgroundColor { get; private set; } = SKColors.White;
+    protected SKColor PlotBackgroundColor { get; private set; } = SKColors.White;
+    protected SKColor TitleForegroundColor { get; private set; } = SKColors.Black;
 
     protected SkiaChartBaseControl()
     {
@@ -61,7 +81,39 @@ public abstract partial class SkiaChartBaseControl : SKElement
         Focusable = true;
         IsHitTestVisible = true;
         SnapsToDevicePixels = true;
+        Loaded += OnLoadedThemeRegistration;
+        Unloaded += OnUnloadedThemeRegistration;
         ApplyUiScaleToResources();
+        ApplyTheme(_theme);
+    }
+
+    private void OnLoadedThemeRegistration(object sender, RoutedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        DefaultThemeChanged -= HandleDefaultThemeChanged;
+        DefaultThemeChanged += HandleDefaultThemeChanged;
+        if (_theme != DefaultTheme)
+        {
+            ApplyTheme(DefaultTheme);
+        }
+    }
+
+    private void OnUnloadedThemeRegistration(object sender, RoutedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        DefaultThemeChanged -= HandleDefaultThemeChanged;
+    }
+
+    private void HandleDefaultThemeChanged(PlottoThemeKind theme)
+    {
+        if (_theme == theme)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(new Action(() => ApplyTheme(theme)));
     }
 
     protected virtual void ApplyUiScaleToResources()
@@ -72,6 +124,47 @@ public abstract partial class SkiaChartBaseControl : SKElement
         AxisFont.Size = (float)Math.Max(6d, AxisFontSize) * s;
         _overlayStroke.StrokeWidth = Math.Max(0.5f, 1f * s);
         _zoomRubberStrokePaint.StrokeWidth = Math.Max(0.5f, 1f * s);
+    }
+
+    public PlottoThemeKind Theme
+    {
+        get => _theme;
+        set
+        {
+            if (_theme == value)
+            {
+                return;
+            }
+
+            ApplyTheme(value);
+        }
+    }
+
+    public void ApplyTheme(PlottoThemeKind theme)
+    {
+        _theme = theme;
+        switch (theme)
+        {
+            case PlottoThemeKind.Vs2013DarkTheme:
+                ChartBackgroundColor = new SKColor(37, 37, 38);
+                PlotBackgroundColor = new SKColor(45, 45, 48);
+                TitleForegroundColor = SKColors.White;
+                AxisStrokePaint.Color = new SKColor(104, 104, 104);
+                AxisLabelPaint.Color = new SKColor(241, 241, 241);
+                _linePaint.Color = new SKColor(86, 156, 214);
+                break;
+            case PlottoThemeKind.Vs2013LightTheme:
+            default:
+                ChartBackgroundColor = SKColors.White;
+                PlotBackgroundColor = SKColors.White;
+                TitleForegroundColor = SKColors.Black;
+                AxisStrokePaint.Color = SKColors.Gray;
+                AxisLabelPaint.Color = SKColors.Gray;
+                _linePaint.Color = new SKColor(65, 135, 225);
+                break;
+        }
+
+        InvalidateVisual();
     }
 
     /// <summary>SKElement is not a <see cref="Control"/>; ensure the full bounds participate in hit-testing so mouse zoom/pan work.</summary>
