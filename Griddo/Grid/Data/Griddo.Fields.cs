@@ -126,6 +126,7 @@ public sealed partial class Griddo
         SetFieldWidth(fieldIndex, max);
         _hasAutoSizedFields = true;
         InvalidateVisual();
+        FieldWidthsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public void AutoSizeAllFields()
@@ -174,6 +175,7 @@ public sealed partial class Griddo
 
         _hasAutoSizedFields = true;
         InvalidateVisual();
+        FieldWidthsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void AutoSizeFieldsFromSampleRecords()
@@ -186,7 +188,7 @@ public sealed partial class Griddo
         var sampledRecords = GetAutoSizeSampleRecords();
         for (var fieldIndex = 0; fieldIndex < Fields.Count; fieldIndex++)
         {
-            if (_suppressInitialAutoWidthFields.Contains(Fields[fieldIndex]))
+            if (ShouldSkipInitialSampleAutoWidth(fieldIndex))
             {
                 continue;
             }
@@ -197,6 +199,37 @@ public sealed partial class Griddo
 
         _hasAutoSizedFields = true;
         InvalidateVisual();
+    }
+
+    /// <summary>
+    /// Initial deferred auto-width (when records first appear) runs only for columns that do not already have a width:
+    /// persisted/user override, layout-applier suppression, or a host-declared <see cref="IGriddoFieldView.Width"/> &gt; 0.
+    /// Use <c>Width == 0</c> on the field view to request sample-based width when data loads.
+    /// </summary>
+    private bool ShouldSkipInitialSampleAutoWidth(int fieldIndex)
+    {
+        if (fieldIndex < 0 || fieldIndex >= Fields.Count)
+        {
+            return true;
+        }
+
+        var field = Fields[fieldIndex];
+        if (_suppressInitialAutoWidthFields.Contains(field))
+        {
+            return true;
+        }
+
+        if (_fieldWidthOverrides.ContainsKey(field))
+        {
+            return true;
+        }
+
+        if (field.Width > 0)
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private void ScheduleInitialSampleAutoSize()

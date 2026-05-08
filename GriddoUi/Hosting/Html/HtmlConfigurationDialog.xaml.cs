@@ -1,8 +1,11 @@
+using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Griddo.Fields;
+using Griddo.Primitives;
 using Griddo.Editing;
 using Griddo.Hosting.Configuration;
 using Griddo.Hosting.Html;
@@ -30,6 +33,39 @@ public partial class HtmlConfigurationDialog : Window
         GeneralGrid.CellPropertyViewResolver = ResolveGeneralCellPropertyView;
         SeedFrom(seed, allFields);
         UpdateMoveButtonsVisibility();
+        Loaded += OnHtmlDialogLoadedOnce;
+    }
+
+    private void OnHtmlDialogLoadedOnce(object sender, RoutedEventArgs e)
+    {
+        Loaded -= OnHtmlDialogLoadedOnce;
+        Dispatcher.BeginInvoke(new Action(SelectEnabledSegmentRowsAndScrollFirst), DispatcherPriority.Loaded);
+    }
+
+    /// <summary>Select every segment row with Use=true; scroll the first enabled row to the viewport center.</summary>
+    private void SelectEnabledSegmentRowsAndScrollFirst()
+    {
+        var indices = new List<int>();
+        for (var i = 0; i < SegmentsGrid.Records.Count; i++)
+        {
+            if (SegmentsGrid.Records[i] is HtmlSegmentEditRecord { Enabled: true })
+            {
+                indices.Add(i);
+            }
+        }
+
+        if (indices.Count == 0)
+        {
+            return;
+        }
+
+        SegmentsGrid.ClearCellSelection();
+        for (var i = 0; i < indices.Count; i++)
+        {
+            SegmentsGrid.SelectEntireRecord(indices[i], additive: i > 0);
+        }
+
+        SegmentsGrid.CenterCellInViewport(new GriddoCellAddress(indices[0], 0));
     }
 
     private void MainTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)

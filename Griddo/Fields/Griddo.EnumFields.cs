@@ -43,7 +43,7 @@ public sealed class GriddoEnumFieldView<TEnum> : IGriddoFieldView, IGriddoFieldS
     public string FontStyleName { get; set; } = string.Empty;
     public string ForegroundColor { get; set; } = string.Empty;
     public string BackgroundColor { get; set; } = string.Empty;
-    public bool NoWrap { get; set; }
+    public bool NoWrap { get; set; } = true;
     public string SourceMemberName { get; }
     public string SourceObjectName { get; }
     public double Width { get; }
@@ -134,7 +134,7 @@ public sealed class GriddoFlagsFieldView<TEnum> : IGriddoFieldView, IGriddoField
     public string FontStyleName { get; set; } = string.Empty;
     public string ForegroundColor { get; set; } = string.Empty;
     public string BackgroundColor { get; set; } = string.Empty;
-    public bool NoWrap { get; set; }
+    public bool NoWrap { get; set; } = true;
     public string SourceMemberName { get; }
     public string SourceObjectName { get; }
     public double Width { get; }

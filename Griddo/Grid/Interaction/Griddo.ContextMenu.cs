@@ -1,5 +1,7 @@
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace Griddo.Grid;
@@ -126,6 +128,100 @@ public sealed partial class Griddo
         menuItemStyle.Triggers.Add(disabledHighlightedTrigger);
 
         menu.Resources[typeof(MenuItem)] = menuItemStyle;
+    }
+
+    /// <summary>
+    /// Bold <c>Sort</c> submenu for field headers: ascending/descending by column order (1, 2, …),
+    /// Ctrl while clicking a command or Ctrl when opening the menu appends keys after existing sort.
+    /// </summary>
+    public MenuItem CreateFieldHeaderSortMenuItem(
+        IReadOnlyList<int> selectedFieldIndices,
+        ModifierKeys headerOpenModifiers,
+        Action? afterSort = null)
+    {
+        var indices = selectedFieldIndices
+            .Where(i => i >= 0 && i < Fields.Count)
+            .Distinct()
+            .OrderBy(i => i)
+            .ToList();
+
+        var sortRoot = new MenuItem
+        {
+            Header = "Sort",
+            FontWeight = FontWeights.Bold,
+        };
+
+        void Run(bool ascending)
+        {
+            if (indices.Count == 0)
+            {
+                return;
+            }
+
+            var additive = (Keyboard.Modifiers & ModifierKeys.Control) != 0
+                || (headerOpenModifiers & ModifierKeys.Control) != 0;
+            ApplyFieldHeaderSort(indices, ascending, additive);
+            afterSort?.Invoke();
+        }
+
+        var sortAscItem = new MenuItem
+        {
+            Header = "Ascending",
+            InputGestureText = "Ctrl: add level",
+            FontWeight = FontWeights.Normal,
+        };
+        sortAscItem.Click += (_, _) => Run(ascending: true);
+
+        var sortDescItem = new MenuItem
+        {
+            Header = "Descending",
+            InputGestureText = "Ctrl: add level",
+            FontWeight = FontWeights.Normal,
+        };
+        sortDescItem.Click += (_, _) => Run(ascending: false);
+
+        var sortClearItem = new MenuItem { Header = "Clear sort", FontWeight = FontWeights.Normal };
+        sortClearItem.Click += (_, _) =>
+        {
+            SetSortDescriptors([]);
+            afterSort?.Invoke();
+        };
+
+        var selectedSet = indices.ToHashSet();
+        var sortRemoveSelectedItem = new MenuItem
+        {
+            Header = "Remove sort (selected fields)",
+            FontWeight = FontWeights.Normal,
+        };
+        sortRemoveSelectedItem.Click += (_, _) =>
+        {
+            if (selectedSet.Count == 0)
+            {
+                return;
+            }
+
+            var kept = SortDescriptors
+                .OrderBy(d => d.Priority)
+                .Where(d => !selectedSet.Contains(d.FieldIndex))
+                .ToList();
+            SetSortDescriptors(kept);
+            afterSort?.Invoke();
+        };
+
+        sortRoot.Items.Add(sortAscItem);
+        sortRoot.Items.Add(sortDescItem);
+        sortRoot.Items.Add(new Separator());
+        sortRoot.Items.Add(sortClearItem);
+        sortRoot.Items.Add(sortRemoveSelectedItem);
+        sortRoot.Items.Add(new Separator());
+        sortRoot.Items.Add(new MenuItem
+        {
+            Header = "Tip: Ctrl adds keys after existing sort (or Ctrl when opening menu)",
+            IsEnabled = false,
+            FontWeight = FontWeights.Normal,
+        });
+
+        return sortRoot;
     }
 
     private static SolidColorBrush CreateFrozenBrush(Color color)

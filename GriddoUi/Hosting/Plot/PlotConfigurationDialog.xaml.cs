@@ -1,8 +1,11 @@
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using Griddo.Fields;
+using Griddo.Primitives;
 using Griddo.Editing;
 using Griddo.Hosting.Configuration;
 using Griddo.Hosting.Html;
@@ -114,6 +117,34 @@ public partial class PlotConfigurationDialog : Window
             _rows.Add(row);
             TitleFieldsGrid.Records.Add(row);
         }
+
+        Dispatcher.BeginInvoke(new Action(SelectEnabledTitleFieldRowsAndScrollFirst), DispatcherPriority.Loaded);
+    }
+
+    /// <summary>Select every title row with Use=true; scroll the first enabled row to the viewport center.</summary>
+    private void SelectEnabledTitleFieldRowsAndScrollFirst()
+    {
+        var indices = new List<int>();
+        for (var i = 0; i < TitleFieldsGrid.Records.Count; i++)
+        {
+            if (TitleFieldsGrid.Records[i] is PlotTitleFieldEditRecord { Enabled: true })
+            {
+                indices.Add(i);
+            }
+        }
+
+        if (indices.Count == 0)
+        {
+            return;
+        }
+
+        TitleFieldsGrid.ClearCellSelection();
+        for (var i = 0; i < indices.Count; i++)
+        {
+            TitleFieldsGrid.SelectEntireRecord(indices[i], additive: i > 0);
+        }
+
+        TitleFieldsGrid.CenterCellInViewport(new GriddoCellAddress(indices[0], 0));
     }
 
     private void MoveUpButton_Click(object sender, RoutedEventArgs e)

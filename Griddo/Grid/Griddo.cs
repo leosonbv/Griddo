@@ -341,6 +341,11 @@ public sealed partial class Griddo : FrameworkElement
     public event EventHandler<GriddoFieldHeaderMouseEventArgs>? FieldHeaderRightClick;
     public event EventHandler? SortDescriptorsChanged;
     public event EventHandler? UniformRecordHeightChanged;
+    /// <summary>Fires when <see cref="ContentScale"/> changes (e.g. Ctrl+mouse wheel).</summary>
+    public event EventHandler? ContentScaleChanged;
+
+    /// <summary>Fires when column/field widths change (divider drag, double-click auto-fit, <see cref="AutoSizeAllFields"/>).</summary>
+    public event EventHandler? FieldWidthsChanged;
 
     /// <summary>Fires on record header right-click; see <see cref="GriddoRecordHeaderMouseEventArgs.SelectedRecordIndices"/> for the full scope.</summary>
     public event EventHandler<GriddoRecordHeaderMouseEventArgs>? RecordHeaderRightClick;
@@ -688,6 +693,7 @@ public sealed partial class Griddo : FrameworkElement
             UpdateRecordHeaderWidth();
             InvalidateMeasure();
             InvalidateVisual();
+            ContentScaleChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -780,6 +786,12 @@ public sealed partial class Griddo : FrameworkElement
         UpdateScrollBars();
         UpdateHostCanvasClips();
         InvalidateVisual();
+
+        // Keep rows ordered when sort keys are active (host bulk-add / Records.Add does not call SetSortDescriptors).
+        if (_sortDescriptors.Count > 0 && Records.Count > 1 && Fields.Count > 0)
+        {
+            ApplySorting();
+        }
     }
 
 }

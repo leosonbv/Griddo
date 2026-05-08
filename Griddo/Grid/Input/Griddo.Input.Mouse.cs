@@ -136,7 +136,7 @@ public sealed partial class Griddo
 
             _hasKeyboardSelectionAnchor = false;
             _isEditing = false;
-            FieldHeaderRightClick?.Invoke(this, new GriddoFieldHeaderMouseEventArgs(rightCol, contextFieldIndices));
+            FieldHeaderRightClick?.Invoke(this, new GriddoFieldHeaderMouseEventArgs(rightCol, contextFieldIndices, modifiers));
             InvalidateVisual();
             CompleteMouseDown(e, handled: true);
             return;
@@ -1396,6 +1396,7 @@ public sealed partial class Griddo
         {
             _isResizingField = false;
             _resizingFieldIndex = -1;
+            FieldWidthsChanged?.Invoke(this, EventArgs.Empty);
             if (!_isDraggingSelection && IsMouseCaptured)
             {
                 ReleaseMouseCapture();

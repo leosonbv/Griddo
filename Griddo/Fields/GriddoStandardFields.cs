@@ -40,7 +40,7 @@ public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember
     public string FontStyleName { get; set; } = string.Empty;
     public string ForegroundColor { get; set; } = string.Empty;
     public string BackgroundColor { get; set; } = string.Empty;
-    public bool NoWrap { get; set; }
+    public bool NoWrap { get; set; } = true;
 
     /// <inheritdoc cref="IGriddoFieldSourceMember.SourceMemberName"/>
     /// <remarks>Empty when not specified at construction; field chooser may infer from record type.</remarks>
@@ -116,7 +116,7 @@ public sealed class HtmlGriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMe
     public string FontStyleName { get; set; } = string.Empty;
     public string ForegroundColor { get; set; } = string.Empty;
     public string BackgroundColor { get; set; } = string.Empty;
-    public bool NoWrap { get; set; }
+    public bool NoWrap { get; set; } = true;
 
     public string SourceMemberName { get; }
     public string SourceObjectName { get; }
@@ -187,7 +187,7 @@ public sealed class GriddoBoolFieldView : IGriddoFieldView, IGriddoFieldSourceMe
     public string FontStyleName { get; set; } = string.Empty;
     public string ForegroundColor { get; set; } = string.Empty;
     public string BackgroundColor { get; set; } = string.Empty;
-    public bool NoWrap { get; set; }
+    public bool NoWrap { get; set; } = true;
 
     public string SourceMemberName { get; }
     public string SourceObjectName { get; }

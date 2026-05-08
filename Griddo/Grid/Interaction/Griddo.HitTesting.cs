@@ -285,4 +285,14 @@ public sealed partial class Griddo
 
         Cursor = Cursors.Arrow;
     }
+
+    /// <summary>
+    /// Returns whether <paramref name="position"/> (relative to this grid) lies on a body cell — not field headers,
+    /// record headers, the corner cell, scrollbars, or padding outside the cell viewport.
+    /// </summary>
+    public bool TryHitTestBodyCell(Point position, out GriddoCellAddress cell)
+    {
+        cell = HitTestCell(position);
+        return cell.IsValid;
+    }
 }

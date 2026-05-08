@@ -41,7 +41,7 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
     public double FontSize { get; set; }
     public string FontStyleName { get; set; } = string.Empty;
     public bool IsTable { get; set; } = true;
-    public bool NoWrap { get; set; }
+    public bool NoWrap { get; set; } = true;
     public bool IsCategoryField { get; set; }
     public List<HtmlFieldSegmentConfiguration> Segments { get; set; } = [];
 

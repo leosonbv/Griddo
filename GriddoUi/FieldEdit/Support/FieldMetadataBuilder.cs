@@ -24,18 +24,24 @@ public static class FieldMetadataBuilder
     /// One record per field currently in <paramref name="grid"/>; sample value from <see cref="Griddo.Records"/>[0] when present.
     /// </summary>
     public static List<FieldEditRecord> BuildRecordsFromGrid(global::Griddo.Grid.Griddo grid) =>
-        BuildRecordsFromGrid(grid, fullFieldOrder: null);
+        BuildRecordsFromGrid(grid, fullFieldOrder: null, previewSampleRecord: null);
 
     /// <summary>
     /// One record per entry in <paramref name="fullFieldOrder"/> (e.g. all registered fields). Hidden fields
     /// (not in <paramref name="grid"/>.Fields) appear with <see cref="FieldEditRecord.Visible"/> false.
     /// <see cref="FieldEditRecord.SourceFieldIndex"/> is the index into <paramref name="fullFieldOrder"/>.
     /// </summary>
+    /// <param name="previewSampleRecord">When set, used for value previews instead of <see cref="Griddo.Grid.Griddo.Records"/>[0].</param>
     public static List<FieldEditRecord> BuildRecordsFromGrid(
         global::Griddo.Grid.Griddo grid,
-        IReadOnlyList<IGriddoFieldView>? fullFieldOrder)
+        IReadOnlyList<IGriddoFieldView>? fullFieldOrder,
+        object? previewSampleRecord = null)
     {
-        object? sample = grid.Records.Count > 0 ? grid.Records[0] : null;
+        object? sample = previewSampleRecord;
+        if (sample is null && grid.Records.Count > 0)
+        {
+            sample = grid.Records[0];
+        }
         var recordType = sample?.GetType();
         var nameUseCount = new Dictionary<string, int>(StringComparer.Ordinal);
         var sortMap = BuildSortMap(grid, fullFieldOrder);
@@ -46,7 +52,7 @@ public static class FieldMetadataBuilder
             for (var i = 0; i < grid.Fields.Count; i++)
             {
                 var col = grid.Fields[i];
-                list.Add(BuildOneRecord(col, i, sample, recordType, nameUseCount, visible: true, sortMap));
+                list.Add(BuildOneRecord(col, i, sample, recordType, nameUseCount, visible: true, sortMap, grid, i));
             }
 
             return list;
@@ -57,7 +63,21 @@ public static class FieldMetadataBuilder
         {
             var col = fullFieldOrder[i];
             var visible = grid.Fields.Contains(col);
-            fullList.Add(BuildOneRecord(col, i, sample, recordType, nameUseCount, visible, sortMap));
+            int? gridFieldIndexForWidth = null;
+            if (visible)
+            {
+                for (var j = 0; j < grid.Fields.Count; j++)
+                {
+                    if (ReferenceEquals(grid.Fields[j], col))
+                    {
+                        gridFieldIndexForWidth = j;
+                        break;
+                    }
+                }
+            }
+
+            fullList.Add(BuildOneRecord(col, i, sample, recordType, nameUseCount, visible, sortMap, grid,
+                gridFieldIndexForWidth));
         }
 
         return fullList;
@@ -70,7 +90,9 @@ public static class FieldMetadataBuilder
         Type? recordType,
         Dictionary<string, int> nameUseCount,
         bool visible,
-        Dictionary<int, GriddoSortDescriptor> sortMap)
+        Dictionary<int, GriddoSortDescriptor> sortMap,
+        global::Griddo.Grid.Griddo grid,
+        int? gridFieldIndexForLiveWidth)
     {
         var baseKey = ResolveSourceMemberKey(col, sample, recordType);
         nameUseCount.TryGetValue(baseKey, out var n);
@@ -114,7 +136,7 @@ public static class FieldMetadataBuilder
             Description = col is IGriddoFieldDescriptionView descView ? descView.Description : string.Empty,
             Visible = visible,
             Fill = col.Fill,
-            Width = col.Width,
+            Width = gridFieldIndexForLiveWidth is int gfi ? grid.GetLogicalFieldWidth(gfi) : col.Width,
             SortPriority = sortMap.TryGetValue(sourceFieldIndex, out var sd) ? sd.Priority : 0,
             SortAscending = sortMap.TryGetValue(sourceFieldIndex, out var sd2) ? sd2.Ascending : true,
             SampleDisplay = sampleDisplay,

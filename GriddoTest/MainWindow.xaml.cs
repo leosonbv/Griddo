@@ -129,6 +129,8 @@ public partial class MainWindow : Window
         var layoutKey = ResolveLayoutKey(targetGrid, fieldRegistry);
         void PersistLiveLayout() => PersistGridLayoutFromCurrentGrid(targetGrid, layoutKey, fieldRegistry);
 
+        menu.Items.Insert(0, targetGrid.CreateFieldHeaderSortMenuItem(indices, e.OpenModifiers, PersistLiveLayout));
+
         var gridConfiguratorItem = new MenuItem { Header = "_Grid configurator…" };
         gridConfiguratorItem.Click += (_, _) => OpenFieldConfigurator(
             targetGrid,
@@ -285,8 +287,8 @@ public partial class MainWindow : Window
         }
         menu.Items.Add(new Separator());
 
-        var visibilitySubmenu = new MenuItem { Header = "Field visibility actions" };
-        var hideSelectedFieldsItem = new MenuItem { Header = "Hide selected field(s)" };
+        var visibilitySubmenu = new MenuItem { Header = "Field visibility" };
+        var hideSelectedFieldsItem = new MenuItem { Header = "Hide selected" };
         hideSelectedFieldsItem.Click += (_, _) =>
         {
             var visibleCount = targetGrid.Fields.Count;
@@ -306,17 +308,8 @@ public partial class MainWindow : Window
             PersistLiveLayout();
         };
         visibilitySubmenu.Items.Add(hideSelectedFieldsItem);
-        visibilitySubmenu.Items.Add(new Separator());
 
-        var hideEmptyColsItem = new MenuItem { Header = "Hide _empty fields" };
-        hideEmptyColsItem.Click += (_, _) =>
-        {
-            HideEmptyFields(targetGrid, fieldRegistry);
-            PersistLiveLayout();
-        };
-        visibilitySubmenu.Items.Add(hideEmptyColsItem);
-
-        var showAllColsItem = new MenuItem { Header = "_Show all fields" };
+        var showAllColsItem = new MenuItem { Header = "Show all" };
         showAllColsItem.Click += (_, _) =>
         {
             ShowAllFields(targetGrid, fieldRegistry);
@@ -324,13 +317,78 @@ public partial class MainWindow : Window
         };
         visibilitySubmenu.Items.Add(showAllColsItem);
 
-        var showAllExceptEmptyItem = new MenuItem { Header = "Show all _except empty fields" };
+        var hideEmptyColsItem = new MenuItem { Header = "Hide empty" };
+        hideEmptyColsItem.Click += (_, _) =>
+        {
+            HideEmptyFields(targetGrid, fieldRegistry);
+            PersistLiveLayout();
+        };
+        visibilitySubmenu.Items.Add(hideEmptyColsItem);
+
+        var showAllExceptEmptyItem = new MenuItem { Header = "Show all non-empty" };
         showAllExceptEmptyItem.Click += (_, _) =>
         {
             ShowAllFieldsExceptEmpty(targetGrid, fieldRegistry);
             PersistLiveLayout();
         };
         visibilitySubmenu.Items.Add(showAllExceptEmptyItem);
+
+        var hideAllItem = new MenuItem { Header = "Hide all" };
+        hideAllItem.Click += (_, _) =>
+        {
+            HideAllFieldsExceptOne(targetGrid);
+            PersistLiveLayout();
+        };
+        hideAllItem.IsEnabled = targetGrid.Fields.Count > 1;
+        visibilitySubmenu.Items.Add(hideAllItem);
+
+        visibilitySubmenu.Items.Add(new Separator());
+
+        var fillGridItem = new MenuItem
+        {
+            Header = "Fill grid",
+            IsCheckable = true,
+            StaysOpenOnClick = true,
+            IsChecked = targetGrid.Fields.Count > 0 && targetGrid.Fields.All(f => f.Fill),
+        };
+        fillGridItem.Click += (_, _) =>
+        {
+            var on = fillGridItem.IsChecked == true;
+            foreach (var f in targetGrid.Fields)
+            {
+                f.Fill = on;
+            }
+
+            targetGrid.InvalidateMeasure();
+            targetGrid.InvalidateVisual();
+            PersistLiveLayout();
+        };
+        fillGridItem.IsEnabled = targetGrid.Fields.Count > 0;
+        visibilitySubmenu.Items.Add(fillGridItem);
+
+        var wrapFields = targetGrid.Fields.OfType<IGriddoFieldWrapView>().ToList();
+        var wordWrapItem = new MenuItem
+        {
+            Header = "Word wrap",
+            IsCheckable = true,
+            StaysOpenOnClick = true,
+            IsChecked = wrapFields.Count > 0 && wrapFields.All(w => !w.NoWrap),
+        };
+        wordWrapItem.Click += (_, _) =>
+        {
+            var wrapOn = wordWrapItem.IsChecked == true;
+            foreach (var w in targetGrid.Fields.OfType<IGriddoFieldWrapView>())
+            {
+                w.NoWrap = !wrapOn;
+            }
+
+            targetGrid.InvalidateMeasure();
+            targetGrid.InvalidateVisual();
+            PersistLiveLayout();
+        };
+        wordWrapItem.IsEnabled = wrapFields.Count > 0;
+        visibilitySubmenu.Items.Add(wordWrapItem);
+
         visibilitySubmenu.Items.Add(new Separator());
 
         var visibilityListItem = new MenuItem { Header = "Fields" };
@@ -354,102 +412,6 @@ public partial class MainWindow : Window
 
         visibilitySubmenu.Items.Add(visibilityListItem);
         menu.Items.Add(visibilitySubmenu);
-        menu.Items.Add(new Separator());
-
-        var sortSubmenu = new MenuItem { Header = "Sort" };
-        void ApplySortForSelectedFields(bool ascending)
-        {
-            var selectedFieldIndices = indices
-                .Where(i => i >= 0 && i < targetGrid.Fields.Count)
-                .Distinct()
-                .OrderBy(i => i)
-                .ToList();
-            if (selectedFieldIndices.Count == 0)
-            {
-                return;
-            }
-
-            var isCtrlPressed = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
-            if (!isCtrlPressed)
-            {
-                var descriptors = selectedFieldIndices
-                    .Select((fieldIndex, level) => new GriddoSortDescriptor(fieldIndex, ascending, level + 1))
-                    .ToList();
-                targetGrid.SetSortDescriptors(descriptors);
-                PersistLiveLayout();
-                return;
-            }
-
-            var existing = targetGrid.SortDescriptors
-                .OrderBy(d => d.Priority)
-                .ToList();
-            var existingFields = existing
-                .Select(d => d.FieldIndex)
-                .ToHashSet();
-            var nextPriority = existing.Count == 0 ? 1 : existing.Max(d => d.Priority) + 1;
-            foreach (var fieldIndex in selectedFieldIndices)
-            {
-                if (!existingFields.Add(fieldIndex))
-                {
-                    continue;
-                }
-
-                existing.Add(new GriddoSortDescriptor(fieldIndex, ascending, nextPriority));
-                nextPriority++;
-            }
-
-            targetGrid.SetSortDescriptors(existing);
-            PersistLiveLayout();
-        }
-
-        var sortAscItem = new MenuItem { Header = "Ascending" };
-        sortAscItem.Click += (_, _) =>
-        {
-            ApplySortForSelectedFields(ascending: true);
-        };
-        sortSubmenu.Items.Add(sortAscItem);
-
-        var sortDescItem = new MenuItem { Header = "Descending" };
-        sortDescItem.Click += (_, _) =>
-        {
-            ApplySortForSelectedFields(ascending: false);
-        };
-        sortSubmenu.Items.Add(sortDescItem);
-
-        var sortClearItem = new MenuItem { Header = "Clear sort" };
-        sortClearItem.Click += (_, _) =>
-        {
-            targetGrid.SetSortDescriptors([]);
-            PersistLiveLayout();
-        };
-        sortSubmenu.Items.Add(sortClearItem);
-        var sortRemoveSelectedItem = new MenuItem { Header = "Remove sort (selected fields)" };
-        sortRemoveSelectedItem.Click += (_, _) =>
-        {
-            var selectedFieldIndices = indices
-                .Where(i => i >= 0 && i < targetGrid.Fields.Count)
-                .Distinct()
-                .ToHashSet();
-            if (selectedFieldIndices.Count == 0)
-            {
-                return;
-            }
-
-            var keptDescriptors = targetGrid.SortDescriptors
-                .OrderBy(d => d.Priority)
-                .Where(d => !selectedFieldIndices.Contains(d.FieldIndex))
-                .ToList();
-            targetGrid.SetSortDescriptors(keptDescriptors);
-            PersistLiveLayout();
-        };
-        sortSubmenu.Items.Add(sortRemoveSelectedItem);
-        sortSubmenu.Items.Add(new Separator());
-        sortSubmenu.Items.Add(new MenuItem
-        {
-            Header = "Tip: Ctrl+click header adds sort level",
-            IsEnabled = false
-        });
-        menu.Items.Add(sortSubmenu);
 
         var immediateEditItem = new MenuItem
         {
@@ -1309,6 +1271,17 @@ public partial class MainWindow : Window
     {
         ShowAllFields(grid, registry);
         HideEmptyFields(grid, registry);
+    }
+
+    private static void HideAllFieldsExceptOne(global::Griddo.Grid.Griddo grid)
+    {
+        while (grid.Fields.Count > 1)
+        {
+            grid.Fields.RemoveAt(grid.Fields.Count - 1);
+        }
+
+        grid.InvalidateMeasure();
+        grid.InvalidateVisual();
     }
 
     private static void ToggleFieldVisibility(
@@ -2488,7 +2461,7 @@ public partial class MainWindow : Window
         public double Width { get; }
         public string ForegroundColor { get; set; } = string.Empty;
         public string BackgroundColor { get; set; } = string.Empty;
-        public bool NoWrap { get; set; }
+        public bool NoWrap { get; set; } = true;
         public bool IsTable { get; set; } = true;
         public bool IsCategoryField { get; set; }
         public bool Fill { get; set; }

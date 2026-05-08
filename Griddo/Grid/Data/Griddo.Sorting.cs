@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Specialized;
 using System.Globalization;
+using System.Linq;
 
 namespace Griddo.Grid;
 
@@ -8,6 +9,49 @@ public readonly record struct GriddoSortDescriptor(int FieldIndex, bool Ascendin
 
 public sealed partial class Griddo
 {
+    /// <summary>
+    /// Applies sorting for one or more columns. Indices are ordered left-to-right as successive sort keys (priority 1, 2, …).
+    /// When <paramref name="additive"/> is false, replaces the current sort. When true, appends columns that are not yet in the sort list
+    /// after existing keys (Ctrl when invoking the command, or Ctrl when opening the header menu).
+    /// </summary>
+    public void ApplyFieldHeaderSort(IReadOnlyList<int> fieldIndices, bool ascending, bool additive)
+    {
+        var ordered = fieldIndices
+            .Where(i => i >= 0 && i < Fields.Count)
+            .Distinct()
+            .OrderBy(i => i)
+            .ToList();
+        if (ordered.Count == 0)
+        {
+            return;
+        }
+
+        if (!additive)
+        {
+            var descriptors = ordered
+                .Select((fieldIndex, level) => new GriddoSortDescriptor(fieldIndex, ascending, level + 1))
+                .ToList();
+            SetSortDescriptors(descriptors);
+            return;
+        }
+
+        var existing = SortDescriptors.OrderBy(d => d.Priority).ToList();
+        var existingFields = existing.Select(d => d.FieldIndex).ToHashSet();
+        var nextPriority = existing.Count == 0 ? 1 : existing.Max(d => d.Priority) + 1;
+        foreach (var fieldIndex in ordered)
+        {
+            if (!existingFields.Add(fieldIndex))
+            {
+                continue;
+            }
+
+            existing.Add(new GriddoSortDescriptor(fieldIndex, ascending, nextPriority));
+            nextPriority++;
+        }
+
+        SetSortDescriptors(existing);
+    }
+
     public void SetSortDescriptors(IEnumerable<GriddoSortDescriptor> descriptors)
     {
         _sortDescriptors.Clear();
