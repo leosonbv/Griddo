@@ -50,6 +50,14 @@ public sealed partial class Griddo
             return Math.Clamp(offsetPx, 0, _verticalScrollBar.Maximum);
         }
 
+        // In normal mode, allow pixel-precise vertical scrolling so the last row
+        // can be brought fully/partially into view without a snapped blank band.
+        if (_visibleRecordCount <= 0)
+        {
+            var pixelMaxScroll = Math.Max(0, GetScrollableRecordsContentHeight() - GetScrollRecordsViewportHeight());
+            return Math.Clamp(offsetPx, 0, pixelMaxScroll);
+        }
+
         var h = GetRecordHeight(0);
         if (h < 1e-6)
         {

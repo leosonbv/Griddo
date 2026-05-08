@@ -46,6 +46,25 @@ public sealed partial class Griddo
     // Keyboard
     // -------------------------------------------------------------------------
 
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        var modifiers = Keyboard.Modifiers;
+        var isCtrlPressed = (modifiers & ModifierKeys.Control) != 0;
+
+        // Capture Ctrl+PageUp/PageDown before parent containers (eg tab controls)
+        // can consume these chords for tab switching.
+        if (isCtrlPressed && (e.Key == Key.PageUp || e.Key == Key.PageDown))
+        {
+            var isShiftPressed = (modifiers & ModifierKeys.Shift) != 0;
+            if (TryHandlePageNavigation(e, isCtrlPressed: true, isShiftPressed))
+            {
+                return;
+            }
+        }
+
+        base.OnPreviewKeyDown(e);
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         var modifiers = Keyboard.Modifiers;

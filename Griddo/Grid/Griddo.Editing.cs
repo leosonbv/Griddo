@@ -214,6 +214,7 @@ public sealed partial class Griddo
             HorizontalOffset = cellRect.X + 2,
             VerticalOffset = Math.Min(cellRect.Bottom, ActualHeight - 2)
         };
+        ApplyGriddoContextMenuSelectionStyle(menu);
 
         foreach (var option in options)
         {

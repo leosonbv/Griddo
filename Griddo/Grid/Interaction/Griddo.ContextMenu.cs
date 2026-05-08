@@ -1,10 +1,14 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
+    private static readonly Brush GriddoContextMenuSelectionBrush = CreateFrozenBrush(Color.FromRgb(0, 122, 204));
+    private static readonly Brush GriddoContextMenuSelectionForegroundBrush = Brushes.White;
+
     private ContextMenu BuildDefaultBodyCellContextMenu()
     {
         var copyItem = new MenuItem { Header = "Copy", InputGestureText = "Ctrl+C" };
@@ -61,6 +65,7 @@ public sealed partial class Griddo
         editMenu.Items.Add(editExitItem);
 
         var menu = new ContextMenu();
+        ApplyGriddoContextMenuSelectionStyle(menu);
         menu.Items.Add(copyItem);
         menu.Items.Add(copyHeadersItem);
         menu.Items.Add(cutItem);
@@ -77,6 +82,57 @@ public sealed partial class Griddo
         menu.Items.Add(findMenu);
         menu.Items.Add(editMenu);
         return menu;
+    }
+
+    private static void ApplyGriddoContextMenuSelectionStyle(ContextMenu menu)
+    {
+        static ComponentResourceKey MenuItemKey(string resourceId) => new(typeof(MenuItem), resourceId);
+
+        menu.Resources[SystemColors.MenuHighlightBrushKey] = GriddoContextMenuSelectionBrush;
+        menu.Resources[SystemColors.HighlightBrushKey] = GriddoContextMenuSelectionBrush;
+        menu.Resources["MenuItem.Highlight.Background"] = GriddoContextMenuSelectionBrush;
+        menu.Resources["MenuItem.Highlight.Border"] = GriddoContextMenuSelectionBrush;
+        menu.Resources["MenuItem.Disabled.Highlight.Background"] = GriddoContextMenuSelectionBrush;
+        menu.Resources["MenuItem.Disabled.Highlight.Border"] = GriddoContextMenuSelectionBrush;
+        menu.Resources["MenuItem.Selected.Background"] = GriddoContextMenuSelectionBrush;
+        menu.Resources["MenuItem.Selected.Border"] = GriddoContextMenuSelectionBrush;
+        menu.Resources[MenuItemKey("Highlight.Background")] = GriddoContextMenuSelectionBrush;
+        menu.Resources[MenuItemKey("Highlight.Border")] = GriddoContextMenuSelectionBrush;
+        menu.Resources[MenuItemKey("Disabled.Highlight.Background")] = GriddoContextMenuSelectionBrush;
+        menu.Resources[MenuItemKey("Disabled.Highlight.Border")] = GriddoContextMenuSelectionBrush;
+        menu.Resources[MenuItemKey("Selected.Background")] = GriddoContextMenuSelectionBrush;
+        menu.Resources[MenuItemKey("Selected.Border")] = GriddoContextMenuSelectionBrush;
+
+        var menuItemStyle = new Style(typeof(MenuItem));
+        menuItemStyle.Setters.Add(new Setter(Control.BackgroundProperty, Brushes.Transparent));
+        menuItemStyle.Setters.Add(new Setter(Control.ForegroundProperty, Brushes.Black));
+        menuItemStyle.Setters.Add(new Setter(UIElement.OpacityProperty, 1.0));
+
+        var highlightedTrigger = new Trigger { Property = MenuItem.IsHighlightedProperty, Value = true };
+        highlightedTrigger.Setters.Add(new Setter(Control.BackgroundProperty, GriddoContextMenuSelectionBrush));
+        highlightedTrigger.Setters.Add(new Setter(Control.ForegroundProperty, GriddoContextMenuSelectionForegroundBrush));
+        menuItemStyle.Triggers.Add(highlightedTrigger);
+
+        var disabledTrigger = new Trigger { Property = UIElement.IsEnabledProperty, Value = false };
+        disabledTrigger.Setters.Add(new Setter(Control.ForegroundProperty, Brushes.DimGray));
+        disabledTrigger.Setters.Add(new Setter(UIElement.OpacityProperty, 1.0));
+        menuItemStyle.Triggers.Add(disabledTrigger);
+
+        var disabledHighlightedTrigger = new MultiTrigger();
+        disabledHighlightedTrigger.Conditions.Add(new Condition(UIElement.IsEnabledProperty, false));
+        disabledHighlightedTrigger.Conditions.Add(new Condition(MenuItem.IsHighlightedProperty, true));
+        disabledHighlightedTrigger.Setters.Add(new Setter(Control.BackgroundProperty, GriddoContextMenuSelectionBrush));
+        disabledHighlightedTrigger.Setters.Add(new Setter(Control.ForegroundProperty, Brushes.DimGray));
+        menuItemStyle.Triggers.Add(disabledHighlightedTrigger);
+
+        menu.Resources[typeof(MenuItem)] = menuItemStyle;
+    }
+
+    private static SolidColorBrush CreateFrozenBrush(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        brush.Freeze();
+        return brush;
     }
 }
 

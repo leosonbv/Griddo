@@ -85,14 +85,54 @@ public static class GriddoValuePainter
 
         formatted.TextAlignment = alignment;
         formatted.MaxTextWidth = Math.Max(1, bounds.Width - 8);
-        formatted.MaxTextHeight = Math.Max(1, bounds.Height - 4);
         formatted.MaxLineCount = noWrap ? 1 : int.MaxValue;
-        formatted.Trimming = TextTrimming.CharacterEllipsis;
-        var topPadding = 2.0;
-        var y = verticalAlignment == VerticalAlignment.Center
-            ? bounds.Y + Math.Max(0, (bounds.Height - formatted.Height) / 2)
-            : bounds.Y + topPadding;
-        drawingContext.DrawText(formatted, new Point(bounds.X + 4, y));
+
+        // Measure height at width *before* MaxTextHeight. After the cap, FormattedText.Height is clipped,
+        // so it can never exceed the inner box — the old "pin when taller than inner" check never fired.
+        // If MaxTextHeight is even slightly below intrinsic height, CharacterEllipsis can drop all glyphs.
+        var naturalHeight = formatted.Height;
+
+        const double topPadding = 2.0;
+        var maxInner = Math.Max(1, bounds.Height - 4);
+
+        drawingContext.PushClip(new RectangleGeometry(bounds));
+        try
+        {
+            if (naturalHeight <= maxInner)
+            {
+                formatted.MaxTextHeight = maxInner;
+                formatted.Trimming = TextTrimming.CharacterEllipsis;
+                var laidOutH = formatted.Height;
+                var y = PlainTextVerticalOrigin(verticalAlignment, bounds, laidOutH, topPadding);
+                drawingContext.DrawText(formatted, new Point(bounds.X + 4, y));
+            }
+            else
+            {
+                // Vertical overflow: lay out without a height cap and clip — shows a partial line/block
+                // instead of ellipsis collapsing to nothing.
+                formatted.Trimming = TextTrimming.None;
+                var y = PlainTextVerticalOrigin(verticalAlignment, bounds, naturalHeight, topPadding);
+                drawingContext.DrawText(formatted, new Point(bounds.X + 4, y));
+            }
+        }
+        finally
+        {
+            drawingContext.Pop();
+        }
+    }
+
+    private static double PlainTextVerticalOrigin(
+        VerticalAlignment verticalAlignment,
+        Rect bounds,
+        double blockHeight,
+        double topPadding)
+    {
+        return verticalAlignment switch
+        {
+            VerticalAlignment.Top => bounds.Y + topPadding,
+            VerticalAlignment.Bottom => bounds.Bottom - topPadding - blockHeight,
+            _ => bounds.Y + Math.Max(0, (bounds.Height - blockHeight) / 2),
+        };
     }
 
     /// <summary>Renders a simple checkbox centered in <paramref name="bounds"/> (DIP).</summary>
@@ -332,22 +372,40 @@ public static class GriddoValuePainter
             return;
         }
 
-        const double padX = 4.0;
-        const double padY = 2.0;
+        const double padXDefault = 4.0;
+        const double padYDefault = 2.0;
+        // Shrink padding when the cell is only partially visible (thin strip above scrollbar / clip)
+        // so we don't bail out with nothing drawn.
+        var padX = padXDefault;
+        var padY = padYDefault;
+        while (padY > 0 && bounds.Height - padY * 2 < 1)
+        {
+            padY--;
+        }
+
+        while (padX > 0 && bounds.Width - padX * 2 < 1)
+        {
+            padX--;
+        }
+
+        var innerAvailableH = bounds.Height - padY * 2;
+        if (innerAvailableH <= 0)
+        {
+            return;
+        }
+
         // Layout as if width/height were generous so typography is not shrunk/ellipsized solely because the rendered cell clip is narrow.
         var layoutW = Math.Max(bounds.Width, layoutMinSide);
         var layoutInnerW = layoutW - padX * 2;
         formatted.MaxTextWidth = Math.Max(1, layoutInnerW);
         formatted.MaxLineCount = noWrap ? 1 : int.MaxValue;
 
-        var innerAvailableH = bounds.Height - padY * 2;
-        if (innerAvailableH <= 1)
-        {
-            return;
-        }
+        var pinTopForThinStrip =
+            verticalAlignment == VerticalAlignment.Center
+            && (formatted.Height > innerAvailableH || innerAvailableH <= padYDefault * 2);
 
         double y;
-        if (formatted.Height <= innerAvailableH)
+        if (formatted.Height <= innerAvailableH && !pinTopForThinStrip)
         {
             switch (verticalAlignment)
             {
@@ -365,7 +423,7 @@ public static class GriddoValuePainter
         }
         else
         {
-            // Overflow: preserve full intrinsic line layout; clipping shows top of content.
+            // Overflow or clipped strip: preserve full intrinsic line layout; clipping shows top of content.
             y = bounds.Y + padY;
         }
 
