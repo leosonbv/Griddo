@@ -401,7 +401,8 @@ public sealed partial class Griddo : FrameworkElement
     }
 
     /// <summary>
-    /// 0 (X) = use <see cref="UniformRecordHeight"/>. 1..10 = fit exactly this many records into visible body height.
+    /// 0 = use <see cref="UniformRecordHeight"/>. 1..10 = divide visible body height into that many row slots.
+    /// When <see cref="Records"/> has fewer rows than this value, each row grows so the existing rows fill the viewport.
     /// </summary>
     public int VisibleRecordCount
     {

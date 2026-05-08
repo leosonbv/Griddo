@@ -349,21 +349,24 @@ public partial class MainWindow : Window
             Header = "Fill grid",
             IsCheckable = true,
             StaysOpenOnClick = true,
-            IsChecked = targetGrid.Fields.Count > 0 && targetGrid.Fields.All(f => f.Fill),
+            IsChecked = targetFields.Count > 0 && targetFields.All(f => f.Fill),
         };
         fillGridItem.Click += (_, _) =>
         {
             var on = fillGridItem.IsChecked == true;
-            foreach (var f in targetGrid.Fields)
+            foreach (var f in targetFields)
             {
-                f.Fill = on;
+                if (targetGrid.Fields.Contains(f))
+                {
+                    f.Fill = on;
+                }
             }
 
             targetGrid.InvalidateMeasure();
             targetGrid.InvalidateVisual();
             PersistLiveLayout();
         };
-        fillGridItem.IsEnabled = targetGrid.Fields.Count > 0;
+        fillGridItem.IsEnabled = indices.Count > 0;
         visibilitySubmenu.Items.Add(fillGridItem);
 
         var wrapFields = targetGrid.Fields.OfType<IGriddoFieldWrapView>().ToList();
@@ -502,11 +505,11 @@ public partial class MainWindow : Window
         };
         appearanceSubmenu.Items.Add(showSortIndicatorsItem);
 
-        var visibleRecordsSubmenu = new MenuItem { Header = "Fill records" };
+        var visibleRecordsSubmenu = new MenuItem { Header = "Record(s) fill space" };
         for (var mode = 0; mode <= 10; mode++)
         {
             var localMode = mode;
-            var label = localMode == 0 ? "Auto" : localMode.ToString();
+            var label = localMode == 0 ? "None" : localMode.ToString();
             var modeItem = new MenuItem
             {
                 Header = label,

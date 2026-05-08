@@ -89,7 +89,10 @@ public sealed partial class Griddo
         _ = recordIndex;
         if (_visibleRecordCount > 0 && _viewportBodyHeight > 0)
         {
-            return _viewportBodyHeight / _visibleRecordCount;
+            var slots = Records.Count > 0
+                ? Math.Min(_visibleRecordCount, Records.Count)
+                : _visibleRecordCount;
+            return _viewportBodyHeight / Math.Max(1, slots);
         }
 
         return Math.Max(GetMinimumRecordThickness(), _uniformRecordHeight) * ContentScale;

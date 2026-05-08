@@ -96,6 +96,7 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         }
 
         ApplyChartSettings(chart, recordSource);
+        SyncPeakOverlay(chart, recordSource);
     }
 
     public bool IsHostInEditMode(FrameworkElement host) =>
@@ -232,6 +233,22 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         chart.TitleFontSize = TitleFontSize;
         chart.ShowXAxis = ShowXAxis;
         chart.ShowYAxis = ShowYAxis;
+    }
+
+    private void SyncPeakOverlay(ChromatogramControl chart, object? recordSource)
+    {
+        if (chart.RenderMode != ChartRenderMode.Renderer)
+        {
+            return;
+        }
+
+        if (!ChromatogramShowPeaks || recordSource is null)
+        {
+            chart.IntegrationRegions = Array.Empty<IntegrationRegion>();
+            return;
+        }
+
+        chart.IntegrationRegions = _signalProvider.GetPeakOverlayRegions(recordSource);
     }
 
     private static object BuildRuntimePointsValue(IReadOnlyList<SignalPoint> points)

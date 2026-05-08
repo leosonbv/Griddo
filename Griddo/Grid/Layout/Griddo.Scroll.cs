@@ -16,7 +16,7 @@ public sealed partial class Griddo
     }
 
     /// <summary>
-    /// When <see cref="VisibleRecordCount"/> is set, record height tracks viewport height; snap scroll extent so the thumb maps to whole-record offsets.
+    /// When <see cref="VisibleRecordCount"/> is set, record height tracks viewport height (fewer rows than the slot count share the full height); snap scroll extent so the thumb maps to whole-record offsets.
     /// </summary>
     private double GetAlignedMaxVerticalScrollForSlider(double rawMaxVertical)
     {

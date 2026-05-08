@@ -9,6 +9,9 @@ public readonly record struct CalibrationSignalPoint(double X, double Y, bool En
 public interface IChromatogramSignalProvider
 {
     IReadOnlyList<SignalPoint> GetPoints(object recordSource);
+
+    /// <summary>Peak integration bands drawn when chromatogram &quot;Show peak overlay&quot; is enabled (renderer mode only).</summary>
+    IReadOnlyList<IntegrationRegion> GetPeakOverlayRegions(object recordSource) => [];
 }
 
 public interface ISpectrumSignalProvider
