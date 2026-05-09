@@ -5,7 +5,10 @@ namespace Griddo.Hosting.Abstractions;
 public readonly record struct SignalPoint(double X, double Y);
 
 public readonly record struct CalibrationSignalPoint(double X, double Y, bool Enabled = true);
-public readonly record struct ChromatogramPeakOverlayRegion(IntegrationRegion Region, bool IsSelected);
+public readonly record struct ChromatogramPeakOverlayRegion(
+    IntegrationRegion Region,
+    bool IsSelected,
+    bool IsManualIntegrated = false);
 
 public interface ITicPeakOverlayOptions
 {
@@ -24,7 +27,7 @@ public interface IChromatogramSignalProvider
     /// <summary>Peak integration bands with selection state (selected vs alternative).</summary>
     IReadOnlyList<ChromatogramPeakOverlayRegion> GetPeakOverlayRegionsWithSelection(object recordSource) =>
         GetPeakOverlayRegions(recordSource)
-            .Select(static region => new ChromatogramPeakOverlayRegion(region, IsSelected: false))
+            .Select(static region => new ChromatogramPeakOverlayRegion(region, IsSelected: false, IsManualIntegrated: false))
             .ToList();
 
     /// <summary>Optional per-region colored overlays (used for category-specific peak coloring, e.g. TIC).</summary>

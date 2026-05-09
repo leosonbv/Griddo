@@ -64,7 +64,7 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
     public Color SelectedPeakOverlayColor { get; set; } = Color.FromRgb(22, 163, 74);
     public Color AlternativePeakOverlayColor { get; set; } = Color.FromRgb(234, 179, 8);
     public Color IntegrationLineOverlayColor { get; set; } = Color.FromRgb(255, 0, 0);
-    public Color ManualIntegrationFillColor { get; set; } = Color.FromRgb(30, 144, 255);
+    public Color ManualIntegrationFillColor { get; set; } = Color.FromRgb(26, 118, 218);
     public double OverlayLineWidth { get; set; } = 1.5d;
     public int PeakFillAlpha { get; set; } = 48;
     public bool CalibrationShowRegression { get; set; }
@@ -169,10 +169,19 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         }
     }
 
+    public bool ShouldRelayLeftDoubleClickWhileInHostedEditMode() => true;
+
     public void RelayDirectEditMouseDown(FrameworkElement host, MouseButtonEventArgs eFromGrid)
     {
         if (host is not Border { Child: ChromatogramControl chart })
         {
+            return;
+        }
+
+        if (eFromGrid is { ChangedButton: MouseButton.Left, ClickCount: 2 })
+        {
+            chart.Focus();
+            chart.ZoomOutCompletely();
             return;
         }
 
@@ -334,6 +343,8 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         {
             chart.IntegrationRegions = Array.Empty<IntegrationRegion>();
             chart.AlternativeIntegrationRegions = Array.Empty<IntegrationRegion>();
+            chart.IntegrationRegionsManualIntegrated = Array.Empty<bool>();
+            chart.AlternativeIntegrationRegionsManualIntegrated = Array.Empty<bool>();
             chart.ColoredIntegrationRegions = Array.Empty<ColoredIntegrationRegion>();
             return;
         }
@@ -343,23 +354,29 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         {
             chart.IntegrationRegions = Array.Empty<IntegrationRegion>();
             chart.AlternativeIntegrationRegions = Array.Empty<IntegrationRegion>();
+            chart.IntegrationRegionsManualIntegrated = Array.Empty<bool>();
+            chart.AlternativeIntegrationRegionsManualIntegrated = Array.Empty<bool>();
             return;
         }
 
         var overlays = _signalProvider.GetPeakOverlayRegionsWithSelection(recordSource);
-        var selected = overlays
-            .Where(static x => x.IsSelected)
-            .Select(static x => x.Region)
-            .ToList();
-        var selectedKeys = selected
-            .Select(static r => (Begin: Math.Min(r.Start.X, r.End.X), End: Math.Max(r.Start.X, r.End.X)))
+        static (double Begin, double End) RegionKey(IntegrationRegion r) =>
+            (Math.Min(r.Start.X, r.End.X), Math.Max(r.Start.X, r.End.X));
+
+        var selectedOverlays = overlays.Where(static x => x.IsSelected).ToList();
+        var selectedKeys = selectedOverlays
+            .Select(static x => RegionKey(x.Region))
             .ToHashSet();
-        chart.IntegrationRegions = selected;
-        chart.AlternativeIntegrationRegions = overlays
+
+        chart.IntegrationRegions = selectedOverlays.Select(static x => x.Region).ToList();
+        chart.IntegrationRegionsManualIntegrated = selectedOverlays.Select(static x => x.IsManualIntegrated).ToList();
+
+        var alternativeOverlays = overlays
             .Where(static x => !x.IsSelected)
-            .Select(static x => x.Region)
-            .Where(r => !selectedKeys.Contains((Math.Min(r.Start.X, r.End.X), Math.Max(r.Start.X, r.End.X))))
+            .Where(x => !selectedKeys.Contains(RegionKey(x.Region)))
             .ToList();
+        chart.AlternativeIntegrationRegions = alternativeOverlays.Select(static x => x.Region).ToList();
+        chart.AlternativeIntegrationRegionsManualIntegrated = alternativeOverlays.Select(static x => x.IsManualIntegrated).ToList();
     }
 
     private static object BuildRuntimePointsValue(IReadOnlyList<SignalPoint> points)

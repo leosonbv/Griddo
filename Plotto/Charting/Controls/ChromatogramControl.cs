@@ -9,6 +9,9 @@ namespace Plotto.Charting.Controls;
 
 public partial class ChromatogramControl : SkiaChartBaseControl
 {
+    /// <summary>Multiplies committed manual-peak fill RGB (same alpha as normal peak fill); lower is darker.</summary>
+    private const float ManualIntegratedPeakFillRgbFactor = 0.68f;
+
     private const double ActivationMoveToleranceDip = 4d;
     private Point _activationPressPosition;
     private bool _awaitingActivationClick;
@@ -51,6 +54,18 @@ public partial class ChromatogramControl : SkiaChartBaseControl
         Style = SKPaintStyle.Fill,
         Color = new SKColor(255, 235, 59, 96)
     };
+    private readonly SKPaint _alternativeManualPeakFillPaint = new()
+    {
+        IsAntialias = true,
+        Style = SKPaintStyle.Fill,
+        Color = new SKColor(173, 160, 40, 96)
+    };
+    private readonly SKPaint _selectedManualPeakFillPaint = new()
+    {
+        IsAntialias = true,
+        Style = SKPaintStyle.Fill,
+        Color = new SKColor(54, 150, 82, 96)
+    };
     private readonly SKPaint _alternativePeakLinePaint = new()
     {
         IsAntialias = true,
@@ -92,10 +107,27 @@ public partial class ChromatogramControl : SkiaChartBaseControl
         _alternativePeakLinePaint.Color = alternativePeak;
         _integrationLinePaint.Color = integrationLine;
         _rendererIntegrationLinePaint.Color = SKColors.Red;
-        _integrationFillPaint.Color = new SKColor(30, 144, 255, 128);
+        _integrationFillPaint.Color = new SKColor(
+            manualIntegrationFill.Red,
+            manualIntegrationFill.Green,
+            manualIntegrationFill.Blue,
+            clampedAlpha);
         _selectedPeakFillPaint.Color = new SKColor(selectedPeak.Red, selectedPeak.Green, selectedPeak.Blue, clampedAlpha);
         _alternativePeakFillPaint.Color = new SKColor(alternativePeak.Red, alternativePeak.Green, alternativePeak.Blue, clampedAlpha);
+        _selectedManualPeakFillPaint.Color = DarkenPeakFillRgb(_selectedPeakFillPaint.Color, ManualIntegratedPeakFillRgbFactor);
+        _alternativeManualPeakFillPaint.Color = DarkenPeakFillRgb(_alternativePeakFillPaint.Color, ManualIntegratedPeakFillRgbFactor);
         ApplyUiScaleToResources();
+    }
+
+    private static SKColor DarkenPeakFillRgb(SKColor fill, float rgbFactor)
+    {
+        byte Scale(byte channel)
+        {
+            var v = (int)Math.Round(channel * rgbFactor);
+            return (byte)Math.Clamp(v, 0, 255);
+        }
+
+        return new SKColor(Scale(fill.Red), Scale(fill.Green), Scale(fill.Blue), fill.Alpha);
     }
 
     protected override void ApplyUiScaleToResources()
@@ -172,6 +204,40 @@ public partial class ChromatogramControl : SkiaChartBaseControl
             typeof(ChromatogramControl),
             new FrameworkPropertyMetadata(Array.Empty<IntegrationRegion>(), FrameworkPropertyMetadataOptions.AffectsRender));
 
+    /// <summary>
+    /// Parallel to <see cref="AlternativeIntegrationRegions"/>; when shorter than that list, missing entries are treated as false.
+    /// When true, the region fill uses the manual-integration color instead of the alternative-peak overlay color.
+    /// </summary>
+    public IReadOnlyList<bool> AlternativeIntegrationRegionsManualIntegrated
+    {
+        get => (IReadOnlyList<bool>)GetValue(AlternativeIntegrationRegionsManualIntegratedProperty);
+        set => SetValue(AlternativeIntegrationRegionsManualIntegratedProperty, value);
+    }
+
+    public static readonly DependencyProperty AlternativeIntegrationRegionsManualIntegratedProperty =
+        DependencyProperty.Register(
+            nameof(AlternativeIntegrationRegionsManualIntegrated),
+            typeof(IReadOnlyList<bool>),
+            typeof(ChromatogramControl),
+            new FrameworkPropertyMetadata(Array.Empty<bool>(), FrameworkPropertyMetadataOptions.AffectsRender));
+
+    /// <summary>
+    /// Parallel to <see cref="IntegrationRegions"/>; when shorter than that list, missing entries are treated as false.
+    /// When true, the region fill uses the manual-integration color instead of the selected-peak overlay color.
+    /// </summary>
+    public IReadOnlyList<bool> IntegrationRegionsManualIntegrated
+    {
+        get => (IReadOnlyList<bool>)GetValue(IntegrationRegionsManualIntegratedProperty);
+        set => SetValue(IntegrationRegionsManualIntegratedProperty, value);
+    }
+
+    public static readonly DependencyProperty IntegrationRegionsManualIntegratedProperty =
+        DependencyProperty.Register(
+            nameof(IntegrationRegionsManualIntegrated),
+            typeof(IReadOnlyList<bool>),
+            typeof(ChromatogramControl),
+            new FrameworkPropertyMetadata(Array.Empty<bool>(), FrameworkPropertyMetadataOptions.AffectsRender));
+
     public IReadOnlyList<ColoredIntegrationRegion> ColoredIntegrationRegions
     {
         get => (IReadOnlyList<ColoredIntegrationRegion>)GetValue(ColoredIntegrationRegionsProperty);
@@ -191,24 +257,15 @@ public partial class ChromatogramControl : SkiaChartBaseControl
         _isIntegrationDragActive = false;
         _peakSplitStaticX.Clear();
         _peakSplitHoverX = null;
+        _activeRegion = null;
 
-        if (RenderMode == ChartRenderMode.Editor)
+        // Do not clear IntegrationRegions / AlternativeIntegrationRegions / ColoredIntegrationRegions here.
+        // The grid host pushes those from data (SyncPeakOverlay); clearing on mode flip removes peaks when
+        // zoom switches Renderer → Editor (right-drag rubber band) until the next host refresh.
+
+        if (RenderMode == ChartRenderMode.Renderer && IsMouseCaptured)
         {
-            IntegrationRegions = Array.Empty<IntegrationRegion>();
-            AlternativeIntegrationRegions = Array.Empty<IntegrationRegion>();
-            ColoredIntegrationRegions = Array.Empty<ColoredIntegrationRegion>();
-            _activeRegion = null;
-        }
-        else if (RenderMode == ChartRenderMode.Renderer)
-        {
-            IntegrationRegions = Array.Empty<IntegrationRegion>();
-            AlternativeIntegrationRegions = Array.Empty<IntegrationRegion>();
-            ColoredIntegrationRegions = Array.Empty<ColoredIntegrationRegion>();
-            _activeRegion = null;
-            if (IsMouseCaptured)
-            {
-                ReleaseMouseCapture();
-            }
+            ReleaseMouseCapture();
         }
 
         InvalidateVisual();
@@ -225,6 +282,8 @@ public partial class ChromatogramControl : SkiaChartBaseControl
         _peakSplitHoverX = null;
         IntegrationRegions = Array.Empty<IntegrationRegion>();
         AlternativeIntegrationRegions = Array.Empty<IntegrationRegion>();
+        IntegrationRegionsManualIntegrated = Array.Empty<bool>();
+        AlternativeIntegrationRegionsManualIntegrated = Array.Empty<bool>();
         ColoredIntegrationRegions = Array.Empty<ColoredIntegrationRegion>();
         _activeRegion = null;
         InvalidateVisual();
@@ -236,9 +295,14 @@ public partial class ChromatogramControl : SkiaChartBaseControl
             ? (IReadOnlyList<ChartPoint>)Array.Empty<ChartPoint>()
             : Points.OrderBy(p => p.X).ToList();
 
-        foreach (var region in AlternativeIntegrationRegions)
+        var altManualFlags = AlternativeIntegrationRegionsManualIntegrated;
+        for (var i = 0; i < AlternativeIntegrationRegions.Count; i++)
         {
-            ChartSkiaManualIntegration.DrawRegionFill(canvas, ordered, plotRect, region, ToPixelX, ToPixelY, _alternativePeakFillPaint);
+            var region = AlternativeIntegrationRegions[i];
+            var fillPaint = ManualIntegratedFlagAt(altManualFlags, i)
+                ? _alternativeManualPeakFillPaint
+                : _alternativePeakFillPaint;
+            ChartSkiaManualIntegration.DrawRegionFill(canvas, ordered, plotRect, region, ToPixelX, ToPixelY, fillPaint);
         }
 
         foreach (var region in AlternativeIntegrationRegions)
@@ -246,9 +310,14 @@ public partial class ChromatogramControl : SkiaChartBaseControl
             ChartSkiaManualIntegration.DrawRegionBaseline(canvas, ordered, plotRect, region, ToPixelX, ToPixelY, _rendererIntegrationLinePaint);
         }
 
-        foreach (var region in IntegrationRegions)
+        var selManualFlags = IntegrationRegionsManualIntegrated;
+        for (var i = 0; i < IntegrationRegions.Count; i++)
         {
-            ChartSkiaManualIntegration.DrawRegionFill(canvas, ordered, plotRect, region, ToPixelX, ToPixelY, _selectedPeakFillPaint);
+            var region = IntegrationRegions[i];
+            var fillPaint = ManualIntegratedFlagAt(selManualFlags, i)
+                ? _selectedManualPeakFillPaint
+                : _selectedPeakFillPaint;
+            ChartSkiaManualIntegration.DrawRegionFill(canvas, ordered, plotRect, region, ToPixelX, ToPixelY, fillPaint);
         }
 
         foreach (var region in IntegrationRegions)
@@ -334,6 +403,9 @@ public partial class ChromatogramControl : SkiaChartBaseControl
             }
         }
     }
+
+    private static bool ManualIntegratedFlagAt(IReadOnlyList<bool> flags, int index) =>
+        (uint)index < (uint)flags.Count && flags[index];
 
     private bool TryGetPrimaryIntegrationRegion(out IntegrationRegion region)
     {
