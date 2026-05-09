@@ -83,8 +83,7 @@ public sealed partial class Griddo
         }
 
         _findMatchCell = new GriddoCellAddress(pickedFlat / Fields.Count, pickedFlat % Fields.Count);
-        _currentCell = _findMatchCell;
-        CenterCellInViewport(_findMatchCell);
+        AssignCurrentCell(_findMatchCell);
         return true;
     }
 
@@ -148,6 +147,97 @@ public sealed partial class Griddo
         var field = Fields[col];
         var value = field.GetValue(Records[record]);
         return field.FormatValue(value) ?? string.Empty;
+    }
+
+    private void AssignCurrentCell(GriddoCellAddress value)
+    {
+        _currentCell = value;
+        if (!value.IsValid || Records.Count == 0 || Fields.Count == 0 || _viewportBodyWidth <= 0 || _viewportBodyHeight <= 0)
+        {
+            return;
+        }
+
+        if (!IsCellFullyVisibleInViewport(value))
+        {
+            CenterCellInViewport(value);
+        }
+    }
+
+    /// <summary>
+    /// True when the cell rect lies entirely inside the clipped body viewport (frozen vs scroll bands).
+    /// </summary>
+    private bool IsCellFullyVisibleInViewport(GriddoCellAddress cell)
+    {
+        var rect = GetCellRect(cell.RecordIndex, cell.FieldIndex);
+        if (rect.IsEmpty)
+        {
+            return true;
+        }
+
+        if (IsBodyTransposed)
+        {
+            var bodyViewport = new Rect(_recordHeaderWidth, ScaledFieldHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
+            return RectFullyInside(rect, bodyViewport);
+        }
+
+        const double eps = 1.0;
+        var bodyLeft = _recordHeaderWidth;
+        var headerH = ScaledFieldHeaderHeight;
+        var fixedFieldsW = GetFixedFieldsWidth();
+        var scrollVpW = GetScrollViewportWidth();
+        var fRecords = GetEffectiveFixedRecordCount();
+        var fixedRecordsH = GetFixedRecordsHeight();
+        var scrollVpH = GetScrollRecordsViewportHeight();
+
+        double hLeft;
+        double hRight;
+        if (cell.FieldIndex < _fixedFieldCount)
+        {
+            hLeft = bodyLeft;
+            hRight = bodyLeft + fixedFieldsW;
+        }
+        else
+        {
+            if (scrollVpW <= 1e-6)
+            {
+                return false;
+            }
+
+            hLeft = bodyLeft + fixedFieldsW;
+            hRight = hLeft + scrollVpW;
+        }
+
+        if (rect.Left < hLeft - eps || rect.Right > hRight + eps)
+        {
+            return false;
+        }
+
+        double vTop;
+        double vBottom;
+        if (cell.RecordIndex < fRecords)
+        {
+            vTop = headerH;
+            vBottom = headerH + fixedRecordsH;
+        }
+        else
+        {
+            if (scrollVpH <= 1e-6)
+            {
+                return false;
+            }
+
+            vTop = headerH + fixedRecordsH;
+            vBottom = vTop + scrollVpH;
+        }
+
+        return rect.Top >= vTop - eps && rect.Bottom <= vBottom + eps;
+    }
+
+    private static bool RectFullyInside(Rect inner, Rect outer)
+    {
+        const double eps = 1.0;
+        return inner.Left >= outer.Left - eps && inner.Top >= outer.Top - eps
+               && inner.Right <= outer.Right + eps && inner.Bottom <= outer.Bottom + eps;
     }
 
     public void CenterCellInViewport(GriddoCellAddress cell)

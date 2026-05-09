@@ -5,6 +5,9 @@ namespace Plotto.Charting.Controls;
 
 public abstract partial class SkiaChartBaseControl
 {
+    /// <summary>Fits the viewport to the current <see cref="Points"/> (margins + interaction clamp).</summary>
+    public void FitViewportToCurrentPoints() => UpdateViewportFromData();
+
     private void UpdateViewportFromData()
     {
         var points = Points;
@@ -127,6 +130,26 @@ public abstract partial class SkiaChartBaseControl
     private void FitViewportToAllData()
     {
         UpdateViewportFromData();
+        InvalidateVisual();
+    }
+
+    /// <summary>
+    /// Sets the axis ranges from a snapshot (XMin/XMax/YMin/YMax only). No interaction clamp — same values as when saved.
+    /// Used by hosted plots to remember zoom per grid row per plot column.
+    /// </summary>
+    public void RestoreViewportSnapshot(ChartViewport snapshot)
+    {
+        if (snapshot is null || !snapshot.IsValid || Points.Count == 0)
+        {
+            return;
+        }
+
+        Viewport.XMin = snapshot.XMin;
+        Viewport.XMax = snapshot.XMax;
+        Viewport.YMin = snapshot.YMin;
+        Viewport.YMax = snapshot.YMax;
+        Viewport.EnsureMinimumSize();
+        ViewportChanged?.Invoke(this, EventArgs.Empty);
         InvalidateVisual();
     }
 }

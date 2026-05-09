@@ -197,6 +197,23 @@ public sealed partial class Griddo : FrameworkElement
     private Point _pendingBodyRightContextMenuDownPos;
     private bool _pendingBodyRightContextMenuWasAlreadySelected;
 
+    /// <summary>Waits for a possible second click before opening <see cref="CellContextMenu"/>.</summary>
+    private DispatcherTimer? _deferredBodyCellContextMenuTimer;
+
+    private GriddoCellAddress _deferredBodyCellContextMenuCell = new(-1, -1);
+
+    private Point _deferredBodyCellContextMenuPosition;
+    private bool _deferredBodyCellContextMenuWasAlreadySelected;
+
+    /// <summary>
+    /// Hosted plot: after the cell context menu was shown, WPF often keeps the mouse right-button ClickCount at 1; manual timing detects a second right-down on the same cell for zoom-out.
+    /// </summary>
+    private long _hostedPlotLastRightDownTickCount64 = long.MinValue;
+
+    private GriddoCellAddress _hostedPlotLastRightDownCell = new(-1, -1);
+
+    private Point _hostedPlotLastRightDownGridPos;
+
     public Griddo()
     {
         Focusable = true;

@@ -70,6 +70,11 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
     public bool CalibrationShowRegression { get; set; }
     public bool SpectrumNormalizeIntensity { get; set; }
 
+    /// <summary>
+    /// When set, viewport zoom is remembered per this string across navigations (same logical row can use new CLR instances).
+    /// </summary>
+    public Func<object?, string?>? ViewportZoomRecordKey { get; set; }
+
     public string SourceObjectName { get; }
     public string SourceMemberName { get; }
     public double Width { get; }
@@ -89,7 +94,16 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         chart.PeakSplitRequested += OnChartPeakSplitRequested;
         chart.PeakSelectionRequested += OnChartPeakSelectionRequested;
         ApplyChartSettings(chart, null);
-        return Wrap(chart);
+        var border = Wrap(chart);
+        var plotKey = HostedPlotViewportMemory.PlotKey(SourceMemberName, Header);
+        chart.ViewportChanged += (_, _) =>
+        {
+            if (border.Tag is { } row)
+            {
+                HostedPlotViewportMemory.Remember(row, plotKey, chart.Viewport, ViewportZoomRecordKey);
+            }
+        };
+        return border;
     }
 
     public void UpdateHostElement(FrameworkElement host, object recordSource, bool isSelected, bool isCurrentCell)
@@ -99,18 +113,35 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
             return;
         }
 
+        var plotKey = HostedPlotViewportMemory.PlotKey(SourceMemberName, Header);
+        var previousRow = host.Tag;
+        var recordChanged = !ReferenceEquals(previousRow, recordSource);
+
         // Avoid rebinding series every frame; Griddo can call this during render loops.
         // Rebinding while dragging in editor mode resets manual integration interaction state.
-        if (!ReferenceEquals(host.Tag, recordSource))
+        if (recordChanged)
         {
+            HostedPlotViewportMemory.SaveLeavingRow(previousRow, plotKey, chart.Viewport, ViewportZoomRecordKey);
+            host.Tag = recordSource;
             var points = _signalProvider.GetPoints(recordSource);
             var pointsValue = BuildRuntimePointsValue(points);
+            // Skip auto-fit on this bind so Remember'd zoom is not overwritten before TryRestore (main grid reloads rows often).
+            chart.SuppressAutomaticViewportFitOnNextPointsChange = points.Count > 0;
             chart.SetValue(SkiaChartBaseControl.PointsProperty, pointsValue);
-            host.Tag = recordSource;
+            var restored = HostedPlotViewportMemory.TryRestore(recordSource, plotKey, chart, ViewportZoomRecordKey);
+            if (!restored && chart.Points.Count > 0)
+            {
+                chart.FitViewportToCurrentPoints();
+            }
         }
 
         ApplyChartSettings(chart, recordSource);
         SyncPeakOverlay(chart, recordSource);
+
+        if (recordChanged)
+        {
+            HostedPlotViewportMemory.ScheduleDeferredTryRestore(host, recordSource, plotKey, chart, ViewportZoomRecordKey);
+        }
     }
 
     public bool IsHostInEditMode(FrameworkElement host) =>

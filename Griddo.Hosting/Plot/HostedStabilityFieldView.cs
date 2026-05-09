@@ -133,10 +133,19 @@ public sealed class HostedStabilityFieldView : IGriddoHostedFieldView, IGriddoFi
         return true;
     }
 
+    public bool ShouldRelayLeftDoubleClickWhileInHostedEditMode() => true;
+
     public void RelayDirectEditMouseDown(FrameworkElement host, MouseButtonEventArgs eFromGrid)
     {
         if (host is not Border { Child: StabilityScatterControl chart })
         {
+            return;
+        }
+
+        if (eFromGrid is { ChangedButton: MouseButton.Left, ClickCount: 2 })
+        {
+            chart.Focus();
+            chart.ZoomOutCompletely();
             return;
         }
 

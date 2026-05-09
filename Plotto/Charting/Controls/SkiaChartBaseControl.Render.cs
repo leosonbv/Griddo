@@ -555,8 +555,13 @@ public abstract partial class SkiaChartBaseControl
             }
         }
 
+        double yLabelScale = 1;
+        var yPowExponent = 0;
+        var useYPowerOfTen = false;
+
         if (ShowYAxis)
         {
+            useYPowerOfTen = YAxisPowerOfTenFormatting.TryGetScale(Viewport.YMin, Viewport.YMax, out yLabelScale, out yPowExponent);
             canvas.DrawLine(plotRect.Left, plotRect.Top, plotRect.Left, plotRect.Bottom, AxisStrokePaint);
             var yMinGap = 3f * zs;
             var maxYTickCount = Math.Clamp((int)(plotRect.Height / Math.Max(10f * zs, axisFontHeight * 0.9f)), 2, 120);
@@ -599,6 +604,20 @@ public abstract partial class SkiaChartBaseControl
             }
 
             yTicks = NiceAxisTickGrid.Generate(Viewport.YMin, Viewport.YMax, bestYTickRequest, out var yStep);
+            SKRect yExponentBadgePadded = default;
+            var hasYExponentBadge = false;
+            if (useYPowerOfTen)
+            {
+                var bb = YAxisPowerOfTenFormatting.GetExponentBadgeBounds(plotRect, zs, AxisFont, yPowExponent);
+                var pad = 2f * zs;
+                yExponentBadgePadded = SKRect.Create(
+                    bb.Left - pad,
+                    bb.Top - pad,
+                    bb.Width + 2f * pad,
+                    bb.Height + 2f * pad);
+                hasYExponentBadge = true;
+            }
+
             var lastLabelTop = float.PositiveInfinity;
             foreach (var tick in yTicks)
             {
@@ -617,9 +636,33 @@ public abstract partial class SkiaChartBaseControl
                     continue;
                 }
 
-                var label = AxisTickLabelFormatter.FormatSnappedToGrid(tick, yStep, AxisLabelPrecisionY, null, AxisLabelFormatY);
+                var label = useYPowerOfTen
+                    ? AxisTickLabelFormatter.FormatSnappedToGrid(
+                        tick / yLabelScale,
+                        yStep / yLabelScale,
+                        5,
+                        null,
+                        AxisLabelFormatY)
+                    : AxisTickLabelFormatter.FormatSnappedToGrid(tick, yStep, AxisLabelPrecisionY, null, AxisLabelFormatY);
+                if (hasYExponentBadge)
+                {
+                    var lw = AxisFont.MeasureText(label);
+                    var lblTop = baseline + axisMetrics.Ascent;
+                    var lblH = Math.Max(1e-3f, axisMetrics.Descent - axisMetrics.Ascent);
+                    var lblRect = SKRect.Create(yTickRight - lw, lblTop, lw, lblH);
+                    if (lblRect.IntersectsWith(yExponentBadgePadded))
+                    {
+                        continue;
+                    }
+                }
+
                 canvas.DrawText(label, yTickRight, baseline, SKTextAlign.Right, AxisFont, AxisLabelPaint);
                 lastLabelTop = top;
+            }
+
+            if (useYPowerOfTen)
+            {
+                YAxisPowerOfTenFormatting.DrawYAxisExponentBadge(canvas, plotRect, zs, AxisFont, AxisLabelPaint, yPowExponent);
             }
         }
 
@@ -636,11 +679,53 @@ public abstract partial class SkiaChartBaseControl
             var yCaption = AxisLabelY;
             var yTitleLeftInset = (ChartPlotLayout.CellPadding * zs) + (2f * zs);
             var yTitleCenterX = yTitleLeftInset + Math.Max(0f, -axisMetrics.Ascent) - (axisFontHeight * 0.5f);
-            canvas.Save();
-            canvas.Translate(yTitleCenterX, (plotRect.Top + plotRect.Bottom) / 2f);
-            canvas.RotateDegrees(-90f);
-            canvas.DrawText(yCaption, 0f, 0f, SKTextAlign.Center, AxisFont, AxisLabelPaint);
-            canvas.Restore();
+            var titleCenterY = (plotRect.Top + plotRect.Bottom) * 0.5f;
+            var drawYAxisCaption = true;
+            if (useYPowerOfTen)
+            {
+                var bb = YAxisPowerOfTenFormatting.GetExponentBadgeBounds(plotRect, zs, AxisFont, yPowExponent);
+                var pad = 2f * zs;
+                var badgePadded = SKRect.Create(
+                    bb.Left - pad,
+                    bb.Top - pad,
+                    bb.Width + 2f * pad,
+                    bb.Height + 2f * pad);
+                var textW = AxisFont.MeasureText(yCaption);
+                var halfW = textW * 0.5f;
+                var halfH = axisFontHeight * 0.5f;
+
+                bool RotatedCaptionOverlapsBadge(float cy)
+                {
+                    var ax0 = yTitleCenterX - halfH;
+                    var ay0 = cy - halfW;
+                    var titleBounds = SKRect.Create(ax0, ay0, axisFontHeight, textW);
+                    return titleBounds.IntersectsWith(badgePadded);
+                }
+
+                if (RotatedCaptionOverlapsBadge(titleCenterY))
+                {
+                    var step = Math.Max(4f * zs, axisFontHeight * 0.35f);
+                    var limit = plotRect.Bottom + halfW + 6f * zs;
+                    while (RotatedCaptionOverlapsBadge(titleCenterY) && titleCenterY < limit)
+                    {
+                        titleCenterY += step;
+                    }
+
+                    if (RotatedCaptionOverlapsBadge(titleCenterY))
+                    {
+                        drawYAxisCaption = false;
+                    }
+                }
+            }
+
+            if (drawYAxisCaption)
+            {
+                canvas.Save();
+                canvas.Translate(yTitleCenterX, titleCenterY);
+                canvas.RotateDegrees(-90f);
+                canvas.DrawText(yCaption, 0f, 0f, SKTextAlign.Center, AxisFont, AxisLabelPaint);
+                canvas.Restore();
+            }
         }
     }
 

@@ -21,6 +21,12 @@ public interface IGriddoHostedFieldView : IGriddoFieldView
     {
     }
 
+    /// <summary>
+    /// When true, left-button double-clicks are relayed to <see cref="RelayDirectEditMouseDown"/> even while
+    /// <see cref="IsHostInEditMode"/> is true (Skia charts that stay in Editor after zoom).
+    /// </summary>
+    bool ShouldRelayLeftDoubleClickWhileInHostedEditMode() => false;
+
     void RelayDirectEditMouseDown(FrameworkElement host, MouseButtonEventArgs eFromGrid)
     {
     }

@@ -281,6 +281,12 @@ public abstract partial class SkiaChartBaseControl : SKElement
 
     public ChartViewport Viewport { get; } = new();
 
+    /// <summary>
+    /// When true, the next assignment to <see cref="Points"/> skips <see cref="FitViewportToCurrentPoints"/> so callers can restore a saved viewport first.
+    /// Cleared automatically after that assignment. When the new points list is empty, the viewport is still updated from data.
+    /// </summary>
+    public bool SuppressAutomaticViewportFitOnNextPointsChange { get; set; }
+
     public event EventHandler? ViewportChanged;
     public event EventHandler<ChartPointEventArgs>? DataPointClicked;
     public event EventHandler? PopupEditorRequested;
@@ -581,6 +587,16 @@ public abstract partial class SkiaChartBaseControl : SKElement
     private static void OnDataChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var chart = (SkiaChartBaseControl)d;
+        if (chart.SuppressAutomaticViewportFitOnNextPointsChange)
+        {
+            chart.SuppressAutomaticViewportFitOnNextPointsChange = false;
+            if (chart.Points.Count > 0)
+            {
+                chart.InvalidateVisual();
+                return;
+            }
+        }
+
         chart.UpdateViewportFromData();
         chart.InvalidateVisual();
     }

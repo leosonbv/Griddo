@@ -30,7 +30,7 @@ public sealed partial class Griddo
         ClearHeaderAuxiliarySelectionState();
         var record = Math.Clamp(_currentCell.RecordIndex + recordDelta, 0, Records.Count - 1);
         var col = Math.Clamp(_currentCell.FieldIndex + colDelta, 0, Fields.Count - 1);
-        _currentCell = new GriddoCellAddress(record, col);
+        AssignCurrentCell(new GriddoCellAddress(record, col));
         _selectedCells.Clear();
         _selectedCells.Add(_currentCell);
         InvalidateVisual();
@@ -59,7 +59,7 @@ public sealed partial class Griddo
 
             ClearHeaderFocus();
             ClearHeaderAuxiliarySelectionState();
-            _currentCell = target;
+            AssignCurrentCell(target);
             SelectRange(_keyboardSelectionAnchor, _currentCell, additive: false);
             InvalidateVisual();
             return;
@@ -68,7 +68,7 @@ public sealed partial class Griddo
         ClearHeaderFocus();
         ClearHeaderAuxiliarySelectionState();
         _hasKeyboardSelectionAnchor = false;
-        _currentCell = target;
+        AssignCurrentCell(target);
         _selectedCells.Clear();
         _selectedCells.Add(_currentCell);
         InvalidateVisual();
@@ -228,7 +228,7 @@ public sealed partial class Griddo
         Fields.Move(fromIndex, toIndex);
 
         var oldCurrent = _currentCell;
-        _currentCell = new GriddoCellAddress(oldCurrent.RecordIndex, RemapFieldIndex(oldCurrent.FieldIndex, fromIndex, toIndex));
+        AssignCurrentCell(new GriddoCellAddress(oldCurrent.RecordIndex, RemapFieldIndex(oldCurrent.FieldIndex, fromIndex, toIndex)));
 
         var remapped = new HashSet<GriddoCellAddress>();
         foreach (var address in _selectedCells)
@@ -346,9 +346,9 @@ public sealed partial class Griddo
         _isEditing = false;
         if (Records.Count > 0 && Fields.Count > 0)
         {
-            _currentCell = new GriddoCellAddress(
+            AssignCurrentCell(new GriddoCellAddress(
                 Math.Clamp(_currentCell.RecordIndex, 0, Records.Count - 1),
-                Math.Clamp(_currentCell.FieldIndex, 0, Fields.Count - 1));
+                Math.Clamp(_currentCell.FieldIndex, 0, Fields.Count - 1)));
         }
 
         InvalidateVisual();
@@ -371,7 +371,7 @@ public sealed partial class Griddo
         _isEditing = false;
         recordIndex = Math.Clamp(recordIndex, 0, Records.Count - 1);
         fieldIndex = Math.Clamp(fieldIndex, 0, Fields.Count - 1);
-        _currentCell = new GriddoCellAddress(recordIndex, fieldIndex);
+        AssignCurrentCell(new GriddoCellAddress(recordIndex, fieldIndex));
         _selectedCells.Clear();
         _selectedCells.Add(_currentCell);
         InvalidateVisual();
@@ -478,7 +478,7 @@ public sealed partial class Griddo
         if (_currentCell is { IsValid: true, FieldIndex: >= 0 }
             && _currentCell.FieldIndex < oldToNew.Length)
         {
-            _currentCell = new GriddoCellAddress(_currentCell.RecordIndex, oldToNew[_currentCell.FieldIndex]);
+            AssignCurrentCell(new GriddoCellAddress(_currentCell.RecordIndex, oldToNew[_currentCell.FieldIndex]));
         }
 
         var remapped = new HashSet<GriddoCellAddress>();
@@ -547,7 +547,7 @@ public sealed partial class Griddo
         if (_currentCell is { IsValid: true, RecordIndex: >= 0 }
             && _currentCell.RecordIndex < oldToNew.Length)
         {
-            _currentCell = new GriddoCellAddress(oldToNew[_currentCell.RecordIndex], _currentCell.FieldIndex);
+            AssignCurrentCell(new GriddoCellAddress(oldToNew[_currentCell.RecordIndex], _currentCell.FieldIndex));
         }
 
         var remapped = new HashSet<GriddoCellAddress>();
@@ -647,9 +647,9 @@ public sealed partial class Griddo
         SelectRecord(recordIndex, additive);
         if (recordIndex >= 0 && recordIndex < Records.Count && Fields.Count > 0)
         {
-            _currentCell = new GriddoCellAddress(
+            AssignCurrentCell(new GriddoCellAddress(
                 recordIndex,
-                Math.Clamp(_currentCell.FieldIndex, 0, Fields.Count - 1));
+                Math.Clamp(_currentCell.FieldIndex, 0, Fields.Count - 1)));
         }
 
         _hasKeyboardSelectionAnchor = false;
@@ -664,9 +664,9 @@ public sealed partial class Griddo
         SelectField(fieldIndex, additive);
         if (fieldIndex >= 0 && fieldIndex < Fields.Count && Records.Count > 0)
         {
-            _currentCell = new GriddoCellAddress(
+            AssignCurrentCell(new GriddoCellAddress(
                 Math.Clamp(_currentCell.RecordIndex, 0, Records.Count - 1),
-                fieldIndex);
+                fieldIndex));
         }
 
         _hasKeyboardSelectionAnchor = false;

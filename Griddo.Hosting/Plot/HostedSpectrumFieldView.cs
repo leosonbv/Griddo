@@ -62,6 +62,8 @@ public sealed class HostedSpectrumFieldView : IGriddoHostedFieldView, IGriddoFie
     public bool CalibrationShowRegression { get; set; }
     public bool SpectrumNormalizeIntensity { get; set; }
 
+    public Func<object?, string?>? ViewportZoomRecordKey { get; set; }
+
     public string SourceObjectName { get; }
     public string SourceMemberName { get; }
     public double Width { get; }
@@ -78,7 +80,16 @@ public sealed class HostedSpectrumFieldView : IGriddoHostedFieldView, IGriddoFie
     {
         var chart = CreateChart();
         ApplyChartSettings(chart, null);
-        return new Border { Background = null, Child = chart, SnapsToDevicePixels = true, IsHitTestVisible = true };
+        var border = new Border { Background = null, Child = chart, SnapsToDevicePixels = true, IsHitTestVisible = true };
+        var plotKey = HostedPlotViewportMemory.PlotKey(SourceMemberName, Header);
+        chart.ViewportChanged += (_, _) =>
+        {
+            if (border.Tag is { } row)
+            {
+                HostedPlotViewportMemory.Remember(row, plotKey, chart.Viewport, ViewportZoomRecordKey);
+            }
+        };
+        return border;
     }
 
     public void UpdateHostElement(FrameworkElement host, object recordSource, bool isSelected, bool isCurrentCell)
@@ -88,10 +99,31 @@ public sealed class HostedSpectrumFieldView : IGriddoHostedFieldView, IGriddoFie
             return;
         }
 
-        var points = _signalProvider.GetPoints(recordSource);
-        var pointsValue = BuildRuntimePointsValue(points);
-        chart.SetValue(SkiaChartBaseControl.PointsProperty, pointsValue);
+        var plotKey = HostedPlotViewportMemory.PlotKey(SourceMemberName, Header);
+        var previousRow = host.Tag;
+        var recordChanged = !ReferenceEquals(previousRow, recordSource);
+
+        if (recordChanged)
+        {
+            HostedPlotViewportMemory.SaveLeavingRow(previousRow, plotKey, chart.Viewport, ViewportZoomRecordKey);
+            host.Tag = recordSource;
+            var points = _signalProvider.GetPoints(recordSource);
+            var pointsValue = BuildRuntimePointsValue(points);
+            chart.SuppressAutomaticViewportFitOnNextPointsChange = points.Count > 0;
+            chart.SetValue(SkiaChartBaseControl.PointsProperty, pointsValue);
+            var restored = HostedPlotViewportMemory.TryRestore(recordSource, plotKey, chart, ViewportZoomRecordKey);
+            if (!restored && chart.Points.Count > 0)
+            {
+                chart.FitViewportToCurrentPoints();
+            }
+        }
+
         ApplyChartSettings(chart, recordSource);
+
+        if (recordChanged)
+        {
+            HostedPlotViewportMemory.ScheduleDeferredTryRestore(host, recordSource, plotKey, chart, ViewportZoomRecordKey);
+        }
     }
 
     public bool IsHostInEditMode(FrameworkElement host) =>

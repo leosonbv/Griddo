@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -11,6 +12,9 @@ namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern int GetDoubleClickTime();
+
     /// <summary>Minimum pointer travel before field/record move or resize cues activate (DIP).</summary>
     private const double DragCueMinPixels = 1.0;
 
@@ -132,9 +136,9 @@ public sealed partial class Griddo
                 _fieldHeaderOnlySelection.Add(rightCol);
                 _fieldHeaderRightClickOutline.Add(rightCol);
                 contextFieldIndices = [rightCol];
-                _currentCell = new GriddoCellAddress(
+                AssignCurrentCell(new GriddoCellAddress(
                     Records.Count == 0 ? 0 : Math.Clamp(_currentCell.RecordIndex, 0, Math.Max(0, Records.Count - 1)),
-                    rightCol);
+                    rightCol));
             }
 
             _hasKeyboardSelectionAnchor = false;
@@ -211,9 +215,9 @@ public sealed partial class Griddo
                 _recordHeaderOnlySelection.Add(rightRecordHeaderHit);
                 _recordHeaderRightClickOutline.Add(rightRecordHeaderHit);
                 contextRecordIndices = [rightRecordHeaderHit];
-                _currentCell = new GriddoCellAddress(
+                AssignCurrentCell(new GriddoCellAddress(
                     rightRecordHeaderHit,
-                    Fields.Count == 0 ? 0 : Math.Clamp(_currentCell.FieldIndex, 0, Math.Max(0, Fields.Count - 1)));
+                    Fields.Count == 0 ? 0 : Math.Clamp(_currentCell.FieldIndex, 0, Math.Max(0, Fields.Count - 1))));
             }
 
             _hasKeyboardSelectionAnchor = false;
@@ -255,7 +259,7 @@ public sealed partial class Griddo
                 && Records.Count > 0
                 && Fields.Count > 0)
             {
-                _currentCell = target;
+                AssignCurrentCell(target);
                 _isEditing = false;
                 InvalidateVisual();
                 _isTrackingFieldMove = true;
@@ -283,7 +287,7 @@ public sealed partial class Griddo
                 SelectField(clickedFieldHeader, isCtrlPressed);
             }
 
-            _currentCell = target;
+            AssignCurrentCell(target);
             _isEditing = false;
             InvalidateVisual();
             if (!isShiftPressed
@@ -319,7 +323,7 @@ public sealed partial class Griddo
                 && Records.Count > 0
                 && Fields.Count > 0)
             {
-                _currentCell = target;
+                AssignCurrentCell(target);
                 _isEditing = false;
                 InvalidateVisual();
                 _isTrackingRecordMove = true;
@@ -360,7 +364,7 @@ public sealed partial class Griddo
                 CaptureMouse();
             }
 
-            _currentCell = target;
+            AssignCurrentCell(target);
             _isEditing = false;
             InvalidateVisual();
             CompleteMouseDown(e, handled: true);
@@ -395,7 +399,7 @@ public sealed partial class Griddo
             {
                 _selectedCells.Clear();
                 _selectedCells.Add(clicked);
-                _currentCell = clicked;
+                AssignCurrentCell(clicked);
                 _isDraggingSelection = false;
                 if (IsCheckboxToggleCell(clicked))
                 {
@@ -424,7 +428,7 @@ public sealed partial class Griddo
 
                 _selectedCells.Clear();
                 _selectedCells.Add(clicked);
-                _currentCell = clicked;
+                AssignCurrentCell(clicked);
                 _isDraggingSelection = false;
                 _pendingHostedEditActivation = false;
                 SyncHostedCells();
@@ -456,7 +460,7 @@ public sealed partial class Griddo
             {
                 _selectedCells.Clear();
                 _selectedCells.Add(clicked);
-                _currentCell = clicked;
+                AssignCurrentCell(clicked);
                 _isDraggingSelection = false;
                 BeginEditWithoutReplacing();
                 InvalidateVisual();
@@ -492,7 +496,7 @@ public sealed partial class Griddo
                 {
                     _selectedCells.Clear();
                     _selectedCells.Add(clicked);
-                    _currentCell = clicked;
+                    AssignCurrentCell(clicked);
                     _isDraggingSelection = false;
                     ToggleBoolCell(clicked);
                     InvalidateVisual();
@@ -503,7 +507,7 @@ public sealed partial class Griddo
                 {
                     _selectedCells.Clear();
                     _selectedCells.Add(clicked);
-                    _currentCell = clicked;
+                    AssignCurrentCell(clicked);
                     _isDraggingSelection = false;
                     BeginEditWithoutReplacing();
                     InvalidateVisual();
@@ -520,7 +524,7 @@ public sealed partial class Griddo
             && Fields.Count > 0)
         {
             SelectRange(oldCurrentCell, clicked, isCtrlPressed);
-            _currentCell = clicked;
+            AssignCurrentCell(clicked);
             _isEditing = false;
             InvalidateVisual();
             CompleteMouseDown(e, handled: true);
@@ -542,7 +546,7 @@ public sealed partial class Griddo
                 _selectedCells.Add(clicked);
             }
 
-            _currentCell = clicked;
+            AssignCurrentCell(clicked);
             _isDraggingSelection = false;
             _isEditing = false;
             InvalidateVisual();
@@ -575,7 +579,7 @@ public sealed partial class Griddo
         _isDraggingSelection = true;
         CaptureMouse();
 
-        _currentCell = clicked;
+        AssignCurrentCell(clicked);
         _isEditing = false;
         InvalidateVisual();
         CompleteMouseDown(e, handled: true);
@@ -583,12 +587,14 @@ public sealed partial class Griddo
 
     private void ApplyPendingBodyRightContextMenuFromBodyClick(GriddoCellAddress clicked, Point pointer)
     {
+        CancelDeferredBodyCellContextMenu();
+
         var wasSelected = _selectedCells.Contains(clicked);
         if (!wasSelected)
         {
             _selectedCells.Clear();
             _selectedCells.Add(clicked);
-            _currentCell = clicked;
+            AssignCurrentCell(clicked);
             if (Fields[clicked.FieldIndex] is IGriddoHostedFieldView)
             {
                 SyncHostedCells();
@@ -617,11 +623,103 @@ public sealed partial class Griddo
         CellContextMenu.HorizontalOffset = positionOnGrid.X;
         CellContextMenu.VerticalOffset = positionOnGrid.Y;
         CellContextMenu.IsOpen = true;
+        ClearHostedPlotManualRightDoubleClickTracking();
+    }
+
+    private void ClearHostedPlotManualRightDoubleClickTracking()
+    {
+        _hostedPlotLastRightDownTickCount64 = long.MinValue;
+        _hostedPlotLastRightDownCell = new GriddoCellAddress(-1, -1);
+    }
+
+    private bool IsHostedPlotManualRightDoubleClick(
+        GriddoCellAddress clickedPreview,
+        Point pointerPreview,
+        long nowTickCount64)
+    {
+        if (_hostedPlotLastRightDownTickCount64 == long.MinValue
+            || !_hostedPlotLastRightDownCell.IsValid
+            || !clickedPreview.IsValid
+            || clickedPreview != _hostedPlotLastRightDownCell)
+        {
+            return false;
+        }
+
+        var elapsedMs = nowTickCount64 - _hostedPlotLastRightDownTickCount64;
+        if (elapsedMs < 0 || elapsedMs > GetClampedDoubleClickTimeMilliseconds())
+        {
+            return false;
+        }
+
+        var dx = pointerPreview.X - _hostedPlotLastRightDownGridPos.X;
+        var dy = pointerPreview.Y - _hostedPlotLastRightDownGridPos.Y;
+        return dx * dx + dy * dy <= BodyRightClickMenuSlopDipSquared;
+    }
+
+    private void TrackHostedPlotRightDownForManualDoubleClick(
+        GriddoCellAddress clickedPreview,
+        Point pointerPreview,
+        long nowTickCount64)
+    {
+        _hostedPlotLastRightDownTickCount64 = nowTickCount64;
+        _hostedPlotLastRightDownCell = clickedPreview;
+        _hostedPlotLastRightDownGridPos = pointerPreview;
     }
 
     private void ResetPendingBodyRightContextMenu()
     {
         _pendingBodyRightContextMenuCell = new GriddoCellAddress(-1, -1);
+    }
+
+    private static int GetClampedDoubleClickTimeMilliseconds()
+    {
+        var ms = GetDoubleClickTime();
+        if (ms <= 0)
+        {
+            ms = 500;
+        }
+
+        return Math.Clamp(ms, 100, 2000);
+    }
+
+    private static TimeSpan DeferredBodyCellContextMenuInterval() =>
+        TimeSpan.FromMilliseconds(GetClampedDoubleClickTimeMilliseconds());
+
+    private void CancelDeferredBodyCellContextMenu()
+    {
+        if (_deferredBodyCellContextMenuTimer is not { } t)
+        {
+            return;
+        }
+
+        t.Stop();
+        _deferredBodyCellContextMenuTimer = null;
+        _deferredBodyCellContextMenuCell = new GriddoCellAddress(-1, -1);
+    }
+
+    private void ScheduleDeferredBodyCellContextMenu(GriddoCellAddress cell, bool cellWasAlreadySelected, Point positionOnGrid)
+    {
+        CancelDeferredBodyCellContextMenu();
+        _deferredBodyCellContextMenuCell = cell;
+        _deferredBodyCellContextMenuWasAlreadySelected = cellWasAlreadySelected;
+        _deferredBodyCellContextMenuPosition = positionOnGrid;
+
+        var timer = new DispatcherTimer { Interval = DeferredBodyCellContextMenuInterval() };
+        _deferredBodyCellContextMenuTimer = timer;
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            _deferredBodyCellContextMenuTimer = null;
+            var c = _deferredBodyCellContextMenuCell;
+            var wasSel = _deferredBodyCellContextMenuWasAlreadySelected;
+            var pos = _deferredBodyCellContextMenuPosition;
+            _deferredBodyCellContextMenuCell = new GriddoCellAddress(-1, -1);
+            if (c.IsValid)
+            {
+                OpenCellContextMenuAt(c, wasSel, pos);
+            }
+        };
+        timer.Start();
     }
 
     /// <summary>
@@ -650,6 +748,7 @@ public sealed partial class Griddo
 
         var cell = _pendingBodyRightContextMenuCell;
         ResetPendingBodyRightContextMenu();
+        CancelDeferredBodyCellContextMenu();
         if (IsMouseCaptured)
         {
             ReleaseMouseCapture();
@@ -701,7 +800,7 @@ public sealed partial class Griddo
         var dy = upPos.Y - downPos.Y;
         if (dx * dx + dy * dy <= BodyRightClickMenuSlopDipSquared)
         {
-            OpenCellContextMenuAt(cell, wasSel, upPos);
+            ScheduleDeferredBodyCellContextMenu(cell, wasSel, upPos);
         }
 
         e.Handled = true;
@@ -795,15 +894,50 @@ public sealed partial class Griddo
         {
             var pointerPreview = e.GetPosition(this);
             var clickedPreview = HitTestCell(pointerPreview);
+            // Hosted Plotto: handle here in both Renderer and Editor (after zoom the chart stays in Editor;
+            // without this, right-click never reaches the deferred grid CellContextMenu path).
             if (clickedPreview.IsValid
                 && Fields[clickedPreview.FieldIndex] is IGriddoHostedFieldView hostedPv
-                && TryGetHostedElement(clickedPreview) is { } hostPv
-                && !hostedPv.IsHostInEditMode(hostPv))
+                && TryGetHostedElement(clickedPreview) is { } hostPv)
             {
                 ClearHeaderFocus();
                 ClearHeaderAuxiliarySelectionState();
-                ApplyPendingBodyRightContextMenuFromBodyClick(clickedPreview, pointerPreview);
-                e.Handled = true;
+                var nowRightTicks = Environment.TickCount64;
+                var hostedPlotRightDouble = e.ClickCount >= 2
+                    || IsHostedPlotManualRightDoubleClick(clickedPreview, pointerPreview, nowRightTicks);
+                if (hostedPlotRightDouble)
+                {
+                    ClearHostedPlotManualRightDoubleClickTracking();
+                    CancelDeferredBodyCellContextMenu();
+                    var wasSelDbl = _selectedCells.Contains(clickedPreview);
+                    if (!wasSelDbl)
+                    {
+                        _selectedCells.Clear();
+                        _selectedCells.Add(clickedPreview);
+                        AssignCurrentCell(clickedPreview);
+                        SyncHostedCells();
+                    }
+
+                    _isEditing = false;
+                    InvalidateVisual();
+                    _hostedDirectRelayDepth++;
+                    try
+                    {
+                        hostedPv.RelayDirectEditMouseDown(hostPv, e);
+                    }
+                    finally
+                    {
+                        _hostedDirectRelayDepth--;
+                    }
+
+                    e.Handled = true;
+                }
+                else
+                {
+                    ApplyPendingBodyRightContextMenuFromBodyClick(clickedPreview, pointerPreview);
+                    TrackHostedPlotRightDownForManualDoubleClick(clickedPreview, pointerPreview, nowRightTicks);
+                    e.Handled = true;
+                }
             }
 
             base.OnPreviewMouseDown(e);
@@ -835,9 +969,36 @@ public sealed partial class Griddo
         {
             if (e.ClickCount == 2)
             {
+                if (TryGetHostedElement(clicked) is { } hostDbl
+                    && Fields[clicked.FieldIndex] is IGriddoHostedFieldView hostedDbl
+                    && (!hostedDbl.IsHostInEditMode(hostDbl)
+                        || hostedDbl.ShouldRelayLeftDoubleClickWhileInHostedEditMode()))
+                {
+                    CancelDeferredBodyCellContextMenu();
+                    _selectedCells.Clear();
+                    _selectedCells.Add(clicked);
+                    AssignCurrentCell(clicked);
+                    _isDraggingSelection = false;
+                    _isEditing = false;
+                    InvalidateVisual();
+                    _hostedDirectRelayDepth++;
+                    try
+                    {
+                        hostedDbl.RelayDirectEditMouseDown(hostDbl, e);
+                    }
+                    finally
+                    {
+                        _hostedDirectRelayDepth--;
+                    }
+
+                    e.Handled = true;
+                    base.OnPreviewMouseDown(e);
+                    return;
+                }
+
                 _selectedCells.Clear();
                 _selectedCells.Add(clicked);
-                _currentCell = clicked;
+                AssignCurrentCell(clicked);
                 _isDraggingSelection = false;
                 _isEditing = false;
                 InvalidateVisual();
@@ -849,7 +1010,7 @@ public sealed partial class Griddo
             {
                 _selectedCells.Clear();
                 _selectedCells.Add(clicked);
-                _currentCell = clicked;
+                AssignCurrentCell(clicked);
                 _isDraggingSelection = false;
                 _isEditing = false;
                 InvalidateVisual();
@@ -861,7 +1022,7 @@ public sealed partial class Griddo
         if (isShiftPressed && oldCurrentCell.IsValid && Records.Count > 0 && Fields.Count > 0)
         {
             SelectRange(oldCurrentCell, clicked, isCtrlPressed);
-            _currentCell = clicked;
+            AssignCurrentCell(clicked);
             _isEditing = false;
             InvalidateVisual();
             base.OnPreviewMouseDown(e);
@@ -885,7 +1046,7 @@ public sealed partial class Griddo
         _dragAnchorCell = clicked;
         _dragCurrentCell = clicked;
         _isDraggingSelection = false;
-        _currentCell = clicked;
+        AssignCurrentCell(clicked);
         _isEditing = false;
         InvalidateVisual();
         base.OnPreviewMouseDown(e);
@@ -1444,9 +1605,9 @@ public sealed partial class Griddo
                     SelectField(_pendingFieldHeaderIndex, _pendingFieldHeaderSelectionAdditive);
                 }
 
-                _currentCell = new GriddoCellAddress(
+                AssignCurrentCell(new GriddoCellAddress(
                     Records.Count == 0 ? 0 : Math.Clamp(_currentCell.RecordIndex, 0, Records.Count - 1),
-                    _pendingFieldHeaderIndex);
+                    _pendingFieldHeaderIndex));
                 _isEditing = false;
                 InvalidateVisual();
             }
@@ -1474,9 +1635,9 @@ public sealed partial class Griddo
                     SelectRecord(_pendingRecordHeaderIndex, _pendingRecordHeaderSelectionAdditive);
                 }
 
-                _currentCell = new GriddoCellAddress(
+                AssignCurrentCell(new GriddoCellAddress(
                     _pendingRecordHeaderIndex,
-                    Fields.Count == 0 ? 0 : Math.Clamp(_currentCell.FieldIndex, 0, Fields.Count - 1));
+                    Fields.Count == 0 ? 0 : Math.Clamp(_currentCell.FieldIndex, 0, Fields.Count - 1)));
                 _isEditing = false;
                 InvalidateVisual();
             }

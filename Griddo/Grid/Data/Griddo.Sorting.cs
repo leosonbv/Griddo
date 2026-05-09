@@ -223,7 +223,7 @@ public sealed partial class Griddo
         _selectedCells.Clear();
         if (Records.Count > 0 && Fields.Count > 0)
         {
-            _currentCell = new Primitives.GriddoCellAddress(Math.Clamp(_currentCell.RecordIndex, 0, Records.Count - 1), Math.Clamp(_currentCell.FieldIndex, 0, Fields.Count - 1));
+            AssignCurrentCell(new Primitives.GriddoCellAddress(Math.Clamp(_currentCell.RecordIndex, 0, Records.Count - 1), Math.Clamp(_currentCell.FieldIndex, 0, Fields.Count - 1)));
             _selectedCells.Add(_currentCell);
         }
     }

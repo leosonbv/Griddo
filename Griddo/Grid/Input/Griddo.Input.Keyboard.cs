@@ -111,9 +111,22 @@ public sealed partial class Griddo
         }
         else if (IsCurrentHostedCellInEditMode())
         {
-            if (e.NewFocus is DependencyObject newFocus
-                && TryGetHostedElement(_currentCell) is FrameworkElement host
-                && (ReferenceEquals(newFocus, host) || IsVisualDescendantOf(newFocus, host)))
+            if (e.NewFocus is DependencyObject newFocus)
+            {
+                if (TryGetHostedElement(_currentCell) is FrameworkElement host
+                    && (ReferenceEquals(newFocus, host) || IsVisualDescendantOf(newFocus, host)))
+                {
+                    base.OnLostKeyboardFocus(e);
+                    return;
+                }
+
+                if (IsFocusInsideBodyCellContextMenu(newFocus))
+                {
+                    base.OnLostKeyboardFocus(e);
+                    return;
+                }
+            }
+            else if (ShouldKeepHostedEditDuringBodyContextMenuGesture())
             {
                 base.OnLostKeyboardFocus(e);
                 return;
@@ -136,6 +149,43 @@ public sealed partial class Griddo
         {
             InvalidateVisual();
         }
+    }
+
+    /// <summary>
+    /// Body <see cref="CellContextMenu"/> (and deferred open) steal keyboard focus from the hosted chart;
+    /// do not exit hosted edit mode or the red outline and menu flash closed.
+    /// </summary>
+    private bool ShouldKeepHostedEditDuringBodyContextMenuGesture()
+    {
+        if (CellContextMenu is { IsOpen: true })
+        {
+            return true;
+        }
+
+        return _deferredBodyCellContextMenuTimer is not null;
+    }
+
+    private bool IsFocusInsideBodyCellContextMenu(DependencyObject focus)
+    {
+        if (CellContextMenu is not { IsOpen: true } menu)
+        {
+            return false;
+        }
+
+        if (ReferenceEquals(focus, menu) || IsVisualDescendantOf(focus, menu))
+        {
+            return true;
+        }
+
+        for (var d = focus; d is not null; d = LogicalTreeHelper.GetParent(d))
+        {
+            if (ReferenceEquals(d, menu))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsVisualDescendantOf(DependencyObject? node, DependencyObject ancestor)
@@ -488,7 +538,7 @@ public sealed partial class Griddo
         _isEditing = false;
         if (Records.Count > 0 && Fields.Count > 0)
         {
-            _currentCell = new GriddoCellAddress(0, 0);
+            AssignCurrentCell(new GriddoCellAddress(0, 0));
         }
 
         InvalidateVisual();

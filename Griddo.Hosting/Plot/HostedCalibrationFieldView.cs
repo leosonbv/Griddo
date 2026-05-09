@@ -61,6 +61,8 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
     public bool CalibrationShowRegression { get; set; }
     public bool SpectrumNormalizeIntensity { get; set; }
 
+    public Func<object?, string?>? ViewportZoomRecordKey { get; set; }
+
     public string SourceObjectName { get; }
     public string SourceMemberName { get; }
     public double Width { get; }
@@ -77,7 +79,16 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
     {
         var chart = CreateChart();
         ApplyChartSettings(chart, null);
-        return new Border { Background = null, Child = chart, SnapsToDevicePixels = true, IsHitTestVisible = true };
+        var border = new Border { Background = null, Child = chart, SnapsToDevicePixels = true, IsHitTestVisible = true };
+        var plotKey = HostedPlotViewportMemory.PlotKey(SourceMemberName, Header);
+        chart.ViewportChanged += (_, _) =>
+        {
+            if (border.Tag is { } row)
+            {
+                HostedPlotViewportMemory.Remember(row, plotKey, chart.Viewport, ViewportZoomRecordKey);
+            }
+        };
+        return border;
     }
 
     public void UpdateHostElement(FrameworkElement host, object recordSource, bool isSelected, bool isCurrentCell)
@@ -87,11 +98,27 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
             return;
         }
 
-        chart.CalibrationPoints = _signalProvider.GetPoints(recordSource)
-            .Select(static p => new CalibrationPoint { X = p.X, Y = p.Y, IsEnabled = p.Enabled })
-            .ToList();
-        chart.FitMode = _signalProvider.GetFitMode(recordSource);
+        var plotKey = HostedPlotViewportMemory.PlotKey(SourceMemberName, Header);
+        var previousRow = host.Tag;
+        var recordChanged = !ReferenceEquals(previousRow, recordSource);
+
+        if (recordChanged)
+        {
+            HostedPlotViewportMemory.SaveLeavingRow(previousRow, plotKey, chart.Viewport, ViewportZoomRecordKey);
+            host.Tag = recordSource;
+            chart.CalibrationPoints = _signalProvider.GetPoints(recordSource)
+                .Select(static p => new CalibrationPoint { X = p.X, Y = p.Y, IsEnabled = p.Enabled })
+                .ToList();
+            chart.FitMode = _signalProvider.GetFitMode(recordSource);
+        }
+
         ApplyChartSettings(chart, recordSource);
+
+        if (recordChanged)
+        {
+            HostedPlotViewportMemory.TryRestore(recordSource, plotKey, chart, ViewportZoomRecordKey);
+            HostedPlotViewportMemory.ScheduleDeferredTryRestore(host, recordSource, plotKey, chart, ViewportZoomRecordKey);
+        }
     }
 
     public bool IsHostInEditMode(FrameworkElement host) =>
