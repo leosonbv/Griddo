@@ -96,6 +96,46 @@ public static class ChartSkiaManualIntegration
         canvas.DrawLine(pxE, pyBaseE, pxE, pySigE, linePaint);
     }
 
+    public static void DrawRegionSignalLine(
+        SKCanvas canvas,
+        IReadOnlyList<ChartPoint> pointsSortedByXAscending,
+        SKRect plotRect,
+        IntegrationRegion region,
+        Func<double, SKRect, float> toPixelX,
+        Func<double, SKRect, float> toPixelY,
+        SKPaint linePaint)
+    {
+        var ordered = pointsSortedByXAscending;
+        if (ordered.Count == 0)
+        {
+            return;
+        }
+
+        var xMin = Math.Min(region.Start.X, region.End.X);
+        var xMax = Math.Max(region.Start.X, region.End.X);
+        if (xMax - xMin < 1e-12)
+        {
+            return;
+        }
+
+        var yLeft = ChartSignalInterpolation.InterpolateYAtX(ordered, xMin);
+        var yRight = ChartSignalInterpolation.InterpolateYAtX(ordered, xMax);
+
+        var builder = new SKPathBuilder();
+        builder.MoveTo(toPixelX(xMin, plotRect), toPixelY(yLeft, plotRect));
+        foreach (var p in ordered)
+        {
+            if (p.X > xMin && p.X < xMax)
+            {
+                builder.LineTo(toPixelX(p.X, plotRect), toPixelY(p.Y, plotRect));
+            }
+        }
+
+        builder.LineTo(toPixelX(xMax, plotRect), toPixelY(yRight, plotRect));
+        using var path = builder.Detach();
+        canvas.DrawPath(path, linePaint);
+    }
+
     public static void DrawPeakSplitVertical(
         SKCanvas canvas,
         IReadOnlyList<ChartPoint> pointsSortedByXAscending,

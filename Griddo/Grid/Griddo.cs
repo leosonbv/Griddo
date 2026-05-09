@@ -191,6 +191,12 @@ public sealed partial class Griddo : FrameworkElement
     /// </summary>
     private int _hostedDirectRelayDepth;
 
+    /// <summary>Body cell (including hosted Plotto and HTML columns): right-down prepares; <see cref="CellContextMenu"/> opens only on right-up at the same location unless the gesture is promoted to the hosted chart.</summary>
+    private GriddoCellAddress _pendingBodyRightContextMenuCell = new(-1, -1);
+
+    private Point _pendingBodyRightContextMenuDownPos;
+    private bool _pendingBodyRightContextMenuWasAlreadySelected;
+
     public Griddo()
     {
         Focusable = true;

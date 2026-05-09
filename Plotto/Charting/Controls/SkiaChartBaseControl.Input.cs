@@ -149,6 +149,17 @@ public abstract partial class SkiaChartBaseControl
             return;
         }
 
+        _lastMousePos = e.GetPosition(this);
+
+        // Right-drag zoom / context menu: may begin in Renderer; editor activates only after movement slop.
+        if (e.ChangedButton == MouseButton.Right
+            && EnableMouseInteractions
+            && EnableInlineEditing)
+        {
+            BeginRightButtonRubberBand(_lastMousePos, e);
+            return;
+        }
+
         if (!CanInteract())
         {
             return;
@@ -158,14 +169,6 @@ public abstract partial class SkiaChartBaseControl
         if (EnablePopupEditing && UseSparklineLayout && e.ClickCount == 2)
         {
             PopupEditorRequested?.Invoke(this, EventArgs.Empty);
-            return;
-        }
-
-        _lastMousePos = e.GetPosition(this);
-
-        if (e.ChangedButton == MouseButton.Right)
-        {
-            BeginRightButtonRubberBand(_lastMousePos, e);
             return;
         }
 
@@ -193,7 +196,7 @@ public abstract partial class SkiaChartBaseControl
         var pos = e.GetPosition(this);
         var canInteract = CanInteract();
 
-        TryPromoteRightRubberToDragZoom(pos, canInteract);
+        TryPromoteRightRubberToDragZoom(pos);
 
         if (_isDragging)
         {
@@ -211,7 +214,7 @@ public abstract partial class SkiaChartBaseControl
 
         if (e.ChangedButton == MouseButton.Right)
         {
-            CompleteRightButtonInteraction(e, pos, canInteract);
+            CompleteRightButtonInteraction(e);
             return;
         }
 
@@ -243,7 +246,8 @@ public abstract partial class SkiaChartBaseControl
             return false;
         }
 
-        ScheduleDeferredContextMenu(e.GetPosition(this));
+        CancelDeferredContextMenu();
+        OpenContextMenuAt(_rightMouseDownPosition);
         return true;
     }
 
@@ -258,6 +262,11 @@ public abstract partial class SkiaChartBaseControl
 
     private void OpenDeferredEditorContextMenu()
     {
+        OpenContextMenuAt(_deferredContextMenuPosition);
+    }
+
+    private void OpenContextMenuAt(Point positionInChart)
+    {
         var menu = ContextMenu;
         if (menu is null)
         {
@@ -267,8 +276,8 @@ public abstract partial class SkiaChartBaseControl
         menu.Focusable = false;
         menu.PlacementTarget = this;
         menu.Placement = PlacementMode.RelativePoint;
-        menu.HorizontalOffset = _deferredContextMenuPosition.X;
-        menu.VerticalOffset = _deferredContextMenuPosition.Y;
+        menu.HorizontalOffset = positionInChart.X;
+        menu.VerticalOffset = positionInChart.Y;
         menu.IsOpen = true;
     }
 
@@ -333,6 +342,7 @@ public abstract partial class SkiaChartBaseControl
     private void BeginRightButtonRubberBand(Point logicalDown, MouseButtonEventArgs e)
     {
         CancelDeferredContextMenu();
+        _rightMouseDownPosition = logicalDown;
 
         _rightZoomRubberPending = true;
         SyncHitTestGeometryFromLayout();
@@ -343,9 +353,14 @@ public abstract partial class SkiaChartBaseControl
         e.Handled = true;
     }
 
-    private void TryPromoteRightRubberToDragZoom(Point pos, bool canInteract)
+    private void TryPromoteRightRubberToDragZoom(Point pos)
     {
-        if (!_rightZoomRubberPending || !canInteract || _isRightDragZoom)
+        if (!_rightZoomRubberPending || _isRightDragZoom)
+        {
+            return;
+        }
+
+        if (!EnableMouseInteractions || !EnableInlineEditing)
         {
             return;
         }
@@ -355,6 +370,18 @@ public abstract partial class SkiaChartBaseControl
         var ox = surf.X - _zoomRectStart.X;
         var oy = surf.Y - _zoomRectStart.Y;
         if (ox * ox + oy * oy < RightDragRubberActivationDistSquared)
+        {
+            return;
+        }
+
+        // Slop exceeded: enter editor (if needed) and start zoom rectangle from original mouse-down (surface) point.
+        if (RenderMode == ChartRenderMode.Renderer)
+        {
+            RenderMode = ChartRenderMode.Editor;
+            Focus();
+        }
+
+        if (!CanInteract())
         {
             return;
         }
@@ -399,15 +426,18 @@ public abstract partial class SkiaChartBaseControl
         InvalidateVisual();
     }
 
-    private void CompleteRightButtonInteraction(MouseButtonEventArgs e, Point pos, bool canInteract)
+    private void CompleteRightButtonInteraction(MouseButtonEventArgs e)
     {
         var rubberWasPending = _rightZoomRubberPending;
-        if (canInteract && _isRightDragZoom)
+        var allowRightUi = EnableMouseInteractions && EnableInlineEditing;
+        var didZoom = _isRightDragZoom;
+
+        if (allowRightUi && didZoom && CanInteract())
         {
             _viewportWheelClamp.ResyncXClampFromPoints(Points);
             ApplyRightDragZoom(_zoomRectStart, _zoomRectCurrent);
         }
-        else if (canInteract && rubberWasPending && !_isRightDragZoom)
+        else if (allowRightUi && rubberWasPending && !didZoom)
         {
             TryOpenEditorContextMenu(e);
         }
@@ -417,7 +447,7 @@ public abstract partial class SkiaChartBaseControl
         _isDragging = false;
         ReleaseMouseCapture();
         InvalidateVisual();
-        e.Handled = canInteract;
+        e.Handled = allowRightUi && rubberWasPending;
     }
 
     private void CompleteLeftChartDrag(Point pos, bool canInteract, MouseButtonEventArgs e)

@@ -57,7 +57,10 @@ public sealed class SeriesViewportInteractionClamp
     /// X: viewport inside plot xmin/xmax ± 5% of horizontal data span.
     /// Y: ymin/ymax are plot-point extrema; chart height = visible span (Viewport.YMax − Viewport.YMin).
     /// </summary>
-    public void ClampViewportToWheelZoomLimits(ChartViewport viewport, IReadOnlyList<ChartPoint> points)
+    public void ClampViewportToWheelZoomLimits(
+        ChartViewport viewport,
+        IReadOnlyList<ChartPoint> points,
+        bool clampYToDataFloor = true)
     {
         if (points.Count == 0)
         {
@@ -84,9 +87,16 @@ public sealed class SeriesViewportInteractionClamp
             viewport.XMax = viewport.XMin + w;
         }
 
-        ClampViewportYUsingVisibleChartHeight(viewport, yminPlot);
+        if (clampYToDataFloor)
+        {
+            ClampViewportYUsingVisibleChartHeight(viewport, yminPlot);
+        }
+
         viewport.EnsureMinimumSize();
-        ClampViewportYUsingVisibleChartHeight(viewport, yminPlot);
+        if (clampYToDataFloor)
+        {
+            ClampViewportYUsingVisibleChartHeight(viewport, yminPlot);
+        }
     }
 
     private void SyncZoomClampBoundsFromPoints(IReadOnlyList<ChartPoint> points)

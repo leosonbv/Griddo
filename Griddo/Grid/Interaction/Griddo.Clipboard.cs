@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Windows;
+using System.Windows.Media.Imaging;
 using Griddo.Clipboard;
 using Griddo.Fields;
 using Griddo.Primitives;
@@ -134,6 +135,11 @@ public sealed partial class Griddo
 
     private void CopySelectedCellsToClipboard(bool includeHeaders = false)
     {
+        if (!includeHeaders && TryCopySingleHostedCellImageOnlyToClipboard())
+        {
+            return;
+        }
+
         if (!TryBuildClipboardPayload(includeHeaders, out var tsv, out var cfHtml))
         {
             return;
@@ -149,6 +155,77 @@ public sealed partial class Griddo
         dataObject.SetData(DataFormats.Html, new MemoryStream(htmlBytes, writable: false));
 
         System.Windows.Clipboard.SetDataObject(dataObject, copy: true);
+    }
+
+    private bool TryCopySingleHostedCellImageOnlyToClipboard()
+    {
+        if (_selectedCells.Count != 1)
+        {
+            return false;
+        }
+
+        var address = _selectedCells.First();
+        if (address.RecordIndex < 0 || address.RecordIndex >= Records.Count || address.FieldIndex < 0 || address.FieldIndex >= Fields.Count)
+        {
+            return false;
+        }
+
+        if (Fields[address.FieldIndex] is not IGriddoHostedFieldView hosted)
+        {
+            return false;
+        }
+
+        var cellRect = GetCellRect(address.RecordIndex, address.FieldIndex);
+        var cw = Math.Max(1, (int)Math.Round(cellRect.Width));
+        var ch = Math.Max(1, (int)Math.Round(cellRect.Height));
+        if (!hosted.TryGetClipboardHtmlFragment(
+                TryGetHostedElement(address),
+                Records[address.RecordIndex],
+                cw,
+                ch,
+                out var fragment))
+        {
+            return false;
+        }
+
+        var marker = "base64,";
+        var markerIndex = fragment.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (markerIndex < 0)
+        {
+            return false;
+        }
+
+        var dataStart = markerIndex + marker.Length;
+        var dataEnd = fragment.IndexOf('"', dataStart);
+        if (dataEnd <= dataStart)
+        {
+            return false;
+        }
+
+        byte[] pngBytes;
+        try
+        {
+            pngBytes = Convert.FromBase64String(fragment[dataStart..dataEnd]);
+        }
+        catch
+        {
+            return false;
+        }
+
+        var bitmap = new BitmapImage();
+        using (var ms = new MemoryStream(pngBytes, writable: false))
+        {
+            bitmap.BeginInit();
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.StreamSource = ms;
+            bitmap.EndInit();
+            bitmap.Freeze();
+        }
+
+        var dataObject = new DataObject();
+        dataObject.SetImage(bitmap);
+        System.Windows.Clipboard.SetDataObject(dataObject, copy: true);
+        return true;
     }
 
     private bool TryBuildClipboardPayload(bool includeHeaders, out string tsv, out string cfHtml)

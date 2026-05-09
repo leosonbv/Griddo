@@ -24,6 +24,9 @@ public interface IPlotFieldLayoutTarget
     double AxisFontSize { get; set; }
     double TitleFontSize { get; set; }
     bool ChromatogramShowPeaks { get; set; }
+    bool OverlayIstdPeaks { get; set; }
+    bool OverlaySurrogatePeaks { get; set; }
+    bool OverlayTargetPeaks { get; set; }
     bool CalibrationShowRegression { get; set; }
     bool SpectrumNormalizeIntensity { get; set; }
 }

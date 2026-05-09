@@ -22,7 +22,10 @@ public abstract partial class SkiaChartBaseControl
     /// <summary>After wheel zoom, pan, or drag-zoom; default uses point-based X/Y clamps.</summary>
     protected virtual void ApplyViewportInteractionClamp()
     {
-        _viewportWheelClamp.ClampViewportToWheelZoomLimits(Viewport, Points);
+        _viewportWheelClamp.ClampViewportToWheelZoomLimits(
+            Viewport,
+            Points,
+            clampYToDataFloor: !IsViewportClampAfterRectZoom);
     }
 
     protected void ZoomXAt(Point pivot, double scale)

@@ -14,6 +14,9 @@ public sealed partial class Griddo
     /// <summary>Minimum pointer travel before field/record move or resize cues activate (DIP).</summary>
     private const double DragCueMinPixels = 1.0;
 
+    /// <summary>Squared DIP distance; right-up farther than this from right-down does not open the cell context menu.</summary>
+    private const double BodyRightClickMenuSlopDipSquared = 25.0;
+
     // -------------------------------------------------------------------------
     // Mouse down
     // -------------------------------------------------------------------------
@@ -377,56 +380,9 @@ public sealed partial class Griddo
             ClearHeaderAuxiliarySelectionState();
         }
 
-        if (e.ChangedButton == MouseButton.Right
-            && HostedPlotDirectEditOnMouseDown
-            && e.ClickCount == 1
-            && Fields[clicked.FieldIndex] is IGriddoHostedFieldView hostedRightDirect)
-        {
-            var wasSelectedHosted = _selectedCells.Contains(clicked);
-            if (!wasSelectedHosted)
-            {
-                _selectedCells.Clear();
-                _selectedCells.Add(clicked);
-            }
-            _currentCell = clicked;
-            _isDraggingSelection = false;
-            _pendingHostedEditActivation = false;
-            SyncHostedCells();
-            SetCurrentHostedCellEditMode(true);
-            if (TryGetHostedElement(clicked) is { } hostForRightRelay)
-            {
-                UpdateLayout();
-                hostForRightRelay.UpdateLayout();
-                _hostedDirectRelayDepth++;
-                try
-                {
-                    hostedRightDirect.RelayDirectEditMouseDown(hostForRightRelay, e);
-                }
-                finally
-                {
-                    _hostedDirectRelayDepth--;
-                }
-            }
-
-            _isEditing = false;
-            InvalidateVisual();
-            CompleteMouseDown(e, handled: true);
-            return;
-        }
-
         if (e.ChangedButton == MouseButton.Right)
         {
-            var wasSelected = _selectedCells.Contains(clicked);
-            if (!wasSelected)
-            {
-                _selectedCells.Clear();
-                _selectedCells.Add(clicked);
-            }
-            _currentCell = clicked;
-
-            _isEditing = false;
-            InvalidateVisual();
-            OpenCellContextMenu(e, clicked, wasSelected);
+            ApplyPendingBodyRightContextMenuFromBodyClick(clicked, pointer);
             CompleteMouseDown(e, handled: true);
             return;
         }
@@ -455,8 +411,7 @@ public sealed partial class Griddo
                 return;
             }
 
-            if (HostedPlotDirectEditOnMouseDown
-                && e.ClickCount == 1
+            if (e.ClickCount == 1
                 && Fields[clicked.FieldIndex] is IGriddoHostedFieldView hostedDirect)
             {
                 if (TryGetHostedElement(clicked) is { } hostedForDirect
@@ -626,10 +581,31 @@ public sealed partial class Griddo
         CompleteMouseDown(e, handled: true);
     }
 
-    private void OpenCellContextMenu(MouseButtonEventArgs e, GriddoCellAddress cell, bool cellWasAlreadySelected)
+    private void ApplyPendingBodyRightContextMenuFromBodyClick(GriddoCellAddress clicked, Point pointer)
     {
-        var pos = e.GetPosition(this);
-        var args = new GriddoCellContextMenuEventArgs(cell, pos, cellWasAlreadySelected);
+        var wasSelected = _selectedCells.Contains(clicked);
+        if (!wasSelected)
+        {
+            _selectedCells.Clear();
+            _selectedCells.Add(clicked);
+            _currentCell = clicked;
+            if (Fields[clicked.FieldIndex] is IGriddoHostedFieldView)
+            {
+                SyncHostedCells();
+            }
+        }
+
+        _isEditing = false;
+        _pendingBodyRightContextMenuCell = clicked;
+        _pendingBodyRightContextMenuDownPos = pointer;
+        _pendingBodyRightContextMenuWasAlreadySelected = wasSelected;
+        CaptureMouse();
+        InvalidateVisual();
+    }
+
+    private void OpenCellContextMenuAt(GriddoCellAddress cell, bool cellWasAlreadySelected, Point positionOnGrid)
+    {
+        var args = new GriddoCellContextMenuEventArgs(cell, positionOnGrid, cellWasAlreadySelected);
         CellContextMenuOpening?.Invoke(this, args);
         if (args.Handled || CellContextMenu is null)
         {
@@ -638,9 +614,98 @@ public sealed partial class Griddo
 
         CellContextMenu.PlacementTarget = this;
         CellContextMenu.Placement = PlacementMode.RelativePoint;
-        CellContextMenu.HorizontalOffset = pos.X;
-        CellContextMenu.VerticalOffset = pos.Y;
+        CellContextMenu.HorizontalOffset = positionOnGrid.X;
+        CellContextMenu.VerticalOffset = positionOnGrid.Y;
         CellContextMenu.IsOpen = true;
+    }
+
+    private void ResetPendingBodyRightContextMenu()
+    {
+        _pendingBodyRightContextMenuCell = new GriddoCellAddress(-1, -1);
+    }
+
+    /// <summary>
+    /// Hosted Plotto: after right-down + move beyond slop, hand off to the chart so rectangle zoom still works;
+    /// grid <see cref="CellContextMenu"/> is skipped for that gesture.
+    /// </summary>
+    private bool TryPromotePendingBodyRightClickToHostedChart(MouseEventArgs e, Point pointer)
+    {
+        if (!_pendingBodyRightContextMenuCell.IsValid
+            || e.RightButton != MouseButtonState.Pressed)
+        {
+            return false;
+        }
+
+        if (Fields[_pendingBodyRightContextMenuCell.FieldIndex] is not IGriddoHostedFieldView hosted)
+        {
+            return false;
+        }
+
+        var dx = pointer.X - _pendingBodyRightContextMenuDownPos.X;
+        var dy = pointer.Y - _pendingBodyRightContextMenuDownPos.Y;
+        if (dx * dx + dy * dy <= BodyRightClickMenuSlopDipSquared)
+        {
+            return false;
+        }
+
+        var cell = _pendingBodyRightContextMenuCell;
+        ResetPendingBodyRightContextMenu();
+        if (IsMouseCaptured)
+        {
+            ReleaseMouseCapture();
+        }
+
+        if (TryGetHostedElement(cell) is not { } host)
+        {
+            InvalidateVisual();
+            return false;
+        }
+
+        UpdateLayout();
+        host.UpdateLayout();
+        var synth = new MouseButtonEventArgs(e.MouseDevice, e.Timestamp, MouseButton.Right);
+        _hostedDirectRelayDepth++;
+        try
+        {
+            hosted.RelayDirectEditMouseDown(host, synth);
+        }
+        finally
+        {
+            _hostedDirectRelayDepth--;
+        }
+
+        InvalidateVisual();
+        e.Handled = true;
+        return true;
+    }
+
+    private bool TryCompletePendingBodyRightContextMenu(MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Right || !_pendingBodyRightContextMenuCell.IsValid)
+        {
+            return false;
+        }
+
+        var cell = _pendingBodyRightContextMenuCell;
+        var downPos = _pendingBodyRightContextMenuDownPos;
+        var wasSel = _pendingBodyRightContextMenuWasAlreadySelected;
+        ResetPendingBodyRightContextMenu();
+
+        if (IsMouseCaptured)
+        {
+            ReleaseMouseCapture();
+        }
+
+        var upPos = e.GetPosition(this);
+        var dx = upPos.X - downPos.X;
+        var dy = upPos.Y - downPos.Y;
+        if (dx * dx + dy * dy <= BodyRightClickMenuSlopDipSquared)
+        {
+            OpenCellContextMenuAt(cell, wasSel, upPos);
+        }
+
+        e.Handled = true;
+        return true;
     }
 
     private void CompleteMouseDown(MouseButtonEventArgs e, bool handled)
@@ -726,9 +791,23 @@ public sealed partial class Griddo
 
     protected override void OnPreviewMouseDown(MouseButtonEventArgs e)
     {
-        if (e.ChangedButton == MouseButton.Left)
+        if (e.ChangedButton == MouseButton.Right)
         {
-            ClearHeaderAuxiliarySelectionState();
+            var pointerPreview = e.GetPosition(this);
+            var clickedPreview = HitTestCell(pointerPreview);
+            if (clickedPreview.IsValid
+                && Fields[clickedPreview.FieldIndex] is IGriddoHostedFieldView hostedPv
+                && TryGetHostedElement(clickedPreview) is { } hostPv
+                && !hostedPv.IsHostInEditMode(hostPv))
+            {
+                ClearHeaderFocus();
+                ClearHeaderAuxiliarySelectionState();
+                ApplyPendingBodyRightContextMenuFromBodyClick(clickedPreview, pointerPreview);
+                e.Handled = true;
+            }
+
+            base.OnPreviewMouseDown(e);
+            return;
         }
 
         if (e.ChangedButton != MouseButton.Left)
@@ -736,6 +815,8 @@ public sealed partial class Griddo
             base.OnPreviewMouseDown(e);
             return;
         }
+
+        ClearHeaderAuxiliarySelectionState();
 
         var pointer = e.GetPosition(this);
         var clicked = HitTestCell(pointer);
@@ -818,6 +899,12 @@ public sealed partial class Griddo
     {
         var pointer = e.GetPosition(this);
         UpdateFieldHeaderTooltip(pointer);
+        if (TryPromotePendingBodyRightClickToHostedChart(e, pointer))
+        {
+            base.OnMouseMove(e);
+            return;
+        }
+
         if (_isDraggingEditSelection && e.LeftButton == MouseButtonState.Pressed)
         {
             var caretIndex = GetCaretIndexFromEditPoint(pointer);
@@ -1310,6 +1397,12 @@ public sealed partial class Griddo
 
     protected override void OnMouseUp(MouseButtonEventArgs e)
     {
+        if (TryCompletePendingBodyRightContextMenu(e))
+        {
+            base.OnMouseUp(e);
+            return;
+        }
+
         if (_isDraggingEditSelection && e.ChangedButton == MouseButton.Left)
         {
             _isDraggingEditSelection = false;
@@ -1608,6 +1701,12 @@ public sealed partial class Griddo
         SetVerticalOffset(_verticalOffset + delta);
         e.Handled = true;
         base.OnMouseWheel(e);
+    }
+
+    protected override void OnLostMouseCapture(MouseEventArgs e)
+    {
+        ResetPendingBodyRightContextMenu();
+        base.OnLostMouseCapture(e);
     }
 }
 

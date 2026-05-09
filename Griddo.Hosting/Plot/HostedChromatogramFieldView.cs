@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Linq;
 using System.Reflection;
 using Griddo.Editing;
 using Griddo.Fields;
@@ -56,6 +58,15 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
     public double AxisFontSize { get; set; } = 10d;
     public double TitleFontSize { get; set; } = 11d;
     public bool ChromatogramShowPeaks { get; set; }
+    public bool OverlayIstdPeaks { get; set; }
+    public bool OverlaySurrogatePeaks { get; set; }
+    public bool OverlayTargetPeaks { get; set; }
+    public Color SelectedPeakOverlayColor { get; set; } = Color.FromRgb(22, 163, 74);
+    public Color AlternativePeakOverlayColor { get; set; } = Color.FromRgb(234, 179, 8);
+    public Color IntegrationLineOverlayColor { get; set; } = Color.FromRgb(255, 0, 0);
+    public Color ManualIntegrationFillColor { get; set; } = Color.FromRgb(30, 144, 255);
+    public double OverlayLineWidth { get; set; } = 1.5d;
+    public int PeakFillAlpha { get; set; } = 48;
     public bool CalibrationShowRegression { get; set; }
     public bool SpectrumNormalizeIntensity { get; set; }
 
@@ -74,6 +85,9 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
     public FrameworkElement CreateHostElement()
     {
         var chart = CreateChart();
+        chart.IntegrationChanged += OnChartIntegrationChanged;
+        chart.PeakSplitRequested += OnChartPeakSplitRequested;
+        chart.PeakSelectionRequested += OnChartPeakSelectionRequested;
         ApplyChartSettings(chart, null);
         return Wrap(chart);
     }
@@ -111,6 +125,7 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
             chart.DeferRendererActivationToParent = false;
             chart.IsHitTestVisible = true;
             chart.Focus();
+            SyncPeakOverlay(chart, host.Tag);
         }
     }
 
@@ -206,6 +221,67 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
             IsHitTestVisible = true
         };
 
+    private void OnChartIntegrationChanged(object? sender, IntegrationRegionEventArgs e)
+    {
+        if (sender is not ChromatogramControl chart)
+        {
+            return;
+        }
+
+        if (chart.Parent is not Border host || host.Tag is null)
+        {
+            return;
+        }
+
+        if (!_signalProvider.TryApplyManualIntegration(host.Tag, e.Region))
+        {
+            return;
+        }
+
+        // Manual integration changes peak boundaries/selection immediately; refresh live overlays in editor.
+        SyncPeakOverlay(chart, host.Tag);
+    }
+
+    private void OnChartPeakSplitRequested(object? sender, PeakSplitEventArgs e)
+    {
+        if (sender is not ChromatogramControl chart)
+        {
+            return;
+        }
+
+        if (chart.Parent is not Border host || host.Tag is null)
+        {
+            return;
+        }
+
+        if (!_signalProvider.TryApplyPeakSplit(host.Tag, e.SplitX))
+        {
+            return;
+        }
+
+        SyncPeakOverlay(chart, host.Tag);
+    }
+
+    private void OnChartPeakSelectionRequested(object? sender, PeakSelectionEventArgs e)
+    {
+        if (sender is not ChromatogramControl chart)
+        {
+            return;
+        }
+
+        if (chart.Parent is not Border host || host.Tag is null)
+        {
+            return;
+        }
+
+        if (!_signalProvider.TrySelectPeakAtX(host.Tag, e.X))
+        {
+            return;
+        }
+
+        SyncPeakOverlay(chart, host.Tag);
+    }
+
     private static ChromatogramControl CreateChart() =>
         new()
         {
@@ -233,22 +309,57 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         chart.TitleFontSize = TitleFontSize;
         chart.ShowXAxis = ShowXAxis;
         chart.ShowYAxis = ShowYAxis;
+        if (chart is ChromatogramControl chromatogram)
+        {
+            chromatogram.SetPeakOverlayColors(
+                new SkiaSharp.SKColor(SelectedPeakOverlayColor.R, SelectedPeakOverlayColor.G, SelectedPeakOverlayColor.B, SelectedPeakOverlayColor.A),
+                new SkiaSharp.SKColor(AlternativePeakOverlayColor.R, AlternativePeakOverlayColor.G, AlternativePeakOverlayColor.B, AlternativePeakOverlayColor.A),
+                new SkiaSharp.SKColor(IntegrationLineOverlayColor.R, IntegrationLineOverlayColor.G, IntegrationLineOverlayColor.B, IntegrationLineOverlayColor.A),
+                new SkiaSharp.SKColor(ManualIntegrationFillColor.R, ManualIntegrationFillColor.G, ManualIntegrationFillColor.B, ManualIntegrationFillColor.A),
+                OverlayLineWidth,
+                PeakFillAlpha);
+        }
     }
 
     private void SyncPeakOverlay(ChromatogramControl chart, object? recordSource)
     {
-        if (chart.RenderMode != ChartRenderMode.Renderer)
+        if (_signalProvider is ITicPeakOverlayOptions ticOptions)
         {
-            return;
+            ticOptions.OverlayIstdPeaks = OverlayIstdPeaks;
+            ticOptions.OverlaySurrogatePeaks = OverlaySurrogatePeaks;
+            ticOptions.OverlayTargetPeaks = OverlayTargetPeaks;
         }
 
-        if (!ChromatogramShowPeaks || recordSource is null)
+        if (recordSource is null)
         {
             chart.IntegrationRegions = Array.Empty<IntegrationRegion>();
+            chart.AlternativeIntegrationRegions = Array.Empty<IntegrationRegion>();
+            chart.ColoredIntegrationRegions = Array.Empty<ColoredIntegrationRegion>();
             return;
         }
 
-        chart.IntegrationRegions = _signalProvider.GetPeakOverlayRegions(recordSource);
+        chart.ColoredIntegrationRegions = _signalProvider.GetPeakOverlayRegionsColored(recordSource);
+        if (!ChromatogramShowPeaks)
+        {
+            chart.IntegrationRegions = Array.Empty<IntegrationRegion>();
+            chart.AlternativeIntegrationRegions = Array.Empty<IntegrationRegion>();
+            return;
+        }
+
+        var overlays = _signalProvider.GetPeakOverlayRegionsWithSelection(recordSource);
+        var selected = overlays
+            .Where(static x => x.IsSelected)
+            .Select(static x => x.Region)
+            .ToList();
+        var selectedKeys = selected
+            .Select(static r => (Begin: Math.Min(r.Start.X, r.End.X), End: Math.Max(r.Start.X, r.End.X)))
+            .ToHashSet();
+        chart.IntegrationRegions = selected;
+        chart.AlternativeIntegrationRegions = overlays
+            .Where(static x => !x.IsSelected)
+            .Select(static x => x.Region)
+            .Where(r => !selectedKeys.Contains((Math.Min(r.Start.X, r.End.X), Math.Max(r.Start.X, r.End.X))))
+            .ToList();
     }
 
     private static object BuildRuntimePointsValue(IReadOnlyList<SignalPoint> points)

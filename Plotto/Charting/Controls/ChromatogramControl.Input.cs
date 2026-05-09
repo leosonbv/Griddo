@@ -12,12 +12,12 @@ public partial class ChromatogramControl
 
     protected override void OnMouseDown(MouseButtonEventArgs e)
     {
-        if (TryHandleRendererActivationMouseDown(e))
+        if (TryHandlePeakSplitAnchorClick(e))
         {
             return;
         }
 
-        if (TryHandlePeakSplitAnchorClick(e))
+        if (TryHandleRendererActivationMouseDown(e))
         {
             return;
         }
@@ -95,10 +95,14 @@ public partial class ChromatogramControl
             return;
         }
 
+        if (RenderMode != ChartRenderMode.Editor)
+        {
+            return;
+        }
+
         _peakSplitStaticX.Clear();
         _peakSplitHoverX = null;
         _isIntegrationDragActive = true;
-        IntegrationRegions = Array.Empty<IntegrationRegion>();
         var p = ClampBaselineAnchor(point);
         _activeRegion = new IntegrationRegion(p, p);
         RequestRender();
@@ -118,16 +122,35 @@ public partial class ChromatogramControl
 
     protected override void OnChartMouseUp(ChartPoint point, MouseButtonEventArgs e)
     {
-        if (IsPeakSplitModifierHeld || !_isIntegrationDragActive || _activeRegion is null || e.ChangedButton != MouseButton.Left)
+        if (e.ChangedButton != MouseButton.Left || IsPeakSplitModifierHeld)
         {
             return;
         }
 
-        // Mouse-up only ends the drag. It must not modify line geometry.
+        if (RenderMode != ChartRenderMode.Editor)
+        {
+            PeakSelectionRequested?.Invoke(this, new PeakSelectionEventArgs(point.X));
+            return;
+        }
+
+        if (!_isIntegrationDragActive || _activeRegion is null)
+        {
+            return;
+        }
+
         var committed = _activeRegion.Value;
-        IntegrationRegions = new List<IntegrationRegion> { committed };
         _activeRegion = null;
         _isIntegrationDragActive = false;
+        var startX = Math.Min(committed.Start.X, committed.End.X);
+        var endX = Math.Max(committed.Start.X, committed.End.X);
+        if (endX - startX <= 1e-9)
+        {
+            PeakSelectionRequested?.Invoke(this, new PeakSelectionEventArgs(point.X));
+            RequestRender();
+            return;
+        }
+
+        // Mouse-up only ends the drag. Provider decides what persistent integration regions become.
         IntegrationChanged?.Invoke(this, new IntegrationRegionEventArgs(committed));
         RequestRender();
     }
@@ -155,22 +178,30 @@ public partial class ChromatogramControl
         }
 
         Focus();
+        // Enter editor immediately on left-down so the same drag gesture can perform manual integration.
         _activationPressPosition = e.GetPosition(this);
-        _awaitingActivationClick = true;
-        CaptureMouse();
-        e.Handled = true;
-        return true;
+        _awaitingActivationClick = false;
+        if (IsMouseCaptured)
+        {
+            ReleaseMouseCapture();
+        }
+
+        RenderMode = ChartRenderMode.Editor;
+        return false;
     }
 
     private bool TryHandlePeakSplitAnchorClick(MouseButtonEventArgs e)
     {
-        if (RenderMode != ChartRenderMode.Editor || e.ChangedButton != MouseButton.Left || !IsPeakSplitModifierHeld)
+        if (e.ChangedButton != MouseButton.Left || !IsPeakSplitModifierHeld)
         {
             return false;
         }
 
         Focus();
-        _peakSplitStaticX.Add(ToChartPoint(e.GetPosition(this)).X);
+        var splitX = ToChartPoint(e.GetPosition(this)).X;
+        _peakSplitStaticX.Clear();
+        _peakSplitStaticX.Add(splitX);
+        PeakSplitRequested?.Invoke(this, new PeakSplitEventArgs(splitX));
         RequestRender();
         e.Handled = true;
         return true;

@@ -65,6 +65,7 @@ public abstract partial class SkiaChartBaseControl : SKElement
     private readonly DeferredDispatcherTimer _deferredContextMenu = new();
 
     private Point _deferredContextMenuPosition;
+    private Point _rightMouseDownPosition;
 
     /// <summary>Slightly above typical OS double-click time so the second click is recognized before the menu opens.</summary>
     private const int DeferredContextMenuDelayMs = 450;

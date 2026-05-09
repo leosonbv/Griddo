@@ -55,6 +55,9 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
     public double AxisFontSize { get; set; } = 10d;
     public double TitleFontSize { get; set; } = 11d;
     public bool ChromatogramShowPeaks { get; set; }
+    public bool OverlayIstdPeaks { get; set; }
+    public bool OverlaySurrogatePeaks { get; set; }
+    public bool OverlayTargetPeaks { get; set; }
     public bool CalibrationShowRegression { get; set; }
     public bool SpectrumNormalizeIntensity { get; set; }
 
