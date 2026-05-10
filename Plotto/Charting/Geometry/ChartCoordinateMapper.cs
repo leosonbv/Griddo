@@ -13,12 +13,16 @@ public sealed class ChartCoordinateMapper
     private int _surfacePixelWidth = 1;
     private int _surfacePixelHeight = 1;
     private SKRect _plotRect;
+    private SKRect _seriesPlotRect;
     private double _hitTestSyncedActualWidth = double.NaN;
     private double _hitTestSyncedActualHeight = double.NaN;
 
     public ChartCoordinateMapper(ChartViewport viewport) => _viewport = viewport;
 
     public SKRect PlotRect => _plotRect;
+
+    /// <summary>Plot rectangle used for series coordinates and hit-testing (excludes chart title band when present).</summary>
+    public SKRect SeriesPlotRect => _seriesPlotRect;
 
     public int SurfacePixelWidth => _surfacePixelWidth;
 
@@ -89,6 +93,21 @@ public sealed class ChartCoordinateMapper
         _surfacePixelWidth = surfaceWidth;
         _surfacePixelHeight = surfaceHeight;
         _plotRect = ChartPlotLayout.ComputePlotRect(surfaceWidth, surfaceHeight, plotUiScale, useSparklineLayout, showXAxis, showYAxis, axisFontSize, hasYAxisTitle, hasXAxisTitle);
+        _seriesPlotRect = _plotRect;
+    }
+
+    /// <summary>
+    /// Shrinks the coordinate-mapping plot from the top by <paramref name="topInsetPixels"/> (chart title band). Must run after <see cref="ApplySurfaceDimensions"/>.
+    /// </summary>
+    public void ApplyChartTitleTopInset(float topInsetPixels)
+    {
+        if (topInsetPixels <= 0.5f || topInsetPixels >= _plotRect.Height - 1f)
+        {
+            _seriesPlotRect = _plotRect;
+            return;
+        }
+
+        _seriesPlotRect = new SKRect(_plotRect.Left, _plotRect.Top + topInsetPixels, _plotRect.Right, _plotRect.Bottom);
     }
 
     public Point LogicalPointToSurface(Point logical, double actualWidthDip, double actualHeightDip)
@@ -105,8 +124,9 @@ public sealed class ChartCoordinateMapper
 
     public ChartPoint SurfacePixelToChartPoint(Point surfacePixel)
     {
-        var x = _viewport.XMin + ((surfacePixel.X - _plotRect.Left) / Math.Max(1, _plotRect.Width)) * (_viewport.XMax - _viewport.XMin);
-        var y = _viewport.YMin + ((_plotRect.Bottom - surfacePixel.Y) / Math.Max(1, _plotRect.Height)) * (_viewport.YMax - _viewport.YMin);
+        var r = _seriesPlotRect;
+        var x = _viewport.XMin + ((surfacePixel.X - r.Left) / Math.Max(1, r.Width)) * (_viewport.XMax - _viewport.XMin);
+        var y = _viewport.YMin + ((r.Bottom - surfacePixel.Y) / Math.Max(1, r.Height)) * (_viewport.YMax - _viewport.YMin);
         return new ChartPoint(x, y);
     }
 }

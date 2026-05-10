@@ -40,6 +40,36 @@ public class CalibrationCurveControl : SkiaChartBaseControl
         Color = new SKColor(140, 30, 30)
     };
 
+    private readonly SKPaint _pointQcPaint = new()
+    {
+        IsAntialias = true,
+        Style = SKPaintStyle.Fill,
+        Color = new SKColor(55, 145, 240)
+    };
+
+    private readonly SKPaint _pointQcStrokePaint = new()
+    {
+        IsAntialias = true,
+        Style = SKPaintStyle.Stroke,
+        StrokeWidth = 1f,
+        Color = new SKColor(28, 88, 170)
+    };
+
+    private readonly SKPaint _pointCurrentPaint = new()
+    {
+        IsAntialias = true,
+        Style = SKPaintStyle.Fill,
+        Color = new SKColor(55, 190, 95)
+    };
+
+    private readonly SKPaint _pointCurrentStrokePaint = new()
+    {
+        IsAntialias = true,
+        Style = SKPaintStyle.Stroke,
+        StrokeWidth = 1f,
+        Color = new SKColor(28, 120, 55)
+    };
+
     private readonly SKPaint _originGuidePaint = new()
     {
         IsAntialias = true,
@@ -239,10 +269,25 @@ public class CalibrationCurveControl : SkiaChartBaseControl
 
     private void ToggleCalibrationPoint(CalibrationPoint nearest)
     {
+        if (!nearest.AllowEnabledToggle)
+        {
+            return;
+        }
+
         nearest.IsEnabled = !nearest.IsEnabled;
         CalibrationPointToggled?.Invoke(this, new CalibrationPointEventArgs(nearest));
         RequestRender();
     }
+
+    private (SKPaint Fill, SKPaint Stroke) ResolveCalibrationMarkerPaints(CalibrationPoint point) =>
+        point.PointKind switch
+        {
+            CalibrationPlotPointKind.QualityControl => ( _pointQcPaint, _pointQcStrokePaint ),
+            CalibrationPlotPointKind.CurrentSample => ( _pointCurrentPaint, _pointCurrentStrokePaint ),
+            _ => (
+                point.IsEnabled ? _pointEnabledPaint : _pointDisabledPaint,
+                _pointStrokePaint),
+        };
 
     /// <summary>Draws <see cref="CurveOverlayPoints"/> when provided; otherwise a polyline through enabled calibration points.</summary>
     protected override void DrawSeries(SKCanvas canvas, IReadOnlyList<ChartPoint> points, SKRect plotRect)
@@ -251,7 +296,7 @@ public class CalibrationCurveControl : SkiaChartBaseControl
         IReadOnlyList<ChartPoint> line = CurveOverlayPoints is { Count: >= 2 } overlay
             ? overlay
             : CalibrationPoints
-                .Where(static p => p.IsEnabled)
+                .Where(static p => p.IsEnabled && p.PointKind == CalibrationPlotPointKind.CalibrationStandard)
                 .OrderBy(static p => p.X)
                 .Select(static p => new ChartPoint(p.X, p.Y))
                 .ToArray();
@@ -546,8 +591,9 @@ public class CalibrationCurveControl : SkiaChartBaseControl
         {
             var px = ToPixelX(point.X, plotRect);
             var py = ToPixelY(point.Y, plotRect);
-            canvas.DrawCircle(px, py, pr, point.IsEnabled ? _pointEnabledPaint : _pointDisabledPaint);
-            canvas.DrawCircle(px, py, pr, _pointStrokePaint);
+            var (fill, stroke) = ResolveCalibrationMarkerPaints(point);
+            canvas.DrawCircle(px, py, pr, fill);
+            canvas.DrawCircle(px, py, pr, stroke);
         }
 
         if (ShowCalibrationPointLabels)
@@ -712,7 +758,7 @@ public class CalibrationCurveControl : SkiaChartBaseControl
         var line = CurveOverlayPoints is { Count: >= 2 } overlay
             ? overlay
             : CalibrationPoints
-                .Where(static p => p.IsEnabled)
+                .Where(static p => p.IsEnabled && p.PointKind == CalibrationPlotPointKind.CalibrationStandard)
                 .OrderBy(static p => p.X)
                 .Select(static p => new ChartPoint(p.X, p.Y))
                 .ToArray();

@@ -541,6 +541,9 @@ public abstract partial class SkiaChartBaseControl : SKElement
 
     protected SKRect PlotRect => _coordinates.PlotRect;
 
+    /// <summary>Plot area used for series drawing and pointer mapping (excludes chart title band).</summary>
+    protected SKRect SeriesPlotRect => _coordinates.SeriesPlotRect;
+
     /// <summary>
     /// Call after the host has finished sizing the chart (e.g. grid cell layout). Clears the hit-test sync so the next
     /// <see cref="ToChartPoint"/> recomputes plot geometry from current <see cref="ActualWidth"/> / <see cref="ActualHeight"/>.
@@ -573,6 +576,7 @@ public abstract partial class SkiaChartBaseControl : SKElement
             AxisFontSize,
             ShowYAxis && !string.IsNullOrWhiteSpace(AxisLabelY),
             ShowXAxis && !string.IsNullOrWhiteSpace(AxisLabelX));
+        _coordinates.ApplyChartTitleTopInset(MeasureChartTitleTopInsetPixels(_coordinates.PlotRect));
     }
 
     private double SurfaceScaleX() => ActualWidth > 0 ? _coordinates.SurfacePixelWidth / ActualWidth : 1d;

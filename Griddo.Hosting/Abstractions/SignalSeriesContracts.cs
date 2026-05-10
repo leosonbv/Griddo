@@ -7,7 +7,15 @@ namespace Griddo.Hosting.Abstractions;
 public readonly record struct SignalPoint(double X, double Y);
 
 /// <param name="DefaultLabel">Plain dose / level name shown when no custom point-label segments are configured.</param>
-public readonly record struct CalibrationSignalPoint(double X, double Y, bool Enabled = true, string? DefaultLabel = null);
+/// <param name="PointKind">Marker category for plot styling.</param>
+/// <param name="AllowEnabledToggle">False for overlay points that must not toggle bracket inclusion.</param>
+public readonly record struct CalibrationSignalPoint(
+    double X,
+    double Y,
+    bool Enabled = true,
+    string? DefaultLabel = null,
+    CalibrationPlotPointKind PointKind = CalibrationPlotPointKind.CalibrationStandard,
+    bool AllowEnabledToggle = true);
 public readonly record struct ChromatogramPeakOverlayRegion(
     IntegrationRegion Region,
     bool IsSelected,

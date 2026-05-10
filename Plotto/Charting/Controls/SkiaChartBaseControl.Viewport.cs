@@ -1,6 +1,5 @@
 using System.Windows;
 using Plotto.Charting.Core;
-using Plotto.Charting.Viewport;
 
 namespace Plotto.Charting.Controls;
 
@@ -26,17 +25,10 @@ public abstract partial class SkiaChartBaseControl
     /// <summary>After wheel zoom, pan, or drag-zoom; default uses point-based X/Y clamps.</summary>
     protected virtual void ApplyViewportInteractionClamp()
     {
-        ClampViewportWheelLimits(yFloorUsesLowestYInVisibleX: false);
-    }
-
-    /// <summary>Applies <see cref="SeriesViewportInteractionClamp.ClampViewportToWheelZoomLimits"/>.</summary>
-    protected void ClampViewportWheelLimits(bool yFloorUsesLowestYInVisibleX)
-    {
         _viewportWheelClamp.ClampViewportToWheelZoomLimits(
             Viewport,
             Points,
-            clampYToDataFloor: !IsViewportClampAfterRectZoom,
-            yFloorUsesLowestYInVisibleX);
+            clampYToDataFloor: !IsViewportClampAfterRectZoom);
     }
 
     protected void ZoomXAt(Point pivot, double scale)
@@ -72,15 +64,16 @@ public abstract partial class SkiaChartBaseControl
 
     private void ApplyRightDragZoom(Point a, Point b)
     {
-        if (PlotRect.Width <= 1 || PlotRect.Height <= 1)
+        var seriesRect = SeriesPlotRect;
+        if (seriesRect.Width <= 1 || seriesRect.Height <= 1)
         {
             return;
         }
 
-        var x0 = Math.Clamp(Math.Min(a.X, b.X), PlotRect.Left, PlotRect.Right);
-        var x1 = Math.Clamp(Math.Max(a.X, b.X), PlotRect.Left, PlotRect.Right);
-        var y0 = Math.Clamp(Math.Min(a.Y, b.Y), PlotRect.Top, PlotRect.Bottom);
-        var y1 = Math.Clamp(Math.Max(a.Y, b.Y), PlotRect.Top, PlotRect.Bottom);
+        var x0 = Math.Clamp(Math.Min(a.X, b.X), seriesRect.Left, seriesRect.Right);
+        var x1 = Math.Clamp(Math.Max(a.X, b.X), seriesRect.Left, seriesRect.Right);
+        var y0 = Math.Clamp(Math.Min(a.Y, b.Y), seriesRect.Top, seriesRect.Bottom);
+        var y1 = Math.Clamp(Math.Max(a.Y, b.Y), seriesRect.Top, seriesRect.Bottom);
         if (x1 - x0 < 4 || y1 - y0 < 4)
         {
             return;
@@ -108,8 +101,9 @@ public abstract partial class SkiaChartBaseControl
 
     private void PanByPixels(double dx, double dy)
     {
-        var xPerPixel = (Viewport.XMax - Viewport.XMin) / Math.Max(1d, PlotRect.Width);
-        var yPerPixel = (Viewport.YMax - Viewport.YMin) / Math.Max(1d, PlotRect.Height);
+        var sr = SeriesPlotRect;
+        var xPerPixel = (Viewport.XMax - Viewport.XMin) / Math.Max(1d, sr.Width);
+        var yPerPixel = (Viewport.YMax - Viewport.YMin) / Math.Max(1d, sr.Height);
         var xDelta = dx * xPerPixel;
         var yDelta = dy * yPerPixel;
 

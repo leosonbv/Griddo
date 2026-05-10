@@ -92,7 +92,6 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
     public FrameworkElement CreateHostElement()
     {
         var chart = CreateChart();
-        chart.WheelZoomClampYMinToTraceVisibleInX = string.Equals(SourceMemberName, "TotalIon", StringComparison.OrdinalIgnoreCase);
         chart.IntegrationChanged += OnChartIntegrationChanged;
         chart.PeakSplitRequested += OnChartPeakSplitRequested;
         chart.PeakSelectionRequested += OnChartPeakSelectionRequested;

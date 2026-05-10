@@ -157,6 +157,7 @@ public sealed class GriddoBoolFieldView : IGriddoFieldView, IGriddoFieldSourceMe
 {
     private readonly Func<object, object?> _valueGetter;
     private readonly Func<object, object?, bool> _valueSetter;
+    private readonly Func<object, bool>? _isCheckboxCell;
 
     public GriddoBoolFieldView(
         string header,
@@ -165,7 +166,8 @@ public sealed class GriddoBoolFieldView : IGriddoFieldView, IGriddoFieldSourceMe
         Func<object, object?, bool> valueSetter,
         bool fill = false,
         string? sourceMemberName = null,
-        string? sourceObjectName = null)
+        string? sourceObjectName = null,
+        Func<object, bool>? isCheckboxCell = null)
     {
         Header = header;
         Width = width;
@@ -174,6 +176,7 @@ public sealed class GriddoBoolFieldView : IGriddoFieldView, IGriddoFieldSourceMe
         SourceObjectName = sourceObjectName ?? string.Empty;
         _valueGetter = valueGetter;
         _valueSetter = valueSetter;
+        _isCheckboxCell = isCheckboxCell;
         Editor = GriddoCellEditors.Bool;
         ContentAlignment = TextAlignment.Center;
     }
@@ -223,5 +226,5 @@ public sealed class GriddoBoolFieldView : IGriddoFieldView, IGriddoFieldSourceMe
         };
     }
 
-    public bool IsCheckboxCell(object recordSource) => true;
+    public bool IsCheckboxCell(object recordSource) => _isCheckboxCell?.Invoke(recordSource) ?? true;
 }

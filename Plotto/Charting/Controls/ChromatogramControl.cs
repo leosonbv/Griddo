@@ -10,23 +10,6 @@ namespace Plotto.Charting.Controls;
 
 public partial class ChromatogramControl : SkiaChartBaseControl
 {
-    /// <summary>
-    /// When true (e.g. sample TIC), wheel zoom / pan keeps <see cref="ChartViewport.YMin"/> from going below the lowest
-    /// trace Y in the visible X window minus 5% of the visible Y span.
-    /// </summary>
-    public bool WheelZoomClampYMinToTraceVisibleInX
-    {
-        get => (bool)GetValue(WheelZoomClampYMinToTraceVisibleInXProperty);
-        set => SetValue(WheelZoomClampYMinToTraceVisibleInXProperty, value);
-    }
-
-    public static readonly DependencyProperty WheelZoomClampYMinToTraceVisibleInXProperty =
-        DependencyProperty.Register(
-            nameof(WheelZoomClampYMinToTraceVisibleInX),
-            typeof(bool),
-            typeof(ChromatogramControl),
-            new FrameworkPropertyMetadata(false));
-
     /// <summary>Multiplies committed manual-peak fill RGB (same alpha as normal peak fill); lower is darker.</summary>
     private const float ManualIntegratedPeakFillRgbFactor = 0.68f;
 
@@ -156,11 +139,6 @@ public partial class ChromatogramControl : SkiaChartBaseControl
         _selectedPeakLinePaint.StrokeWidth = stroke;
         _alternativePeakLinePaint.StrokeWidth = stroke;
         _rendererIntegrationLinePaint.StrokeWidth = stroke;
-    }
-
-    protected override void ApplyViewportInteractionClamp()
-    {
-        ClampViewportWheelLimits(WheelZoomClampYMinToTraceVisibleInX);
     }
 
     /// <summary>

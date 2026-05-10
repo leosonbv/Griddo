@@ -62,6 +62,7 @@ public abstract partial class SkiaChartBaseControl
             AxisFontSize,
             ShowYAxis && !string.IsNullOrWhiteSpace(AxisLabelY),
             ShowXAxis && !string.IsNullOrWhiteSpace(AxisLabelX));
+        _coordinates.ApplyChartTitleTopInset(MeasureChartTitleTopInsetPixels(_coordinates.PlotRect));
 
         if (PlotRect.Width <= 2 || PlotRect.Height <= 2)
         {
@@ -112,12 +113,18 @@ public abstract partial class SkiaChartBaseControl
         }
     }
 
-    private SKRect DrawChartTitle(SKCanvas canvas, SKRect plotRect)
+    /// <summary>Height in surface pixels of the chart title band at the top of <paramref name="layoutPlotRect"/>; 0 when no title is shown.</summary>
+    private float MeasureChartTitleTopInsetPixels(SKRect layoutPlotRect)
     {
+        if (UseSparklineLayout || !ShowChartTitle)
+        {
+            return 0f;
+        }
+
         var lines = BuildTitleLines(ChartTitle);
         if (lines.Count == 0)
         {
-            return plotRect;
+            return 0f;
         }
 
         var defaultFontSize = (float)Math.Max(6d, TitleFontSize) * PlotUiScale;
@@ -128,10 +135,29 @@ public abstract partial class SkiaChartBaseControl
             .Select(row => BuildRowMetrics(row, defaultFontSize))
             .ToList();
         var titleBand = topPadding + rowMetrics.Sum(m => m.BeforeGap + m.LineHeight) + bottomPadding;
-        if (plotRect.Height <= titleBand + 24f)
+        if (layoutPlotRect.Height <= titleBand + 24f)
+        {
+            return 0f;
+        }
+
+        return titleBand;
+    }
+
+    private SKRect DrawChartTitle(SKCanvas canvas, SKRect plotRect)
+    {
+        var titleBand = MeasureChartTitleTopInsetPixels(plotRect);
+        if (titleBand <= 0f)
         {
             return plotRect;
         }
+
+        var lines = BuildTitleLines(ChartTitle);
+        var defaultFontSize = (float)Math.Max(6d, TitleFontSize) * PlotUiScale;
+        var topPadding = 3f * PlotUiScale;
+        var visualRows = BuildVisualRows(lines);
+        var rowMetrics = visualRows
+            .Select(row => BuildRowMetrics(row, defaultFontSize))
+            .ToList();
 
         using var textPaint = new SKPaint
         {

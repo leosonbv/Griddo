@@ -55,14 +55,12 @@ public sealed class SeriesViewportInteractionClamp
 
     /// <summary>
     /// X: viewport inside plot xmin/xmax ± 5% of horizontal data span.
-    /// Y: optional floor so <see cref="ChartViewport.YMin"/> is not below the lowest relevant Y minus 5% of the visible Y span
-    /// (<paramref name="yFloorUsesLowestYInVisibleX"/> uses min Y among points with X inside the viewport; otherwise series global ymin).
+    /// Y: optional rule — lowest trace Y (min in visible X, else global min) stays at least 5% of the visible Y span above <see cref="ChartViewport.YMin"/>.
     /// </summary>
     public void ClampViewportToWheelZoomLimits(
         ChartViewport viewport,
         IReadOnlyList<ChartPoint> points,
-        bool clampYToDataFloor = true,
-        bool yFloorUsesLowestYInVisibleX = false)
+        bool clampYToDataFloor = true)
     {
         if (points.Count == 0)
         {
@@ -71,7 +69,7 @@ public sealed class SeriesViewportInteractionClamp
 
         SyncZoomClampBoundsFromPoints(points);
 
-        ChartSeriesBounds.GetExtents(points, out _, out _, out var yminPlot, out _);
+        ChartSeriesBounds.GetExtents(points, out _, out _, out var yminGlobal, out _);
 
         var limW = _zoomClampXMax - _zoomClampXMin;
         var w = viewport.XMax - viewport.XMin;
@@ -91,7 +89,7 @@ public sealed class SeriesViewportInteractionClamp
 
         if (clampYToDataFloor)
         {
-            ClampViewportYUsingVisibleChartHeight(viewport, points, yminPlot, yFloorUsesLowestYInVisibleX);
+            ClampViewportYLowestTraceAboveBottom(viewport, points, yminGlobal);
         }
 
         viewport.EnsureMinimumSize();
@@ -111,11 +109,13 @@ public sealed class SeriesViewportInteractionClamp
         _zoomClampXMax = xmax + padX;
     }
 
-    private static void ClampViewportYUsingVisibleChartHeight(
+    /// <summary>
+    /// Ensures the lowest relevant trace Y is not inside the bottom 5% band of the viewport (≥ 5% of span above <see cref="ChartViewport.YMin"/>).
+    /// </summary>
+    private static void ClampViewportYLowestTraceAboveBottom(
         ChartViewport viewport,
         IReadOnlyList<ChartPoint> points,
-        double yminFallbackGlobal,
-        bool useLowestYInVisibleX)
+        double yminGlobal)
     {
         const double eps = 1e-12;
         var h = viewport.YMax - viewport.YMin;
@@ -124,15 +124,14 @@ public sealed class SeriesViewportInteractionClamp
             return;
         }
 
-        var baselineMinY = useLowestYInVisibleX
-            && TryGetMinYInXInterval(points, viewport.XMin, viewport.XMax, out var minInWindow)
+        var baselineMinY = TryGetMinYInXInterval(points, viewport.XMin, viewport.XMax, out var minInWindow)
             ? minInWindow
-            : yminFallbackGlobal;
+            : yminGlobal;
 
-        var floorY = baselineMinY - 0.05 * h;
-        if (viewport.YMin < floorY - eps)
+        var maxYMin = baselineMinY - 0.05 * h;
+        if (viewport.YMin > maxYMin + eps)
         {
-            viewport.YMin = floorY;
+            viewport.YMin = maxYMin;
             viewport.YMax = viewport.YMin + h;
         }
     }

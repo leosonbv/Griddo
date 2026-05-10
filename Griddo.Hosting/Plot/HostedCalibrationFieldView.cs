@@ -119,8 +119,15 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
 
         ApplyChartSettings(chart, recordSource);
 
-        // Rebind only when the logical row changes — otherwise fit/viewport restore runs every grid refresh
-        // (same pattern as HostedChromatogramFieldView).
+        // Rebind points + curve whenever this cell is updated: the row object may be unchanged while bracket
+        // data mutates (e.g. Enabled toggled from another grid column). Title uses ApplyChartSettings above
+        // and already reflected that; skipping rebind here left the regression line stale.
+        // Viewport save/restore stays tied to logical row changes only (HostedChromatogramFieldView pattern).
+        if (recordSource is null)
+        {
+            return;
+        }
+
         if (recordChanged)
         {
             var willHavePoints = _signalProvider.GetPoints(recordSource).Count > 0;
@@ -142,6 +149,20 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
             }
 
             HostedPlotViewportMemory.ScheduleDeferredTryRestore(host, recordSource, plotKey, chart, ViewportZoomRecordKey);
+        }
+        else
+        {
+            chart.BeginSuppressCalibrationViewportFit();
+            try
+            {
+                chart.SuppressAutomaticViewportFitOnNextPointsChange = chart.Points.Count > 0;
+                BindCalibrationSeries(chart, recordSource);
+                ApplyCurveOverlay(chart, recordSource);
+            }
+            finally
+            {
+                chart.EndSuppressCalibrationViewportFit();
+            }
         }
     }
 
@@ -324,7 +345,9 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
                 X = p.X,
                 Y = p.Y,
                 IsEnabled = p.Enabled,
-                LabelPlainText = plain
+                LabelPlainText = plain,
+                PointKind = p.PointKind,
+                AllowEnabledToggle = p.AllowEnabledToggle
             });
         }
 
