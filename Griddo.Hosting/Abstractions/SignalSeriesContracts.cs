@@ -52,4 +52,16 @@ public interface ICalibrationSignalProvider
 {
     IReadOnlyList<CalibrationSignalPoint> GetPoints(object recordSource);
     CalibrationFitMode GetFitMode(object recordSource);
+
+    /// <summary>
+    /// Optional fitted curve in the same X/Y space as <see cref="GetPoints"/> (e.g. Quanto bracket curve).
+    /// When null or too few samples, the chart may draw a simple point polyline only.
+    /// </summary>
+    IReadOnlyList<SignalPoint>? GetCurveLineSamples(object recordSource, int segmentCount) => null;
+
+    /// <summary>
+    /// Called when the user toggles a calibration point in editor mode (same concentration/response coordinates as <see cref="GetPoints"/>).
+    /// Implementations should persist the change, refit the curve, and return true when handled.
+    /// </summary>
+    bool TryToggleCalibrationPoint(object recordSource, double x, double y, bool enabled) => false;
 }

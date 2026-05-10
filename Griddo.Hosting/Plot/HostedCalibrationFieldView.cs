@@ -78,6 +78,7 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
     public FrameworkElement CreateHostElement()
     {
         var chart = CreateChart();
+        chart.CalibrationPointToggled += OnCalibrationPointToggled;
         ApplyChartSettings(chart, null);
         var border = new Border { Background = null, Child = chart, SnapsToDevicePixels = true, IsHitTestVisible = true };
         var plotKey = HostedPlotViewportMemory.PlotKey(SourceMemberName, Header);
@@ -106,11 +107,10 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
         {
             HostedPlotViewportMemory.SaveLeavingRow(previousRow, plotKey, chart.Viewport, ViewportZoomRecordKey);
             host.Tag = recordSource;
-            chart.CalibrationPoints = _signalProvider.GetPoints(recordSource)
-                .Select(static p => new CalibrationPoint { X = p.X, Y = p.Y, IsEnabled = p.Enabled })
-                .ToList();
-            chart.FitMode = _signalProvider.GetFitMode(recordSource);
+            BindCalibrationSeries(chart, recordSource);
         }
+
+        ApplyCurveOverlay(chart, recordSource);
 
         ApplyChartSettings(chart, recordSource);
 
@@ -188,6 +188,41 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
             FitMode = CalibrationFitMode.Linear,
             CalibrationPoints = []
         };
+
+    private void OnCalibrationPointToggled(object? sender, CalibrationPointEventArgs e)
+    {
+        if (sender is not CalibrationCurveControl chart || chart.Parent is not Border host || host.Tag is null)
+        {
+            return;
+        }
+
+        var recordSource = host.Tag;
+        if (!_signalProvider.TryToggleCalibrationPoint(recordSource, e.Point.X, e.Point.Y, e.Point.IsEnabled))
+        {
+            e.Point.IsEnabled = !e.Point.IsEnabled;
+            chart.InvalidateVisual();
+            return;
+        }
+
+        BindCalibrationSeries(chart, recordSource);
+        ApplyCurveOverlay(chart, recordSource);
+    }
+
+    private void BindCalibrationSeries(CalibrationCurveControl chart, object recordSource)
+    {
+        chart.CalibrationPoints = _signalProvider.GetPoints(recordSource)
+            .Select(static p => new CalibrationPoint { X = p.X, Y = p.Y, IsEnabled = p.Enabled })
+            .ToList();
+        chart.FitMode = _signalProvider.GetFitMode(recordSource);
+    }
+
+    private void ApplyCurveOverlay(CalibrationCurveControl chart, object recordSource)
+    {
+        var samples = _signalProvider.GetCurveLineSamples(recordSource, 160);
+        chart.CurveOverlayPoints = samples is not { Count: >= 2 }
+            ? null
+            : samples.Select(static p => new ChartPoint(p.X, p.Y)).ToArray();
+    }
 
     private void ApplyChartSettings(SkiaChartBaseControl chart, object? recordSource)
     {
