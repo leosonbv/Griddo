@@ -53,13 +53,15 @@ public sealed class HostedSpectrumFieldView : IGriddoHostedFieldView, IGriddoFie
     public int YAxisLabelPrecision { get; set; } = 2;
     public string XAxisLabelFormat { get; set; } = string.Empty;
     public string YAxisLabelFormat { get; set; } = string.Empty;
-    public double AxisFontSize { get; set; } = 10d;
-    public double TitleFontSize { get; set; } = 11d;
+    public double AxisFontSize { get; set; } = 15d;
+    public double TitleFontSize { get; set; } = 16.5d;
     public bool ChromatogramShowPeaks { get; set; }
     public bool OverlayIstdPeaks { get; set; }
     public bool OverlaySurrogatePeaks { get; set; }
     public bool OverlayTargetPeaks { get; set; }
     public bool CalibrationShowRegression { get; set; }
+    public bool ShowCalibrationPointLabels { get; set; }
+    public List<PlotTitleSegmentConfiguration> CalibrationPointLabelSegments { get; set; } = [];
     public bool SpectrumNormalizeIntensity { get; set; }
 
     public Func<object?, string?>? ViewportZoomRecordKey { get; set; }

@@ -55,8 +55,8 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
     public int YAxisLabelPrecision { get; set; } = 2;
     public string XAxisLabelFormat { get; set; } = string.Empty;
     public string YAxisLabelFormat { get; set; } = string.Empty;
-    public double AxisFontSize { get; set; } = 10d;
-    public double TitleFontSize { get; set; } = 11d;
+    public double AxisFontSize { get; set; } = 15d;
+    public double TitleFontSize { get; set; } = 16.5d;
     public bool ChromatogramShowPeaks { get; set; }
     public bool OverlayIstdPeaks { get; set; }
     public bool OverlaySurrogatePeaks { get; set; }
@@ -68,6 +68,8 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
     public double OverlayLineWidth { get; set; } = 1.5d;
     public int PeakFillAlpha { get; set; } = 48;
     public bool CalibrationShowRegression { get; set; }
+    public bool ShowCalibrationPointLabels { get; set; }
+    public List<PlotTitleSegmentConfiguration> CalibrationPointLabelSegments { get; set; } = [];
     public bool SpectrumNormalizeIntensity { get; set; }
 
     /// <summary>
@@ -90,6 +92,7 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
     public FrameworkElement CreateHostElement()
     {
         var chart = CreateChart();
+        chart.WheelZoomClampYMinToTraceVisibleInX = string.Equals(SourceMemberName, "TotalIon", StringComparison.OrdinalIgnoreCase);
         chart.IntegrationChanged += OnChartIntegrationChanged;
         chart.PeakSplitRequested += OnChartPeakSplitRequested;
         chart.PeakSelectionRequested += OnChartPeakSelectionRequested;
@@ -206,13 +209,6 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
     {
         if (host is not Border { Child: ChromatogramControl chart })
         {
-            return;
-        }
-
-        if (eFromGrid is { ChangedButton: MouseButton.Left, ClickCount: 2 })
-        {
-            chart.Focus();
-            chart.ZoomOutCompletely();
             return;
         }
 

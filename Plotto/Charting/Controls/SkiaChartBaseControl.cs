@@ -471,7 +471,7 @@ public abstract partial class SkiaChartBaseControl : SKElement
             nameof(AxisFontSize),
             typeof(double),
             typeof(SkiaChartBaseControl),
-            new FrameworkPropertyMetadata(10d, FrameworkPropertyMetadataOptions.AffectsRender, OnUiScaleChanged));
+            new FrameworkPropertyMetadata(15d, FrameworkPropertyMetadataOptions.AffectsRender, OnUiScaleChanged));
 
     public double TitleFontSize
     {
@@ -484,7 +484,7 @@ public abstract partial class SkiaChartBaseControl : SKElement
             nameof(TitleFontSize),
             typeof(double),
             typeof(SkiaChartBaseControl),
-            new FrameworkPropertyMetadata(11d, FrameworkPropertyMetadataOptions.AffectsRender));
+            new FrameworkPropertyMetadata(16.5d, FrameworkPropertyMetadataOptions.AffectsRender));
 
     public bool ShowXAxis
     {

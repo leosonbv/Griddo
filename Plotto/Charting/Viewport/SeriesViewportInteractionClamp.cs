@@ -55,12 +55,14 @@ public sealed class SeriesViewportInteractionClamp
 
     /// <summary>
     /// X: viewport inside plot xmin/xmax ± 5% of horizontal data span.
-    /// Y: ymin/ymax are plot-point extrema; chart height = visible span (Viewport.YMax − Viewport.YMin).
+    /// Y: optional floor so <see cref="ChartViewport.YMin"/> is not below the lowest relevant Y minus 5% of the visible Y span
+    /// (<paramref name="yFloorUsesLowestYInVisibleX"/> uses min Y among points with X inside the viewport; otherwise series global ymin).
     /// </summary>
     public void ClampViewportToWheelZoomLimits(
         ChartViewport viewport,
         IReadOnlyList<ChartPoint> points,
-        bool clampYToDataFloor = true)
+        bool clampYToDataFloor = true,
+        bool yFloorUsesLowestYInVisibleX = false)
     {
         if (points.Count == 0)
         {
@@ -89,14 +91,10 @@ public sealed class SeriesViewportInteractionClamp
 
         if (clampYToDataFloor)
         {
-            ClampViewportYUsingVisibleChartHeight(viewport, yminPlot);
+            ClampViewportYUsingVisibleChartHeight(viewport, points, yminPlot, yFloorUsesLowestYInVisibleX);
         }
 
         viewport.EnsureMinimumSize();
-        if (clampYToDataFloor)
-        {
-            ClampViewportYUsingVisibleChartHeight(viewport, yminPlot);
-        }
     }
 
     private void SyncZoomClampBoundsFromPoints(IReadOnlyList<ChartPoint> points)
@@ -113,7 +111,11 @@ public sealed class SeriesViewportInteractionClamp
         _zoomClampXMax = xmax + padX;
     }
 
-    private static void ClampViewportYUsingVisibleChartHeight(ChartViewport viewport, double yminPlot)
+    private static void ClampViewportYUsingVisibleChartHeight(
+        ChartViewport viewport,
+        IReadOnlyList<ChartPoint> points,
+        double yminFallbackGlobal,
+        bool useLowestYInVisibleX)
     {
         const double eps = 1e-12;
         var h = viewport.YMax - viewport.YMin;
@@ -122,11 +124,40 @@ public sealed class SeriesViewportInteractionClamp
             return;
         }
 
-        var clampedYMin = yminPlot - (0.05 * h);
-        if (Math.Abs(clampedYMin - viewport.YMin) > eps)
+        var baselineMinY = useLowestYInVisibleX
+            && TryGetMinYInXInterval(points, viewport.XMin, viewport.XMax, out var minInWindow)
+            ? minInWindow
+            : yminFallbackGlobal;
+
+        var floorY = baselineMinY - 0.05 * h;
+        if (viewport.YMin < floorY - eps)
         {
-            viewport.YMin = clampedYMin;
+            viewport.YMin = floorY;
             viewport.YMax = viewport.YMin + h;
         }
+    }
+
+    private static bool TryGetMinYInXInterval(
+        IReadOnlyList<ChartPoint> points,
+        double xMin,
+        double xMax,
+        out double minY)
+    {
+        minY = double.NaN;
+        var found = false;
+        for (var i = 0; i < points.Count; i++)
+        {
+            var p = points[i];
+            if (p.X >= xMin && p.X <= xMax)
+            {
+                if (!found || p.Y < minY)
+                {
+                    minY = p.Y;
+                    found = true;
+                }
+            }
+        }
+
+        return found;
     }
 }

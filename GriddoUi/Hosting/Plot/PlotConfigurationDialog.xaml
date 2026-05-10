@@ -76,6 +76,14 @@
                     ShowRecordHeaderSelectionColoring="False"
                     UniformRecordHeight="26" />
             </TabItem>
+            <TabItem x:Name="PointLabelsTab" Header="Point labels" Visibility="Collapsed">
+                <grid:Griddo
+                    x:Name="PointLabelFieldsGrid"
+                    Margin="8,6"
+                    ShowFieldHeaderSelectionColoring="False"
+                    ShowRecordHeaderSelectionColoring="False"
+                    UniformRecordHeight="26" />
+            </TabItem>
         </TabControl>
     </DockPanel>
 </Window>

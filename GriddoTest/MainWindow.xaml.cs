@@ -1508,7 +1508,9 @@ public partial class MainWindow : Window
         public IReadOnlyList<CalibrationSignalPoint> GetPoints(object recordSource)
         {
             var seed = GetAnalyticsSource(recordSource).PlottoSeed;
-            return CreateCalibrationPoints(seed).Select(static p => new CalibrationSignalPoint(p.X, p.Y, p.IsEnabled)).ToList();
+            return CreateCalibrationPoints(seed)
+                .Select(static p => new CalibrationSignalPoint(p.X, p.Y, p.IsEnabled, $"L{p.X:0.#}"))
+                .ToList();
         }
 
         public CalibrationFitMode GetFitMode(object recordSource)
@@ -2135,6 +2137,18 @@ public partial class MainWindow : Window
                         TitleFontSize = Math.Clamp(p.TitleFontSize, 6d, 120d),
                         ChromatogramShowPeaks = p.ChromatogramShowPeaks,
                         CalibrationShowRegression = p.CalibrationShowRegression,
+                        ShowCalibrationPointLabels = p.ShowCalibrationPointLabels,
+                        CalibrationPointLabelSegments = p.CalibrationPointLabelSegments
+                            .Select(s => new PlotTitleSegmentConfiguration
+                            {
+                                SourceFieldIndex = s.SourceFieldIndex,
+                                SourceFieldKey = ResolvePropertyViewKeyForSourceField(s.SourceFieldIndex, GetSourceMemberNameOrEmpty(s.SourceFieldIndex)),
+                                Enabled = s.Enabled,
+                                AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
+                                AddLineBreakAfter = s.AddLineBreakAfter,
+                                WordWrap = s.WordWrap
+                            })
+                            .ToList(),
                         SpectrumNormalizeIntensity = p.SpectrumNormalizeIntensity
                     };
                 })
@@ -2881,7 +2895,10 @@ public partial class MainWindow : Window
         target.TitleSegments = settings.TitleSegments
             .Select(s => new PlotTitleSegmentConfiguration
             {
+                SourceObjectName = s.SourceObjectName ?? string.Empty,
+                PropertyName = s.PropertyName ?? string.Empty,
                 SourceFieldIndex = s.SourceFieldIndex,
+                SourceFieldKey = s.SourceFieldKey ?? string.Empty,
                 Enabled = s.Enabled,
                 AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
                 AddLineBreakAfter = s.AddLineBreakAfter,
@@ -2903,6 +2920,20 @@ public partial class MainWindow : Window
         target.TitleFontSize = Math.Clamp(settings.TitleFontSize, 6d, 120d);
         target.ChromatogramShowPeaks = settings.ChromatogramShowPeaks;
         target.CalibrationShowRegression = settings.CalibrationShowRegression;
+        target.ShowCalibrationPointLabels = settings.ShowCalibrationPointLabels;
+        target.CalibrationPointLabelSegments = settings.CalibrationPointLabelSegments
+            .Select(s => new PlotTitleSegmentConfiguration
+            {
+                SourceObjectName = s.SourceObjectName ?? string.Empty,
+                PropertyName = s.PropertyName ?? string.Empty,
+                SourceFieldIndex = s.SourceFieldIndex,
+                SourceFieldKey = s.SourceFieldKey ?? string.Empty,
+                Enabled = s.Enabled,
+                AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
+                AddLineBreakAfter = s.AddLineBreakAfter,
+                WordWrap = s.WordWrap
+            })
+            .ToList();
         target.SpectrumNormalizeIntensity = settings.SpectrumNormalizeIntensity;
     }
 
@@ -2916,6 +2947,8 @@ public partial class MainWindow : Window
         target.Segments = settings.Segments
             .Select(s => new HtmlFieldSegmentConfiguration
             {
+                SourceObjectName = s.SourceObjectName ?? string.Empty,
+                PropertyName = s.PropertyName ?? string.Empty,
                 SourceFieldIndex = s.SourceFieldIndex,
                 SourceFieldKey = s.SourceFieldKey ?? string.Empty,
                 Enabled = s.Enabled,

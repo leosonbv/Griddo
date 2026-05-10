@@ -52,14 +52,22 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
     public int YAxisLabelPrecision { get; set; } = 2;
     public string XAxisLabelFormat { get; set; } = string.Empty;
     public string YAxisLabelFormat { get; set; } = string.Empty;
-    public double AxisFontSize { get; set; } = 10d;
-    public double TitleFontSize { get; set; } = 11d;
+    public double AxisFontSize { get; set; } = 15d;
+    public double TitleFontSize { get; set; } = 16.5d;
     public bool ChromatogramShowPeaks { get; set; }
     public bool OverlayIstdPeaks { get; set; }
     public bool OverlaySurrogatePeaks { get; set; }
     public bool OverlayTargetPeaks { get; set; }
     public bool CalibrationShowRegression { get; set; }
+    public bool ShowCalibrationPointLabels { get; set; } = true;
+    public List<PlotTitleSegmentConfiguration> CalibrationPointLabelSegments { get; set; } = [];
     public bool SpectrumNormalizeIntensity { get; set; }
+
+    /// <summary>
+    /// When set, calibration point-label segments resolve against this field list (e.g. method <c>ResponseView</c> columns).
+    /// Defaults to the grid registry when null.
+    /// </summary>
+    public Func<IReadOnlyList<IGriddoFieldView>>? CalibrationPointLabelFieldsAccessor { get; set; }
 
     public Func<object?, string?>? ViewportZoomRecordKey { get; set; }
 
@@ -107,16 +115,32 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
         {
             HostedPlotViewportMemory.SaveLeavingRow(previousRow, plotKey, chart.Viewport, ViewportZoomRecordKey);
             host.Tag = recordSource;
-            BindCalibrationSeries(chart, recordSource);
         }
-
-        ApplyCurveOverlay(chart, recordSource);
 
         ApplyChartSettings(chart, recordSource);
 
+        // Rebind only when the logical row changes — otherwise fit/viewport restore runs every grid refresh
+        // (same pattern as HostedChromatogramFieldView).
         if (recordChanged)
         {
-            HostedPlotViewportMemory.TryRestore(recordSource, plotKey, chart, ViewportZoomRecordKey);
+            var willHavePoints = _signalProvider.GetPoints(recordSource).Count > 0;
+            chart.BeginSuppressCalibrationViewportFit();
+            try
+            {
+                chart.SuppressAutomaticViewportFitOnNextPointsChange = willHavePoints;
+                BindCalibrationSeries(chart, recordSource);
+                ApplyCurveOverlay(chart, recordSource);
+                var restored = HostedPlotViewportMemory.TryRestore(recordSource, plotKey, chart, ViewportZoomRecordKey);
+                if (!restored && chart.Points.Count > 0)
+                {
+                    chart.FitViewportToCalibrationData();
+                }
+            }
+            finally
+            {
+                chart.EndSuppressCalibrationViewportFit();
+            }
+
             HostedPlotViewportMemory.ScheduleDeferredTryRestore(host, recordSource, plotKey, chart, ViewportZoomRecordKey);
         }
     }
@@ -175,6 +199,51 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
         }
     }
 
+    public bool ShouldRelayLeftDoubleClickWhileInHostedEditMode() => true;
+
+    public void RelayDirectEditMouseDown(FrameworkElement host, MouseButtonEventArgs eFromGrid)
+    {
+        if (host is not Border { Child: CalibrationCurveControl chart })
+        {
+            return;
+        }
+
+        if (eFromGrid is { ChangedButton: MouseButton.Right, ClickCount: 2 })
+        {
+            chart.Focus();
+            chart.ZoomOutCompletely();
+            return;
+        }
+
+        host.UpdateLayout();
+        chart.UpdateLayout();
+        chart.ResetHitTestGeometrySync();
+
+        var routed = new MouseButtonEventArgs(eFromGrid.MouseDevice, eFromGrid.Timestamp, eFromGrid.ChangedButton)
+        {
+            RoutedEvent = Mouse.MouseDownEvent,
+            Source = chart
+        };
+        chart.Focus();
+        chart.RaiseEvent(routed);
+    }
+
+    public void RelayDirectEditMouseUp(FrameworkElement host, MouseButtonEventArgs eFromGrid)
+    {
+        if (host is not Border { Child: CalibrationCurveControl chart })
+        {
+            return;
+        }
+
+        var routed = new MouseButtonEventArgs(eFromGrid.MouseDevice, eFromGrid.Timestamp, eFromGrid.ChangedButton)
+        {
+            RoutedEvent = Mouse.MouseUpEvent,
+            Source = chart
+        };
+        chart.Focus();
+        chart.RaiseEvent(routed);
+    }
+
     private static CalibrationCurveControl CreateChart() =>
         new()
         {
@@ -186,7 +255,9 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
             VerticalAlignment = VerticalAlignment.Stretch,
             IsHitTestVisible = true,
             FitMode = CalibrationFitMode.Linear,
-            CalibrationPoints = []
+            CalibrationPoints = [],
+            ShowCalibrationPointLabels = true,
+            CalibrationPointLabelFontSize = 13.5d
         };
 
     private void OnCalibrationPointToggled(object? sender, CalibrationPointEventArgs e)
@@ -204,15 +275,60 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
             return;
         }
 
-        BindCalibrationSeries(chart, recordSource);
-        ApplyCurveOverlay(chart, recordSource);
+        chart.BeginSuppressCalibrationViewportFit();
+        try
+        {
+            chart.SuppressAutomaticViewportFitOnNextPointsChange = chart.Points.Count > 0;
+            BindCalibrationSeries(chart, recordSource);
+            ApplyCurveOverlay(chart, recordSource);
+        }
+        finally
+        {
+            chart.EndSuppressCalibrationViewportFit();
+        }
     }
 
     private void BindCalibrationSeries(CalibrationCurveControl chart, object recordSource)
     {
-        chart.CalibrationPoints = _signalProvider.GetPoints(recordSource)
-            .Select(static p => new CalibrationPoint { X = p.X, Y = p.Y, IsEnabled = p.Enabled })
-            .ToList();
+        var raw = _signalProvider.GetPoints(recordSource).ToList();
+        List<CalibrationPoint> points = [];
+        for (var i = 0; i < raw.Count; i++)
+        {
+            var p = raw[i];
+            string plain;
+            if (ShowCalibrationPointLabels)
+            {
+                if (CalibrationPointLabelSegments.Count > 0 && CalibrationPointLabelSegments.Exists(static s => s.Enabled))
+                {
+                    var html = PlotTitleHtmlBuilder.BuildCalibrationPointLabelHtml(
+                        recordSource,
+                        i,
+                        _allFieldsAccessor,
+                        CalibrationPointLabelSegments,
+                        _signalProvider,
+                        CalibrationPointLabelFieldsAccessor);
+                    plain = PlotTitleHtmlBuilder.HtmlTableToPlainSummary(html);
+                }
+                else
+                {
+                    plain = p.DefaultLabel ?? string.Empty;
+                }
+            }
+            else
+            {
+                plain = string.Empty;
+            }
+
+            points.Add(new CalibrationPoint
+            {
+                X = p.X,
+                Y = p.Y,
+                IsEnabled = p.Enabled,
+                LabelPlainText = plain
+            });
+        }
+
+        chart.CalibrationPoints = points;
         chart.FitMode = _signalProvider.GetFitMode(recordSource);
     }
 
@@ -239,5 +355,10 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
         chart.TitleFontSize = TitleFontSize;
         chart.ShowXAxis = ShowXAxis;
         chart.ShowYAxis = ShowYAxis;
+        if (chart is CalibrationCurveControl cal)
+        {
+            cal.ShowCalibrationPointLabels = ShowCalibrationPointLabels;
+            cal.CalibrationPointLabelFontSize = Math.Clamp(AxisFontSize * 0.85, 6d, 22d);
+        }
     }
 }

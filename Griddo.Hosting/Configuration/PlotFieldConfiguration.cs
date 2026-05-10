@@ -2,6 +2,12 @@ namespace Griddo.Hosting.Configuration;
 
 public sealed class PlotTitleSegmentConfiguration
 {
+    /// <summary>Optional partition (e.g. Sample vs Quantification) for stable resolution when keys collide.</summary>
+    public string SourceObjectName { get; set; } = string.Empty;
+
+    /// <summary>Optional bound member name (same as <c>IGriddoFieldSourceMember.SourceMemberName</c>).</summary>
+    public string PropertyName { get; set; } = string.Empty;
+
     public int SourceFieldIndex { get; set; } = -1;
     public string SourceFieldKey { get; set; } = string.Empty;
     public bool Enabled { get; set; }
@@ -29,10 +35,12 @@ public sealed class PlotFieldConfiguration
     public int YAxisLabelPrecision { get; set; }
     public string XAxisLabelFormat { get; set; } = string.Empty;
     public string YAxisLabelFormat { get; set; } = string.Empty;
-    public double AxisFontSize { get; set; } = 14d;
-    public double TitleFontSize { get; set; } = 14d;
+    public double AxisFontSize { get; set; } = 21d;
+    public double TitleFontSize { get; set; } = 21d;
     public bool ChromatogramShowPeaks { get; set; }
     public bool CalibrationShowRegression { get; set; }
+    public bool ShowCalibrationPointLabels { get; set; } = true;
+    public List<PlotTitleSegmentConfiguration> CalibrationPointLabelSegments { get; set; } = [];
     public bool SpectrumNormalizeIntensity { get; set; }
     public List<PlotTitleSegmentConfiguration> TitleSegments { get; set; } = [];
 }

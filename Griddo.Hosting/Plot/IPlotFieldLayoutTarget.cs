@@ -28,5 +28,8 @@ public interface IPlotFieldLayoutTarget
     bool OverlaySurrogatePeaks { get; set; }
     bool OverlayTargetPeaks { get; set; }
     bool CalibrationShowRegression { get; set; }
+    /// <summary>When true, calibration markers show dose/HTML labels (configured on the Point labels tab).</summary>
+    bool ShowCalibrationPointLabels { get; set; }
+    List<PlotTitleSegmentConfiguration> CalibrationPointLabelSegments { get; set; }
     bool SpectrumNormalizeIntensity { get; set; }
 }

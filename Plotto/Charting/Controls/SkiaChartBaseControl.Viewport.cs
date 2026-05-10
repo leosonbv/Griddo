@@ -1,5 +1,6 @@
 using System.Windows;
 using Plotto.Charting.Core;
+using Plotto.Charting.Viewport;
 
 namespace Plotto.Charting.Controls;
 
@@ -25,10 +26,17 @@ public abstract partial class SkiaChartBaseControl
     /// <summary>After wheel zoom, pan, or drag-zoom; default uses point-based X/Y clamps.</summary>
     protected virtual void ApplyViewportInteractionClamp()
     {
+        ClampViewportWheelLimits(yFloorUsesLowestYInVisibleX: false);
+    }
+
+    /// <summary>Applies <see cref="SeriesViewportInteractionClamp.ClampViewportToWheelZoomLimits"/>.</summary>
+    protected void ClampViewportWheelLimits(bool yFloorUsesLowestYInVisibleX)
+    {
         _viewportWheelClamp.ClampViewportToWheelZoomLimits(
             Viewport,
             Points,
-            clampYToDataFloor: !IsViewportClampAfterRectZoom);
+            clampYToDataFloor: !IsViewportClampAfterRectZoom,
+            yFloorUsesLowestYInVisibleX);
     }
 
     protected void ZoomXAt(Point pivot, double scale)

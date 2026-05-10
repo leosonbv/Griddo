@@ -32,10 +32,16 @@ public partial class PlotConfigurationDialog : Window
         _allFields = allFields;
         _previewApply = previewApply;
         BuildTitleFieldGridFields();
+        BuildPointLabelFieldGridFields();
         BuildGeneralGridFields();
         BuildSpecificGridFields();
         Loaded += (_, _) =>
         {
+            if (_initial.PlotTypeKey == "Calibration curve")
+            {
+                PointLabelsTab.Visibility = Visibility.Visible;
+            }
+
             LoadFromChart();
             UpdateMoveButtonsVisibility();
         };
@@ -50,7 +56,9 @@ public partial class PlotConfigurationDialog : Window
 
     private void UpdateMoveButtonsVisibility()
     {
-        var show = MainTabs.SelectedIndex == 0;
+        var idx = MainTabs.SelectedIndex;
+        var cal = _initial.PlotTypeKey == "Calibration curve";
+        var show = idx == 0 || (cal && idx == 3);
         var visibility = show ? Visibility.Visible : Visibility.Collapsed;
         MoveUpButton.Visibility = visibility;
         MoveDownButton.Visibility = visibility;
@@ -59,6 +67,7 @@ public partial class PlotConfigurationDialog : Window
     private void LoadFromChart()
     {
         SeedTitleRows();
+        SeedPointLabelRows();
         GeneralGrid.Records.Clear();
         GeneralGrid.Records.Add(new PlotGeneralSettingRecord(PlotGeneralSettingKind.Label, _initial.Label));
         SeedSpecificRows();
@@ -121,6 +130,59 @@ public partial class PlotConfigurationDialog : Window
         Dispatcher.BeginInvoke(new Action(SelectEnabledTitleFieldRowsAndScrollFirst), DispatcherPriority.Loaded);
     }
 
+    private void SeedPointLabelRows()
+    {
+        PointLabelFieldsGrid.Records.Clear();
+        var savedByKey = _initial.CalibrationPointLabelSegments
+            .Where(s => !string.IsNullOrWhiteSpace(s.SourceFieldKey))
+            .GroupBy(s => s.SourceFieldKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        var savedByIndex = _initial.CalibrationPointLabelSegments
+            .GroupBy(s => s.SourceFieldIndex)
+            .ToDictionary(g => g.Key, g => g.First());
+        var excluded = new HashSet<int>();
+        for (var sourceFieldIndex = 0; sourceFieldIndex < _allFields.Count; sourceFieldIndex++)
+        {
+            var field = _allFields[sourceFieldIndex];
+            if (ReferenceEquals(field, _initial) || field is IHtmlFieldLayoutTarget || field is IPlotFieldLayoutTarget)
+            {
+                excluded.Add(sourceFieldIndex);
+            }
+        }
+
+        var configuredOrder = _initial.CalibrationPointLabelSegments
+            .Select(ResolveSourceFieldIndex)
+            .Where(i => i >= 0 && i < _allFields.Count && !excluded.Contains(i))
+            .Distinct()
+            .ToList();
+        var remainingOrder = Enumerable.Range(0, _allFields.Count)
+            .Where(i => !excluded.Contains(i) && !configuredOrder.Contains(i))
+            .ToList();
+        var orderedSourceIndices = configuredOrder.Concat(remainingOrder);
+
+        foreach (var sourceFieldIndex in orderedSourceIndices)
+        {
+            var field = _allFields[sourceFieldIndex];
+
+            var sourceFieldKey = ResolveSourceFieldKey(sourceFieldIndex);
+            var saved =
+                (!string.IsNullOrWhiteSpace(sourceFieldKey) && savedByKey.TryGetValue(sourceFieldKey, out var byKey))
+                    ? byKey
+                    : (savedByIndex.TryGetValue(sourceFieldIndex, out var byIndex) ? byIndex : null);
+            var row = new PlotTitleFieldEditRecord
+            {
+                SourceFieldIndex = sourceFieldIndex,
+                SourceFieldKey = sourceFieldKey,
+                Enabled = saved?.Enabled ?? false,
+                Header = field.Header ?? string.Empty,
+                AbbreviatedHeader = saved?.AbbreviatedHeaderOverride ?? string.Empty,
+                AddLineBreakAfter = saved?.AddLineBreakAfter ?? true,
+                WordWrap = saved?.WordWrap ?? true
+            };
+            PointLabelFieldsGrid.Records.Add(row);
+        }
+    }
+
     /// <summary>Select every title row with Use=true; scroll the first enabled row to the viewport center.</summary>
     private void SelectEnabledTitleFieldRowsAndScrollFirst()
     {
@@ -151,14 +213,27 @@ public partial class PlotConfigurationDialog : Window
     {
         _ = sender;
         _ = e;
-        _ = TitleFieldsGrid.TryMoveSelectedRecordsStep(-1);
+        var grid = ActiveTitleLikeGrid();
+        _ = grid?.TryMoveSelectedRecordsStep(-1);
     }
 
     private void MoveDownButton_Click(object sender, RoutedEventArgs e)
     {
         _ = sender;
         _ = e;
-        _ = TitleFieldsGrid.TryMoveSelectedRecordsStep(1);
+        var grid = ActiveTitleLikeGrid();
+        _ = grid?.TryMoveSelectedRecordsStep(1);
+    }
+
+    private global::Griddo.Grid.Griddo? ActiveTitleLikeGrid()
+    {
+        var cal = _initial.PlotTypeKey == "Calibration curve";
+        return MainTabs.SelectedIndex switch
+        {
+            0 => TitleFieldsGrid,
+            3 when cal => PointLabelFieldsGrid,
+            _ => null
+        };
     }
 
     private void Ok_Click(object sender, RoutedEventArgs e)
@@ -194,14 +269,47 @@ public partial class PlotConfigurationDialog : Window
         var label = GetGeneralText(PlotGeneralSettingKind.Label);
         var titleSegments = TitleFieldsGrid.Records
             .OfType<PlotTitleFieldEditRecord>()
-            .Select(r => new PlotTitleSegmentConfiguration
+            .Select(r =>
             {
-                SourceFieldIndex = r.SourceFieldIndex,
-                SourceFieldKey = r.SourceFieldKey ?? string.Empty,
-                Enabled = r.Enabled,
-                AbbreviatedHeaderOverride = r.AbbreviatedHeader ?? string.Empty,
-                AddLineBreakAfter = r.AddLineBreakAfter,
-                WordWrap = r.WordWrap
+                var field = r.SourceFieldIndex >= 0 && r.SourceFieldIndex < _allFields.Count
+                    ? _allFields[r.SourceFieldIndex]
+                    : null;
+                var sourceObjectName = field is IGriddoFieldSourceObject so ? so.SourceObjectName.Trim() : string.Empty;
+                var propertyName = field is IGriddoFieldSourceMember sm ? sm.SourceMemberName.Trim() : string.Empty;
+                return new PlotTitleSegmentConfiguration
+                {
+                    SourceObjectName = sourceObjectName,
+                    PropertyName = propertyName,
+                    SourceFieldIndex = r.SourceFieldIndex,
+                    SourceFieldKey = r.SourceFieldKey ?? string.Empty,
+                    Enabled = r.Enabled,
+                    AbbreviatedHeaderOverride = r.AbbreviatedHeader ?? string.Empty,
+                    AddLineBreakAfter = r.AddLineBreakAfter,
+                    WordWrap = r.WordWrap
+                };
+            })
+            .ToList();
+
+        var calibrationPointLabelSegments = PointLabelFieldsGrid.Records
+            .OfType<PlotTitleFieldEditRecord>()
+            .Select(r =>
+            {
+                var field = r.SourceFieldIndex >= 0 && r.SourceFieldIndex < _allFields.Count
+                    ? _allFields[r.SourceFieldIndex]
+                    : null;
+                var sourceObjectName = field is IGriddoFieldSourceObject so ? so.SourceObjectName.Trim() : string.Empty;
+                var propertyName = field is IGriddoFieldSourceMember sm ? sm.SourceMemberName.Trim() : string.Empty;
+                return new PlotTitleSegmentConfiguration
+                {
+                    SourceObjectName = sourceObjectName,
+                    PropertyName = propertyName,
+                    SourceFieldIndex = r.SourceFieldIndex,
+                    SourceFieldKey = r.SourceFieldKey ?? string.Empty,
+                    Enabled = r.Enabled,
+                    AbbreviatedHeaderOverride = r.AbbreviatedHeader ?? string.Empty,
+                    AddLineBreakAfter = r.AddLineBreakAfter,
+                    WordWrap = r.WordWrap
+                };
             })
             .ToList();
 
@@ -224,6 +332,8 @@ public partial class PlotConfigurationDialog : Window
             YAxisLabelFormat: GetSpecificText(PlotSpecificSettingKind.YAxisFormat),
             ChromatogramShowPeaks: GetSpecificBool(PlotSpecificSettingKind.ChromatogramShowPeaks),
             CalibrationShowRegression: GetSpecificBool(PlotSpecificSettingKind.CalibrationShowRegression),
+            ShowCalibrationPointLabels: GetSpecificBool(PlotSpecificSettingKind.CalibrationShowPointLabels),
+            CalibrationPointLabelSegments: calibrationPointLabelSegments,
             SpectrumNormalizeIntensity: GetSpecificBool(PlotSpecificSettingKind.SpectrumNormalizeIntensity));
         return true;
     }
@@ -266,18 +376,12 @@ public partial class PlotConfigurationDialog : Window
 
     private int ResolveSourceFieldIndex(PlotTitleSegmentConfiguration segment)
     {
-        if (!string.IsNullOrWhiteSpace(segment.SourceFieldKey))
-        {
-            for (var i = 0; i < _allFields.Count; i++)
-            {
-                if (string.Equals(ResolveSourceFieldKey(i), segment.SourceFieldKey, StringComparison.OrdinalIgnoreCase))
-                {
-                    return i;
-                }
-            }
-        }
-
-        return segment.SourceFieldIndex;
+        return HostingSegmentFieldResolver.Resolve(
+            _allFields,
+            segment.SourceObjectName,
+            segment.PropertyName,
+            segment.SourceFieldKey,
+            segment.SourceFieldIndex);
     }
 
     private string ResolveSourceFieldKey(int sourceFieldIndex)
@@ -359,6 +463,69 @@ public partial class PlotConfigurationDialog : Window
             }));
     }
 
+    private void BuildPointLabelFieldGridFields()
+    {
+        PointLabelFieldsGrid.Fields.Clear();
+        PointLabelFieldsGrid.Fields.Add(new GriddoBoolFieldView(
+            "Use",
+            60,
+            r => ((PlotTitleFieldEditRecord)r).Enabled,
+            (r, v) =>
+            {
+                if (v is not bool b)
+                {
+                    return false;
+                }
+
+                ((PlotTitleFieldEditRecord)r).Enabled = b;
+                return true;
+            }));
+        PointLabelFieldsGrid.Fields.Add(new GriddoBoolFieldView(
+            "Line break",
+            100,
+            r => ((PlotTitleFieldEditRecord)r).AddLineBreakAfter,
+            (r, v) =>
+            {
+                if (v is not bool b)
+                {
+                    return false;
+                }
+
+                ((PlotTitleFieldEditRecord)r).AddLineBreakAfter = b;
+                return true;
+            }));
+        PointLabelFieldsGrid.Fields.Add(new GriddoFieldView(
+            "Header",
+            220,
+            r => ((PlotTitleFieldEditRecord)r).Header,
+            static (_, _) => false,
+            GriddoCellEditors.Text));
+        PointLabelFieldsGrid.Fields.Add(new GriddoFieldView(
+            "Abbr",
+            140,
+            r => ((PlotTitleFieldEditRecord)r).AbbreviatedHeader,
+            (r, v) =>
+            {
+                ((PlotTitleFieldEditRecord)r).AbbreviatedHeader = v?.ToString() ?? string.Empty;
+                return true;
+            },
+            GriddoCellEditors.Text));
+        PointLabelFieldsGrid.Fields.Add(new GriddoBoolFieldView(
+            "Wrap",
+            70,
+            r => ((PlotTitleFieldEditRecord)r).WordWrap,
+            (r, v) =>
+            {
+                if (v is not bool b)
+                {
+                    return false;
+                }
+
+                ((PlotTitleFieldEditRecord)r).WordWrap = b;
+                return true;
+            }));
+    }
+
     private void BuildGeneralGridFields()
     {
         GeneralGrid.Fields.Clear();
@@ -413,6 +580,8 @@ public partial class PlotConfigurationDialog : Window
         else if (_initial.PlotTypeKey == "Calibration curve")
         {
             SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+                PlotSpecificSettingKind.CalibrationShowPointLabels, "Point labels", "Show point labels", boolValue: _initial.ShowCalibrationPointLabels));
+            SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
                 PlotSpecificSettingKind.CalibrationShowRegression, "Type", "Show regression details", boolValue: _initial.CalibrationShowRegression));
         }
         else if (_initial.PlotTypeKey == "Spectrum")
@@ -451,6 +620,7 @@ public partial class PlotConfigurationDialog : Window
     {
         ChromatogramShowPeaks,
         CalibrationShowRegression,
+        CalibrationShowPointLabels,
         SpectrumNormalizeIntensity,
         ShowTitle,
         ShowXAxis,
@@ -648,4 +818,6 @@ public sealed record PlotFieldDialogResult(
     string YAxisLabelFormat,
     bool ChromatogramShowPeaks,
     bool CalibrationShowRegression,
+    bool ShowCalibrationPointLabels,
+    List<PlotTitleSegmentConfiguration> CalibrationPointLabelSegments,
     bool SpectrumNormalizeIntensity);

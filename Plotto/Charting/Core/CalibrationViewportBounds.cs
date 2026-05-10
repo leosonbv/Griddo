@@ -1,17 +1,27 @@
 namespace Plotto.Charting.Core;
 
 /// <summary>
-/// Outer zoom/pan limits for calibration charts (SRP: margin box from points + fitted curve samples).
+/// Outer zoom/pan limits for calibration charts from calibration points and optional fitted-curve samples.
 /// </summary>
 public static class CalibrationViewportBounds
 {
     /// <summary>
-    /// Zoom-out box: 5% margin below/left of origin on X and Y; high side = max of points and fitted curve + 5%.
+    /// Zoom-out box: 5% margin below/left of origin on X and Y; high side = max of points + 5%.
     /// </summary>
     public static bool TryGetZoomOutExtents(
         IReadOnlyList<CalibrationPoint> pts,
-        CalibrationFitMode fitMode,
-        int fitSamplingSegments,
+        out double xMinLim,
+        out double xMaxLim,
+        out double yMinLim,
+        out double yMaxLim) =>
+        TryGetZoomOutExtents(pts, null, out xMinLim, out xMaxLim, out yMinLim, out yMaxLim);
+
+    /// <summary>
+    /// Same as <see cref="TryGetZoomOutExtents(IReadOnlyList{CalibrationPoint}, out double, out double, out double, out double)"/> but unions extents with an optional curve overlay.
+    /// </summary>
+    public static bool TryGetZoomOutExtents(
+        IReadOnlyList<CalibrationPoint> pts,
+        IReadOnlyList<ChartPoint>? curveOverlay,
         out double xMinLim,
         out double xMaxLim,
         out double yMinLim,
@@ -21,7 +31,7 @@ public static class CalibrationViewportBounds
         xMaxLim = 1d;
         yMinLim = 0d;
         yMaxLim = 1d;
-        if (pts.Count == 0)
+        if (pts.Count == 0 && (curveOverlay == null || curveOverlay.Count == 0))
         {
             return false;
         }
@@ -30,31 +40,35 @@ public static class CalibrationViewportBounds
         var ymax = 0d;
         foreach (var p in pts)
         {
-            if (p.X > xmax) xmax = p.X;
-            if (p.Y > ymax) ymax = p.Y;
+            if (p.X > xmax)
+            {
+                xmax = p.X;
+            }
+
+            if (p.Y > ymax)
+            {
+                ymax = p.Y;
+            }
         }
 
-        var enabled = pts.Where(p => p.IsEnabled).ToArray();
-        var interpolatedMaxX = xmax;
-        var interpolatedMaxY = ymax;
-        if (CalibrationFitSolver.TryCreateEvaluator(fitMode, enabled, out var eval))
+        if (curveOverlay != null)
         {
-            interpolatedMaxX = Math.Max(interpolatedMaxX, xmax);
-            var sampleXMax = Math.Max(0d, interpolatedMaxX);
-            fitSamplingSegments = Math.Max(1, fitSamplingSegments);
-            for (var i = 0; i <= fitSamplingSegments; i++)
+            foreach (var p in curveOverlay)
             {
-                var x = sampleXMax * (i / (double)fitSamplingSegments);
-                var y = eval(x);
-                if (double.IsFinite(y))
+                if (p.X > xmax)
                 {
-                    interpolatedMaxY = Math.Max(interpolatedMaxY, y);
+                    xmax = p.X;
+                }
+
+                if (p.Y > ymax)
+                {
+                    ymax = p.Y;
                 }
             }
         }
 
-        var maxX = Math.Max(xmax, interpolatedMaxX);
-        var maxY = Math.Max(ymax, interpolatedMaxY);
+        var maxX = xmax;
+        var maxY = ymax;
         var padX = Math.Max(1e-6, maxX * 0.05);
         var padY = Math.Max(1e-6, maxY * 0.05);
         xMinLim = -padX;

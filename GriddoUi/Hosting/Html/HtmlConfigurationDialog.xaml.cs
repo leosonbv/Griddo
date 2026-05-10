@@ -20,6 +20,7 @@ public partial class HtmlConfigurationDialog : Window
     private readonly List<HtmlSegmentEditRecord> _rows = [];
     private readonly FontSummaryDialogCellEditor _fontEditor = new();
     private int _generalValueFieldIndex = -1;
+    private readonly IReadOnlyList<IGriddoFieldView> _allFields;
 
     public HtmlConfigurationDialog(
         IHtmlFieldLayoutTarget seed,
@@ -27,6 +28,7 @@ public partial class HtmlConfigurationDialog : Window
         Action<HtmlFieldConfiguration>? previewApply = null)
     {
         InitializeComponent();
+        _allFields = allFields;
         PreviewApply = previewApply;
         BuildSegmentGridFields();
         BuildGeneralGridFields();
@@ -174,14 +176,24 @@ public partial class HtmlConfigurationDialog : Window
             FontStyleName = font?.FontStyleName ?? string.Empty,
             Segments = SegmentsGrid.Records
                 .OfType<HtmlSegmentEditRecord>()
-                .Select(r => new HtmlFieldSegmentConfiguration
+                .Select(r =>
                 {
-                    SourceFieldIndex = r.SourceFieldIndex,
-                    SourceFieldKey = r.SourceFieldKey ?? string.Empty,
-                    Enabled = r.Enabled,
-                    AbbreviatedHeaderOverride = r.AbbreviatedHeader ?? string.Empty,
-                    AddLineBreakAfter = r.AddLineBreakAfter,
-                    WordWrap = r.WordWrap
+                    var field = r.SourceFieldIndex >= 0 && r.SourceFieldIndex < _allFields.Count
+                        ? _allFields[r.SourceFieldIndex]
+                        : null;
+                    var sourceObjectName = field is IGriddoFieldSourceObject so ? so.SourceObjectName.Trim() : string.Empty;
+                    var propertyName = field is IGriddoFieldSourceMember sm ? sm.SourceMemberName.Trim() : string.Empty;
+                    return new HtmlFieldSegmentConfiguration
+                    {
+                        SourceObjectName = sourceObjectName,
+                        PropertyName = propertyName,
+                        SourceFieldIndex = r.SourceFieldIndex,
+                        SourceFieldKey = r.SourceFieldKey ?? string.Empty,
+                        Enabled = r.Enabled,
+                        AbbreviatedHeaderOverride = r.AbbreviatedHeader ?? string.Empty,
+                        AddLineBreakAfter = r.AddLineBreakAfter,
+                        WordWrap = r.WordWrap
+                    };
                 })
                 .ToList()
         };
@@ -241,21 +253,12 @@ public partial class HtmlConfigurationDialog : Window
         HtmlFieldSegmentConfiguration segment,
         IReadOnlyList<IGriddoFieldView> allFields)
     {
-        if (!string.IsNullOrWhiteSpace(segment.SourceFieldKey))
-        {
-            for (var i = 0; i < allFields.Count; i++)
-            {
-                var key = ResolveSourceFieldKey(allFields[i], i);
-                if (string.Equals(key, segment.SourceFieldKey, StringComparison.OrdinalIgnoreCase))
-                {
-                    return i;
-                }
-            }
-
-            return -1;
-        }
-
-        return segment.SourceFieldIndex;
+        return HostingSegmentFieldResolver.Resolve(
+            allFields,
+            segment.SourceObjectName,
+            segment.PropertyName,
+            segment.SourceFieldKey,
+            segment.SourceFieldIndex);
     }
 
     private static string ResolveSourceFieldKey(IGriddoFieldView field, int sourceFieldIndex)

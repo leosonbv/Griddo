@@ -142,13 +142,6 @@ public sealed class HostedStabilityFieldView : IGriddoHostedFieldView, IGriddoFi
             return;
         }
 
-        if (eFromGrid is { ChangedButton: MouseButton.Left, ClickCount: 2 })
-        {
-            chart.Focus();
-            chart.ZoomOutCompletely();
-            return;
-        }
-
         if (eFromGrid is { ChangedButton: MouseButton.Right, ClickCount: 2 })
         {
             chart.Focus();

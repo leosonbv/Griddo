@@ -137,7 +137,7 @@ public static class FieldChooserGridApplier
                 .ThenBy(r => r.SourceFieldIndex)
                 .Select(r =>
                 {
-                    if (sourceToGridIndex.TryGetValue(r.SourceFieldIndex, out var colIndex))
+                    if (TryResolveSortGridColumnIndex(r.SourceFieldIndex, sourceToGridIndex, snap, grid, out var colIndex))
                     {
                         return (ok: true, d: new GriddoSortDescriptor(colIndex, r.SortAscending, r.SortPriority));
                     }
@@ -156,6 +156,42 @@ public static class FieldChooserGridApplier
         {
             grid.RefreshHostedCells();
         }
+    }
+
+    /// <summary>
+    /// Maps persisted catalog index to current grid column index. Prefer the layout apply map; fall back to
+    /// locating the same <see cref="IGriddoFieldView"/> instance in <paramref name="grid"/>.Fields (stable across reorder).
+    /// </summary>
+    private static bool TryResolveSortGridColumnIndex(
+        int sourceFieldIndex,
+        IReadOnlyDictionary<int, int> sourceToGridIndex,
+        IReadOnlyList<IGriddoFieldView> snap,
+        global::Griddo.Grid.Griddo grid,
+        out int gridColumnIndex)
+    {
+        gridColumnIndex = -1;
+        if (sourceToGridIndex.TryGetValue(sourceFieldIndex, out var mapped))
+        {
+            gridColumnIndex = mapped;
+            return true;
+        }
+
+        if (sourceFieldIndex < 0 || sourceFieldIndex >= snap.Count)
+        {
+            return false;
+        }
+
+        var fieldView = snap[sourceFieldIndex];
+        for (var gi = 0; gi < grid.Fields.Count; gi++)
+        {
+            if (ReferenceEquals(grid.Fields[gi], fieldView))
+            {
+                gridColumnIndex = gi;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void ApplyFrozenOnly(

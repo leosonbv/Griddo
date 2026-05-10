@@ -61,7 +61,12 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
         var pairs = new List<(HtmlFieldSegmentConfiguration Segment, string Label, string Rendered)>(enabled.Count);
         foreach (var segment in enabled)
         {
-            var sourceFieldIndex = ResolveSourceFieldIndex(segment, fields);
+            var sourceFieldIndex = HostingSegmentFieldResolver.Resolve(
+                fields,
+                segment.SourceObjectName,
+                segment.PropertyName,
+                segment.SourceFieldKey,
+                segment.SourceFieldIndex);
             if (sourceFieldIndex < 0 || sourceFieldIndex >= fields.Count)
             {
                 continue;
@@ -124,42 +129,6 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
         }
 
         return $"<div style='{style}'>{string.Concat(chunks)}</div>";
-    }
-
-    private static int ResolveSourceFieldIndex(HtmlFieldSegmentConfiguration segment, IReadOnlyList<IGriddoFieldView> fields)
-    {
-        if (!string.IsNullOrWhiteSpace(segment.SourceFieldKey))
-        {
-            // Keyed segments are order-independent by design. If a key cannot be resolved
-            // (e.g. field hidden/removed), skip it instead of falling back to an index.
-            return FindFieldIndexByKey(fields, segment.SourceFieldKey);
-        }
-
-        return segment.SourceFieldIndex;
-    }
-
-    private static int FindFieldIndexByKey(IReadOnlyList<IGriddoFieldView> fields, string sourceFieldKey)
-    {
-        for (var i = 0; i < fields.Count; i++)
-        {
-            var key = GetFieldKey(fields[i]);
-            if (string.Equals(key, sourceFieldKey, StringComparison.OrdinalIgnoreCase))
-            {
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
-    private static string GetFieldKey(IGriddoFieldView field)
-    {
-        if (field is IGriddoFieldSourceMember sourceMember && !string.IsNullOrWhiteSpace(sourceMember.SourceMemberName))
-        {
-            return sourceMember.SourceMemberName;
-        }
-
-        return field.Header ?? string.Empty;
     }
 
     public bool TrySetValue(object recordSource, object? value) => false;
