@@ -646,6 +646,11 @@ public class CalibrationCurveControl : SkiaChartBaseControl
 
     private void DrawCalibrationPointLabels(SKCanvas canvas, SKRect plotRect, float markerRadiusPx)
     {
+        if (plotRect.Width <= 1f || plotRect.Height <= 1f)
+        {
+            return;
+        }
+
         var fontPx = (float)Math.Clamp(CalibrationPointLabelFontSize, 6d, 24d) * PlotUiScale;
         using var typeface = SKTypeface.FromFamilyName(null);
         using var font = new SKFont(typeface, fontPx);
@@ -762,6 +767,11 @@ public class CalibrationCurveControl : SkiaChartBaseControl
     /// <summary>True when the marker center lies inside an expanded "keep-out" disc overlapping the label rect.</summary>
     private static bool LabelRectIntrudesMarker(SKRect rect, float ax, float ay, float forbiddenRadiusPx)
     {
+        if (rect.Width <= 0 || rect.Height <= 0)
+        {
+            return false;
+        }
+
         var qx = Math.Clamp(ax, rect.Left, rect.Right);
         var qy = Math.Clamp(ay, rect.Top, rect.Bottom);
         var dx = ax - qx;
@@ -820,10 +830,26 @@ public class CalibrationCurveControl : SkiaChartBaseControl
 
     private static SKRect ClampRectToPlot(SKRect rect, SKRect plotRect, float margin)
     {
-        var w = rect.Width;
-        var h = rect.Height;
-        var left = Math.Clamp(rect.Left, plotRect.Left + margin, plotRect.Right - margin - w);
-        var top = Math.Clamp(rect.Top, plotRect.Top + margin, plotRect.Bottom - margin - h);
+        if (plotRect.Width <= 0 || plotRect.Height <= 0)
+        {
+            return rect;
+        }
+
+        var minX = plotRect.Left + margin;
+        var maxX = plotRect.Right - margin;
+        var minY = plotRect.Top + margin;
+        var maxY = plotRect.Bottom - margin;
+        if (maxX <= minX || maxY <= minY)
+        {
+            return SKRect.Create(plotRect.MidX, plotRect.MidY, 0, 0);
+        }
+
+        var w = Math.Min(rect.Width, maxX - minX);
+        var h = Math.Min(rect.Height, maxY - minY);
+        var maxLeft = maxX - w;
+        var maxTop = maxY - h;
+        var left = maxLeft < minX ? minX : Math.Clamp(rect.Left, minX, maxLeft);
+        var top = maxTop < minY ? minY : Math.Clamp(rect.Top, minY, maxTop);
         return SKRect.Create(left, top, w, h);
     }
 

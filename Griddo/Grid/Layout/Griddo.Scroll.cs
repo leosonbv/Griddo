@@ -57,9 +57,6 @@ public sealed partial class Griddo
         return Math.Max(0, scrollColsContent - scrollColsViewport);
     }
 
-    private double GetAlignedMaxFieldScrollForSlider(double rawMaxHorizontal, int firstFieldIndex) =>
-        FloorToCumulativeFieldScrollOffset(Math.Max(0, rawMaxHorizontal), firstFieldIndex);
-
     /// <summary>Snap scroll extent to whole-record offsets so the thumb maps to aligned rows.</summary>
     private double GetAlignedMaxVerticalScrollForSlider(double rawMaxVertical)
     {
@@ -71,7 +68,7 @@ public sealed partial class Griddo
             }
 
             return ShouldSnapVerticalScrollToFieldBorder(_verticalOffset)
-                ? GetAlignedMaxFieldScrollForSlider(rawMaxVertical, _fixedFieldCount)
+                ? Math.Max(0, rawMaxVertical)
                 : rawMaxVertical;
         }
 
@@ -87,7 +84,7 @@ public sealed partial class Griddo
         }
 
         return ShouldSnapVerticalScrollToRecordBorder(_verticalOffset)
-            ? FloorToRecordStep(rawMaxVertical, h)
+            ? Math.Max(0, rawMaxVertical)
             : rawMaxVertical;
     }
 
@@ -107,7 +104,7 @@ public sealed partial class Griddo
             }
 
             return ShouldSnapHorizontalScrollToRecordBorder(_horizontalOffset)
-                ? FloorToRecordStep(rawMaxHorizontal, h)
+                ? Math.Max(0, rawMaxHorizontal)
                 : rawMaxHorizontal;
         }
 
@@ -117,8 +114,18 @@ public sealed partial class Griddo
         }
 
         return ShouldSnapHorizontalScrollToFieldBorder(_horizontalOffset)
-            ? GetAlignedMaxFieldScrollForSlider(rawMaxHorizontal, _fixedFieldCount)
+            ? Math.Max(0, rawMaxHorizontal)
             : rawMaxHorizontal;
+    }
+
+    private static bool ShouldSnapToTrailingEdge(double offsetPx, double rawMax, double stepPx)
+    {
+        if (rawMax <= 1e-9 || stepPx <= 1e-9)
+        {
+            return false;
+        }
+
+        return offsetPx >= rawMax - stepPx * 0.5 + 1e-9;
     }
 
     /// <summary>
@@ -340,9 +347,13 @@ public sealed partial class Griddo
                 return clamped;
             }
 
-            var maxAligned = GetAlignedMaxFieldScrollForSlider(rawMax, _fixedFieldCount);
-            var snapped = FloorToCumulativeFieldScrollOffset(clamped, _fixedFieldCount);
-            return Math.Clamp(snapped, 0, maxAligned);
+            var tailStep = Fields.Count > _fixedFieldCount
+                ? GetFieldWidth(Fields.Count - 1)
+                : Math.Max(1, _viewportBodyHeight - GetFixedFieldsWidth());
+            var snapped = ShouldSnapToTrailingEdge(clamped, rawMax, tailStep)
+                ? rawMax
+                : FloorToCumulativeFieldScrollOffset(clamped, _fixedFieldCount);
+            return Math.Clamp(snapped, 0, rawMax);
         }
 
         if (Records.Count == 0 || _viewportBodyHeight <= 0)
@@ -363,9 +374,10 @@ public sealed partial class Griddo
             return clampedVertical;
         }
 
-        var maxAlignedVertical = FloorToRecordStep(rawMaxVertical, h);
-        var snappedVertical = FloorToRecordStep(clampedVertical, h);
-        return Math.Clamp(snappedVertical, 0, maxAlignedVertical);
+        var snappedVertical = ShouldSnapToTrailingEdge(clampedVertical, rawMaxVertical, h)
+            ? rawMaxVertical
+            : FloorToRecordStep(clampedVertical, h);
+        return Math.Clamp(snappedVertical, 0, rawMaxVertical);
     }
 
     /// <summary>
@@ -394,9 +406,10 @@ public sealed partial class Griddo
                 return clamped;
             }
 
-            var maxAligned = FloorToRecordStep(rawMax, h);
-            var snapped = FloorToRecordStep(clamped, h);
-            return Math.Clamp(snapped, 0, maxAligned);
+            var snapped = ShouldSnapToTrailingEdge(clamped, rawMax, h)
+                ? rawMax
+                : FloorToRecordStep(clamped, h);
+            return Math.Clamp(snapped, 0, rawMax);
         }
 
         if (Fields.Count == 0 || _viewportBodyWidth <= 0)
@@ -411,9 +424,13 @@ public sealed partial class Griddo
             return clampedHorizontal;
         }
 
-        var maxAlignedHorizontal = GetAlignedMaxFieldScrollForSlider(rawMaxHorizontal, _fixedFieldCount);
-        var snappedHorizontal = FloorToCumulativeFieldScrollOffset(clampedHorizontal, _fixedFieldCount);
-        return Math.Clamp(snappedHorizontal, 0, maxAlignedHorizontal);
+        var tailStep = Fields.Count > _fixedFieldCount
+            ? GetFieldWidth(Fields.Count - 1)
+            : GetScrollViewportWidth();
+        var snappedHorizontal = ShouldSnapToTrailingEdge(clampedHorizontal, rawMaxHorizontal, tailStep)
+            ? rawMaxHorizontal
+            : FloorToCumulativeFieldScrollOffset(clampedHorizontal, _fixedFieldCount);
+        return Math.Clamp(snappedHorizontal, 0, rawMaxHorizontal);
     }
 
     private void UpdateScrollBars()
