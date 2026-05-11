@@ -78,6 +78,14 @@ public class CalibrationCurveControl : SkiaChartBaseControl
         Color = new SKColor(150, 150, 150, 220)
     };
 
+    private readonly SKPaint _currentQuantifierGuidePaint = new()
+    {
+        IsAntialias = true,
+        Style = SKPaintStyle.Stroke,
+        StrokeWidth = 1.5f,
+        Color = new SKColor(28, 120, 55, 230)
+    };
+
     private readonly SKPaint _labelConnectorPaint = new()
     {
         IsAntialias = true,
@@ -193,6 +201,32 @@ public class CalibrationCurveControl : SkiaChartBaseControl
                 FrameworkPropertyMetadataOptions.AffectsRender,
                 OnCurveOverlayChanged));
 
+    public double CurrentQuantifierGuideX
+    {
+        get => (double)GetValue(CurrentQuantifierGuideXProperty);
+        set => SetValue(CurrentQuantifierGuideXProperty, value);
+    }
+
+    public static readonly DependencyProperty CurrentQuantifierGuideXProperty =
+        DependencyProperty.Register(
+            nameof(CurrentQuantifierGuideX),
+            typeof(double),
+            typeof(CalibrationCurveControl),
+            new FrameworkPropertyMetadata(double.NaN, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public double CurrentQuantifierGuideY
+    {
+        get => (double)GetValue(CurrentQuantifierGuideYProperty);
+        set => SetValue(CurrentQuantifierGuideYProperty, value);
+    }
+
+    public static readonly DependencyProperty CurrentQuantifierGuideYProperty =
+        DependencyProperty.Register(
+            nameof(CurrentQuantifierGuideY),
+            typeof(double),
+            typeof(CalibrationCurveControl),
+            new FrameworkPropertyMetadata(double.NaN, FrameworkPropertyMetadataOptions.AffectsRender));
+
     public event EventHandler<CalibrationPointEventArgs>? CalibrationPointToggled;
 
     /// <summary>
@@ -213,6 +247,8 @@ public class CalibrationCurveControl : SkiaChartBaseControl
         _fitPaint.StrokeWidth = 2f * s;
         _pointStrokePaint.StrokeWidth = Math.Max(0.5f, 1f * s);
         _originGuidePaint.StrokeWidth = Math.Max(0.5f, 1f * s);
+        _currentQuantifierGuidePaint.StrokeWidth = Math.Max(0.75f, 1.5f * s);
+        _currentQuantifierGuidePaint.PathEffect = SKPathEffect.CreateDash(new[] { 6f * s, 4f * s }, 0f);
         _labelConnectorPaint.StrokeWidth = Math.Max(1f, 2.25f * s);
     }
 
@@ -583,12 +619,18 @@ public class CalibrationCurveControl : SkiaChartBaseControl
     protected override void DrawOverlay(SKCanvas canvas, SKRect plotRect)
     {
         DrawOriginGuideLines(canvas, plotRect);
+        DrawCurrentQuantifierGuideLines(canvas, plotRect);
 
         _calibrationLabelHitRegions.Clear();
 
         var pr = 10f * PlotUiScale;
         foreach (var point in CalibrationPoints)
         {
+            if (point.PointKind == CalibrationPlotPointKind.CurrentSample)
+            {
+                continue;
+            }
+
             var px = ToPixelX(point.X, plotRect);
             var py = ToPixelY(point.Y, plotRect);
             var (fill, stroke) = ResolveCalibrationMarkerPaints(point);
@@ -893,6 +935,123 @@ public class CalibrationCurveControl : SkiaChartBaseControl
     /// <summary>
     /// Full-height line at x=0 and full-width line at y=0 across the plot when visible.
     /// </summary>
+    private void DrawCurrentQuantifierGuideLines(SKCanvas canvas, SKRect plotRect)
+    {
+        var guideX = CurrentQuantifierGuideX;
+        var guideY = CurrentQuantifierGuideY;
+        if (!double.IsFinite(guideX) || !double.IsFinite(guideY))
+        {
+            return;
+        }
+
+        var curve = GetCurveChartPoints();
+        if (curve.Count < 2)
+        {
+            return;
+        }
+
+        if (TryInterpolateCurveYAtX(curve, guideX, out var curveYAtGuideX))
+        {
+            var px = ToPixelX(guideX, plotRect);
+            var pyAxis = plotRect.Bottom;
+            var pyCurve = ToPixelY(curveYAtGuideX, plotRect);
+            canvas.DrawLine(px, pyAxis, px, pyCurve, _currentQuantifierGuidePaint);
+        }
+
+        if (TryInterpolateCurveXAtY(curve, guideY, guideX, out var curveXAtGuideY))
+        {
+            var pxAxis = plotRect.Left;
+            var pxCurve = ToPixelX(curveXAtGuideY, plotRect);
+            var py = ToPixelY(guideY, plotRect);
+            canvas.DrawLine(pxAxis, py, pxCurve, py, _currentQuantifierGuidePaint);
+        }
+    }
+
+    private IReadOnlyList<ChartPoint> GetCurveChartPoints()
+    {
+        if (CurveOverlayPoints is { Count: >= 2 } overlay)
+        {
+            return overlay;
+        }
+
+        return CalibrationPoints
+            .Where(static p => p.IsEnabled && p.PointKind == CalibrationPlotPointKind.CalibrationStandard)
+            .OrderBy(static p => p.X)
+            .Select(static p => new ChartPoint(p.X, p.Y))
+            .ToArray();
+    }
+
+    private static bool TryInterpolateCurveYAtX(IReadOnlyList<ChartPoint> curve, double x, out double y)
+    {
+        y = 0;
+        for (var i = 0; i < curve.Count - 1; i++)
+        {
+            var a = curve[i];
+            var b = curve[i + 1];
+            var minX = Math.Min(a.X, b.X);
+            var maxX = Math.Max(a.X, b.X);
+            if (x < minX - 1e-12 || x > maxX + 1e-12)
+            {
+                continue;
+            }
+
+            if (Math.Abs(b.X - a.X) <= 1e-12)
+            {
+                y = (a.Y + b.Y) * 0.5;
+                return true;
+            }
+
+            var t = (x - a.X) / (b.X - a.X);
+            y = a.Y + t * (b.Y - a.Y);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryInterpolateCurveXAtY(
+        IReadOnlyList<ChartPoint> curve,
+        double y,
+        double preferredX,
+        out double x)
+    {
+        x = double.NaN;
+        var found = false;
+        var bestDistance = double.PositiveInfinity;
+        for (var i = 0; i < curve.Count - 1; i++)
+        {
+            var a = curve[i];
+            var b = curve[i + 1];
+            var minY = Math.Min(a.Y, b.Y);
+            var maxY = Math.Max(a.Y, b.Y);
+            if (y < minY - 1e-12 || y > maxY + 1e-12)
+            {
+                continue;
+            }
+
+            double candidateX;
+            if (Math.Abs(b.Y - a.Y) <= 1e-12)
+            {
+                candidateX = (a.X + b.X) * 0.5;
+            }
+            else
+            {
+                var t = (y - a.Y) / (b.Y - a.Y);
+                candidateX = a.X + t * (b.X - a.X);
+            }
+
+            var distance = Math.Abs(candidateX - preferredX);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                x = candidateX;
+                found = true;
+            }
+        }
+
+        return found;
+    }
+
     private void DrawOriginGuideLines(SKCanvas canvas, SKRect plotRect)
     {
         if (CalibrationPoints.Count == 0)

@@ -15,12 +15,67 @@ public sealed partial class Griddo
         return Math.Floor(valuePx / recordHeightPx + 1e-9) * recordHeightPx;
     }
 
-    /// <summary>
-    /// When <see cref="VisibleRecordCount"/> is set, record height tracks viewport height (fewer rows than the slot count share the full height); snap scroll extent so the thumb maps to whole-record offsets.
-    /// </summary>
+    /// <summary>Largest cumulative field width at or below <paramref name="offsetPx"/> (scrollable columns only).</summary>
+    private double FloorToCumulativeFieldScrollOffset(double offsetPx, int firstFieldIndex)
+    {
+        var cumulative = 0.0;
+        var first = Math.Clamp(firstFieldIndex, 0, Fields.Count);
+        for (var c = first; c < Fields.Count; c++)
+        {
+            var w = GetFieldWidth(c);
+            if (cumulative + w > offsetPx + 1e-9)
+            {
+                break;
+            }
+
+            cumulative += w;
+        }
+
+        return cumulative;
+    }
+
+    private double GetTransposedRawMaxHorizontalScroll()
+    {
+        var fixedRecordsW = GetTransposeFixedRecordsWidth();
+        var scrollRecordsViewport = Math.Max(0, _viewportBodyWidth - fixedRecordsW);
+        var h = Records.Count > 0 ? GetRecordHeight(0) : 0;
+        var fr = GetEffectiveFixedRecordCount();
+        var scrollRecordsContent = Math.Max(0, Records.Count - fr) * h;
+        return Math.Max(0, scrollRecordsContent - scrollRecordsViewport);
+    }
+
+    private double GetTransposedRawMaxVerticalScroll()
+    {
+        var fixedColsH = GetFixedFieldsWidth();
+        var scrollColsViewport = Math.Max(0, _viewportBodyHeight - fixedColsH);
+        var scrollColsContent = 0.0;
+        for (var c = _fixedFieldCount; c < Fields.Count; c++)
+        {
+            scrollColsContent += GetFieldWidth(c);
+        }
+
+        return Math.Max(0, scrollColsContent - scrollColsViewport);
+    }
+
+    private double GetAlignedMaxFieldScrollForSlider(double rawMaxHorizontal, int firstFieldIndex) =>
+        FloorToCumulativeFieldScrollOffset(Math.Max(0, rawMaxHorizontal), firstFieldIndex);
+
+    /// <summary>Snap scroll extent to whole-record offsets so the thumb maps to aligned rows.</summary>
     private double GetAlignedMaxVerticalScrollForSlider(double rawMaxVertical)
     {
-        if (_visibleRecordCount <= 0 || Records.Count == 0 || _viewportBodyHeight <= 0)
+        if (_isTransposed)
+        {
+            if (Fields.Count == 0 || _viewportBodyHeight <= 0)
+            {
+                return rawMaxVertical;
+            }
+
+            return ShouldSnapVerticalScrollToFieldBorder(_verticalOffset)
+                ? GetAlignedMaxFieldScrollForSlider(rawMaxVertical, _fixedFieldCount)
+                : rawMaxVertical;
+        }
+
+        if (Records.Count == 0 || _viewportBodyHeight <= 0)
         {
             return rawMaxVertical;
         }
@@ -31,7 +86,238 @@ public sealed partial class Griddo
             return rawMaxVertical;
         }
 
-        return FloorToRecordStep(rawMaxVertical, h);
+        return ShouldSnapVerticalScrollToRecordBorder(_verticalOffset)
+            ? FloorToRecordStep(rawMaxVertical, h)
+            : rawMaxVertical;
+    }
+
+    private double GetAlignedMaxHorizontalScrollForSlider(double rawMaxHorizontal)
+    {
+        if (_isTransposed)
+        {
+            if (Records.Count == 0 || _viewportBodyWidth <= 0)
+            {
+                return rawMaxHorizontal;
+            }
+
+            var h = GetRecordHeight(0);
+            if (h < 1e-6)
+            {
+                return rawMaxHorizontal;
+            }
+
+            return ShouldSnapHorizontalScrollToRecordBorder(_horizontalOffset)
+                ? FloorToRecordStep(rawMaxHorizontal, h)
+                : rawMaxHorizontal;
+        }
+
+        if (Fields.Count == 0 || _viewportBodyWidth <= 0)
+        {
+            return rawMaxHorizontal;
+        }
+
+        return ShouldSnapHorizontalScrollToFieldBorder(_horizontalOffset)
+            ? GetAlignedMaxFieldScrollForSlider(rawMaxHorizontal, _fixedFieldCount)
+            : rawMaxHorizontal;
+    }
+
+    /// <summary>
+    /// True when the scrollable body shows exactly one scrollable row and that row is taller than the scroll viewport.
+    /// </summary>
+    private bool ShouldSnapVerticalScrollToRecordBorder(double offsetPx)
+    {
+        if (Records.Count == 0 || _viewportBodyHeight <= 0)
+        {
+            return true;
+        }
+
+        var h = GetRecordHeight(0);
+        if (h < 1e-6)
+        {
+            return true;
+        }
+
+        var fixedRecordCount = GetEffectiveFixedRecordCount();
+        var scrollViewportHeight = GetScrollRecordsViewportHeight();
+        if (scrollViewportHeight <= 0 || fixedRecordCount >= Records.Count)
+        {
+            return true;
+        }
+
+        var viewportTop = offsetPx;
+        var viewportBottom = offsetPx + scrollViewportHeight;
+        var visibleScrollRecords = 0;
+        for (var record = fixedRecordCount; record < Records.Count; record++)
+        {
+            var top = (record - fixedRecordCount) * h;
+            var bottom = top + h;
+            if (bottom <= viewportTop + 1e-9 || top >= viewportBottom - 1e-9)
+            {
+                continue;
+            }
+
+            visibleScrollRecords++;
+            if (visibleScrollRecords > 1)
+            {
+                return true;
+            }
+        }
+
+        if (visibleScrollRecords != 1)
+        {
+            return true;
+        }
+
+        return h <= scrollViewportHeight + 1e-9;
+    }
+
+    /// <summary>
+    /// True when the scrollable body shows exactly one scrollable column and that column is wider than the scroll viewport.
+    /// </summary>
+    private bool ShouldSnapHorizontalScrollToFieldBorder(double offsetPx)
+    {
+        if (Fields.Count <= _fixedFieldCount || _viewportBodyWidth <= 0)
+        {
+            return true;
+        }
+
+        var scrollViewportWidth = GetScrollViewportWidth();
+        if (scrollViewportWidth <= 0)
+        {
+            return true;
+        }
+
+        var viewportLeft = offsetPx;
+        var viewportRight = offsetPx + scrollViewportWidth;
+        var visibleScrollFields = 0;
+        double soleFieldWidth = 0;
+        var contentLeft = 0.0;
+        for (var col = _fixedFieldCount; col < Fields.Count; col++)
+        {
+            var width = GetFieldWidth(col);
+            var right = contentLeft + width;
+            if (right > viewportLeft + 1e-9 && contentLeft < viewportRight - 1e-9)
+            {
+                visibleScrollFields++;
+                soleFieldWidth = width;
+                if (visibleScrollFields > 1)
+                {
+                    return true;
+                }
+            }
+
+            contentLeft = right;
+        }
+
+        if (visibleScrollFields != 1)
+        {
+            return true;
+        }
+
+        return soleFieldWidth <= scrollViewportWidth + 1e-9;
+    }
+
+    /// <summary>
+    /// Transposed layout: horizontal scrolling walks records instead of fields.
+    /// </summary>
+    private bool ShouldSnapHorizontalScrollToRecordBorder(double offsetPx)
+    {
+        if (Records.Count == 0 || _viewportBodyWidth <= 0)
+        {
+            return true;
+        }
+
+        var h = GetRecordHeight(0);
+        if (h < 1e-6)
+        {
+            return true;
+        }
+
+        var fixedRecordsWidth = GetTransposeFixedRecordsWidth();
+        var scrollViewportWidth = Math.Max(0, _viewportBodyWidth - fixedRecordsWidth);
+        if (scrollViewportWidth <= 0)
+        {
+            return true;
+        }
+
+        var fixedRecordCount = GetEffectiveFixedRecordCount();
+        if (fixedRecordCount >= Records.Count)
+        {
+            return true;
+        }
+
+        var viewportLeft = offsetPx;
+        var viewportRight = offsetPx + scrollViewportWidth;
+        var visibleScrollRecords = 0;
+        for (var record = fixedRecordCount; record < Records.Count; record++)
+        {
+            var left = (record - fixedRecordCount) * h;
+            var right = left + h;
+            if (right <= viewportLeft + 1e-9 || left >= viewportRight - 1e-9)
+            {
+                continue;
+            }
+
+            visibleScrollRecords++;
+            if (visibleScrollRecords > 1)
+            {
+                return true;
+            }
+        }
+
+        if (visibleScrollRecords != 1)
+        {
+            return true;
+        }
+
+        return h <= scrollViewportWidth + 1e-9;
+    }
+
+    /// <summary>
+    /// Transposed layout: vertical scrolling walks fields instead of records.
+    /// </summary>
+    private bool ShouldSnapVerticalScrollToFieldBorder(double offsetPx)
+    {
+        if (Fields.Count <= _fixedFieldCount || _viewportBodyHeight <= 0)
+        {
+            return true;
+        }
+
+        var fixedFieldsHeight = GetFixedFieldsWidth();
+        var scrollViewportHeight = Math.Max(0, _viewportBodyHeight - fixedFieldsHeight);
+        if (scrollViewportHeight <= 0)
+        {
+            return true;
+        }
+
+        var viewportTop = offsetPx;
+        var viewportBottom = offsetPx + scrollViewportHeight;
+        var visibleScrollFields = 0;
+        double soleFieldHeight = 0;
+        var contentTop = 0.0;
+        for (var col = _fixedFieldCount; col < Fields.Count; col++)
+        {
+            var height = GetFieldWidth(col);
+            var bottom = contentTop + height;
+            if (bottom > viewportTop + 1e-9 && contentTop < viewportBottom - 1e-9)
+            {
+                visibleScrollFields++;
+                soleFieldHeight = height;
+                if (visibleScrollFields > 1)
+                {
+                    return true;
+                }
+            }
+
+            contentTop = bottom;
+        }
+
+        if (visibleScrollFields != 1)
+        {
+            return true;
+        }
+
+        return soleFieldHeight <= scrollViewportHeight + 1e-9;
     }
 
     /// <summary>
@@ -42,20 +328,26 @@ public sealed partial class Griddo
     {
         if (_isTransposed)
         {
-            return Math.Clamp(offsetPx, 0, _verticalScrollBar.Maximum);
+            if (Fields.Count == 0 || _viewportBodyHeight <= 0)
+            {
+                return Math.Clamp(offsetPx, 0, _verticalScrollBar.Maximum);
+            }
+
+            var rawMax = GetTransposedRawMaxVerticalScroll();
+            var clamped = Math.Clamp(offsetPx, 0, rawMax);
+            if (!ShouldSnapVerticalScrollToFieldBorder(offsetPx))
+            {
+                return clamped;
+            }
+
+            var maxAligned = GetAlignedMaxFieldScrollForSlider(rawMax, _fixedFieldCount);
+            var snapped = FloorToCumulativeFieldScrollOffset(clamped, _fixedFieldCount);
+            return Math.Clamp(snapped, 0, maxAligned);
         }
 
         if (Records.Count == 0 || _viewportBodyHeight <= 0)
         {
             return Math.Clamp(offsetPx, 0, _verticalScrollBar.Maximum);
-        }
-
-        // In normal mode, allow pixel-precise vertical scrolling so the last row
-        // can be brought fully/partially into view without a snapped blank band.
-        if (_visibleRecordCount <= 0)
-        {
-            var pixelMaxScroll = Math.Max(0, GetScrollableRecordsContentHeight() - GetScrollRecordsViewportHeight());
-            return Math.Clamp(offsetPx, 0, pixelMaxScroll);
         }
 
         var h = GetRecordHeight(0);
@@ -64,11 +356,64 @@ public sealed partial class Griddo
             return Math.Clamp(offsetPx, 0, _verticalScrollBar.Maximum);
         }
 
-        var rawMax = Math.Max(0, GetScrollableRecordsContentHeight() - GetScrollRecordsViewportHeight());
-        var clamped = Math.Clamp(offsetPx, 0, rawMax);
-        var maxAligned = FloorToRecordStep(rawMax, h);
-        var snapped = FloorToRecordStep(clamped, h);
-        return Math.Clamp(snapped, 0, maxAligned);
+        var rawMaxVertical = Math.Max(0, GetScrollableRecordsContentHeight() - GetScrollRecordsViewportHeight());
+        var clampedVertical = Math.Clamp(offsetPx, 0, rawMaxVertical);
+        if (!ShouldSnapVerticalScrollToRecordBorder(offsetPx))
+        {
+            return clampedVertical;
+        }
+
+        var maxAlignedVertical = FloorToRecordStep(rawMaxVertical, h);
+        var snappedVertical = FloorToRecordStep(clampedVertical, h);
+        return Math.Clamp(snappedVertical, 0, maxAlignedVertical);
+    }
+
+    /// <summary>
+    /// Keep horizontal scroll offset aligned to whole field-width steps so the left visible column border
+    /// always lands on the left edge of the scroll viewport.
+    /// </summary>
+    private double HarmonizeHorizontalScrollOffset(double offsetPx)
+    {
+        if (_isTransposed)
+        {
+            if (Records.Count == 0 || _viewportBodyWidth <= 0)
+            {
+                return Math.Clamp(offsetPx, 0, _horizontalScrollBar.Maximum);
+            }
+
+            var h = GetRecordHeight(0);
+            if (h < 1e-6)
+            {
+                return Math.Clamp(offsetPx, 0, _horizontalScrollBar.Maximum);
+            }
+
+            var rawMax = GetTransposedRawMaxHorizontalScroll();
+            var clamped = Math.Clamp(offsetPx, 0, rawMax);
+            if (!ShouldSnapHorizontalScrollToRecordBorder(offsetPx))
+            {
+                return clamped;
+            }
+
+            var maxAligned = FloorToRecordStep(rawMax, h);
+            var snapped = FloorToRecordStep(clamped, h);
+            return Math.Clamp(snapped, 0, maxAligned);
+        }
+
+        if (Fields.Count == 0 || _viewportBodyWidth <= 0)
+        {
+            return Math.Clamp(offsetPx, 0, _horizontalScrollBar.Maximum);
+        }
+
+        var rawMaxHorizontal = Math.Max(0, GetScrollableContentWidth() - GetScrollViewportWidth());
+        var clampedHorizontal = Math.Clamp(offsetPx, 0, rawMaxHorizontal);
+        if (!ShouldSnapHorizontalScrollToFieldBorder(offsetPx))
+        {
+            return clampedHorizontal;
+        }
+
+        var maxAlignedHorizontal = GetAlignedMaxFieldScrollForSlider(rawMaxHorizontal, _fixedFieldCount);
+        var snappedHorizontal = FloorToCumulativeFieldScrollOffset(clampedHorizontal, _fixedFieldCount);
+        return Math.Clamp(snappedHorizontal, 0, maxAlignedHorizontal);
     }
 
     private void UpdateScrollBars()
@@ -86,17 +431,13 @@ public sealed partial class Griddo
             var h = Records.Count > 0 ? GetRecordHeight(0) : GetMinimumRecordThickness() * ContentScale;
             var fr = GetEffectiveFixedRecordCount();
             var scrollRecordsContent = Math.Max(0, Records.Count - fr) * h;
-            maxHorizontal = Math.Max(0, scrollRecordsContent - scrollRecordsViewport);
+            var rawMaxHorizontal = Math.Max(0, scrollRecordsContent - scrollRecordsViewport);
+            maxHorizontal = GetAlignedMaxHorizontalScrollForSlider(rawMaxHorizontal);
 
             var fixedColsH = GetFixedFieldsWidth();
             var scrollColsViewport = Math.Max(0, _viewportBodyHeight - fixedColsH);
-            var scrollColsContent = 0.0;
-            for (var c = _fixedFieldCount; c < Fields.Count; c++)
-            {
-                scrollColsContent += GetFieldWidth(c);
-            }
-
-            maxVertical = Math.Max(0, scrollColsContent - scrollColsViewport);
+            var rawMaxVertical = GetTransposedRawMaxVerticalScroll();
+            maxVertical = GetAlignedMaxVerticalScrollForSlider(rawMaxVertical);
             horizontalLargeChange = Math.Max(1, scrollRecordsViewport);
             verticalLargeChange = Math.Max(1, scrollColsViewport);
             verticalSmallChange = 16;
@@ -107,7 +448,8 @@ public sealed partial class Griddo
             var scrollContent = GetScrollableContentWidth();
             var scrollRecordsViewport = GetScrollRecordsViewportHeight();
             var scrollRecordsContent = GetScrollableRecordsContentHeight();
-            maxHorizontal = Math.Max(0, scrollContent - scrollViewport);
+            var rawMaxHorizontal = Math.Max(0, scrollContent - scrollViewport);
+            maxHorizontal = GetAlignedMaxHorizontalScrollForSlider(rawMaxHorizontal);
             var rawMaxVertical = Math.Max(0, scrollRecordsContent - scrollRecordsViewport);
             maxVertical = GetAlignedMaxVerticalScrollForSlider(rawMaxVertical);
             horizontalLargeChange = Math.Max(1, _viewportBodyWidth);
@@ -129,46 +471,47 @@ public sealed partial class Griddo
 
         SetHorizontalOffset(_horizontalOffset);
         SetVerticalOffset(_verticalOffset);
-        SnapVerticalScrollForVisibleRecordFitMode();
+        SnapScrollOffsetsToRuler();
     }
 
-    /// <summary>After viewport/record height changes, re-align scroll offset to whole records so the scroll band starts on a record boundary.</summary>
-    private void SnapVerticalScrollForVisibleRecordFitMode()
+    /// <summary>After viewport or ruler size changes, re-align scroll offsets to row/column boundaries.</summary>
+    private void SnapScrollOffsetsToRuler()
     {
-        if (_isTransposed)
+        var nextHorizontal = HarmonizeHorizontalScrollOffset(_horizontalOffset);
+        var nextVertical = HarmonizeVerticalScrollOffset(_verticalOffset);
+        var changed = false;
+
+        if (Math.Abs(nextHorizontal - _horizontalOffset) > double.Epsilon)
         {
-            return;
+            _horizontalOffset = nextHorizontal;
+            if (Math.Abs(_horizontalScrollBar.Value - nextHorizontal) > double.Epsilon)
+            {
+                _horizontalScrollBar.Value = nextHorizontal;
+            }
+
+            changed = true;
         }
 
-        if (_visibleRecordCount <= 0 || Records.Count == 0 || _viewportBodyHeight <= 0)
+        if (Math.Abs(nextVertical - _verticalOffset) > double.Epsilon)
         {
-            return;
+            _verticalOffset = nextVertical;
+            if (Math.Abs(_verticalScrollBar.Value - nextVertical) > double.Epsilon)
+            {
+                _verticalScrollBar.Value = nextVertical;
+            }
+
+            changed = true;
         }
 
-        var h = GetRecordHeight(0);
-        if (h < 1e-6)
+        if (changed)
         {
-            return;
+            InvalidateVisual();
         }
-
-        var v = HarmonizeVerticalScrollOffset(_verticalOffset);
-        if (Math.Abs(v - _verticalOffset) < double.Epsilon)
-        {
-            return;
-        }
-
-        _verticalOffset = v;
-        if (Math.Abs(_verticalScrollBar.Value - v) > double.Epsilon)
-        {
-            _verticalScrollBar.Value = v;
-        }
-
-        InvalidateVisual();
     }
 
     private void SetHorizontalOffset(double value)
     {
-        var clamped = Math.Clamp(value, 0, _horizontalScrollBar.Maximum);
+        var clamped = HarmonizeHorizontalScrollOffset(value);
         if (Math.Abs(clamped - _horizontalOffset) < double.Epsilon)
         {
             return;
@@ -202,7 +545,13 @@ public sealed partial class Griddo
 
     private void OnHorizontalScrollChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        _horizontalOffset = e.NewValue;
+        var harmonized = HarmonizeHorizontalScrollOffset(e.NewValue);
+        _horizontalOffset = harmonized;
+        if (Math.Abs(e.NewValue - harmonized) > double.Epsilon && Math.Abs(_horizontalScrollBar.Value - harmonized) > double.Epsilon)
+        {
+            _horizontalScrollBar.Value = harmonized;
+        }
+
         InvalidateVisual();
     }
 

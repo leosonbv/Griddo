@@ -152,19 +152,22 @@ internal static class PlotTitleHtmlBuilder
                 pointIndex,
                 segment,
                 field);
-            var valueRow = pointRow ?? recordSource;
             string rendered;
             if (plainOverride != null)
             {
                 rendered = BuildStyledText(WebUtility.HtmlEncode(plainOverride), field);
             }
+            else if (pointRow is null)
+            {
+                rendered = string.Empty;
+            }
             else if (field.IsHtml)
             {
-                rendered = field.GetValue(valueRow)?.ToString() ?? string.Empty;
+                rendered = field.GetValue(pointRow)?.ToString() ?? string.Empty;
             }
             else
             {
-                var value = field.GetValue(valueRow);
+                var value = field.GetValue(pointRow);
                 rendered = BuildStyledText(WebUtility.HtmlEncode(field.FormatValue(value)), field);
             }
 

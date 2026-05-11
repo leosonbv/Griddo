@@ -91,4 +91,14 @@ public interface ICalibrationSignalProvider
     /// When non-null, values are read with <see cref="IGriddoFieldView.GetValue"/> from this object instead of the grid row.
     /// </summary>
     object? TryGetCalibrationPointLabelRecord(object recordSource, int pointIndex) => null;
+
+    /// <summary>
+    /// Optional current-quantifier sample position for axis-to-curve guide lines on calibration plots.
+    /// </summary>
+    bool TryGetCurrentQuantifierGuide(object recordSource, out double x, out double y)
+    {
+        x = 0;
+        y = 0;
+        return false;
+    }
 }

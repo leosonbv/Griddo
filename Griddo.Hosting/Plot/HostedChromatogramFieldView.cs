@@ -79,6 +79,7 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
 
     public string SourceObjectName { get; }
     public string SourceMemberName { get; }
+    public IChromatogramSignalProvider ChromatogramSignalProvider => _signalProvider;
     public double Width { get; }
     public bool Fill { get; set; }
     public bool IsHtml => false;

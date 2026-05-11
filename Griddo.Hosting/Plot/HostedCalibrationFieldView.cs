@@ -137,6 +137,7 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
                 chart.SuppressAutomaticViewportFitOnNextPointsChange = willHavePoints;
                 BindCalibrationSeries(chart, recordSource);
                 ApplyCurveOverlay(chart, recordSource);
+                ApplyCurrentQuantifierGuide(chart, recordSource);
                 var restored = HostedPlotViewportMemory.TryRestore(recordSource, plotKey, chart, ViewportZoomRecordKey);
                 if (!restored && chart.Points.Count > 0)
                 {
@@ -158,6 +159,7 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
                 chart.SuppressAutomaticViewportFitOnNextPointsChange = chart.Points.Count > 0;
                 BindCalibrationSeries(chart, recordSource);
                 ApplyCurveOverlay(chart, recordSource);
+                ApplyCurrentQuantifierGuide(chart, recordSource);
             }
             finally
             {
@@ -302,6 +304,7 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
             chart.SuppressAutomaticViewportFitOnNextPointsChange = chart.Points.Count > 0;
             BindCalibrationSeries(chart, recordSource);
             ApplyCurveOverlay(chart, recordSource);
+            ApplyCurrentQuantifierGuide(chart, recordSource);
         }
         finally
         {
@@ -361,6 +364,19 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
         chart.CurveOverlayPoints = samples is not { Count: >= 2 }
             ? null
             : samples.Select(static p => new ChartPoint(p.X, p.Y)).ToArray();
+    }
+
+    private void ApplyCurrentQuantifierGuide(CalibrationCurveControl chart, object recordSource)
+    {
+        if (_signalProvider.TryGetCurrentQuantifierGuide(recordSource, out var x, out var y))
+        {
+            chart.CurrentQuantifierGuideX = x;
+            chart.CurrentQuantifierGuideY = y;
+            return;
+        }
+
+        chart.CurrentQuantifierGuideX = double.NaN;
+        chart.CurrentQuantifierGuideY = double.NaN;
     }
 
     private void ApplyChartSettings(SkiaChartBaseControl chart, object? recordSource)

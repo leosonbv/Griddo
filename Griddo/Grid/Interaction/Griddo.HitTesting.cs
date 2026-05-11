@@ -134,6 +134,54 @@ public sealed partial class Griddo
             }
         }
 
+        return HitTestOversizedScrollFieldHeaderDivider(point);
+    }
+
+    /// <summary>
+    /// When a scrollable column is wider than the viewport, its true divider can sit off-screen.
+    /// Treat the visible header edge as the resize grip for that column.
+    /// </summary>
+    private int HitTestOversizedScrollFieldHeaderDivider(Point point)
+    {
+        if (point.Y < 0 || point.Y > ScaledFieldHeaderHeight)
+        {
+            return -1;
+        }
+
+        var scrollViewportWidth = GetScrollViewportWidth();
+        if (scrollViewportWidth <= 0)
+        {
+            return -1;
+        }
+
+        var clientRight = _recordHeaderWidth + _viewportBodyWidth;
+        for (var col = _fixedFieldCount; col < Fields.Count; col++)
+        {
+            var width = GetFieldWidth(col);
+            if (width <= scrollViewportWidth + 1e-9)
+            {
+                continue;
+            }
+
+            var headerRect = GetFieldHeaderRect(col);
+            if (headerRect.IsEmpty || headerRect.Right <= _recordHeaderWidth + 1e-9)
+            {
+                continue;
+            }
+
+            var visibleRight = Math.Min(headerRect.Right, clientRight);
+            if (visibleRight <= headerRect.Left + 1e-9)
+            {
+                continue;
+            }
+
+            if (point.X >= headerRect.Left - ScaledResizeGrip
+                && Math.Abs(point.X - visibleRight) <= ScaledResizeGrip)
+            {
+                return col;
+            }
+        }
+
         return -1;
     }
 
@@ -201,6 +249,54 @@ public sealed partial class Griddo
             var h = GetRecordHeight(record);
             var sep = topRel + h;
             if (Math.Abs(bodyY - sep) <= ScaledResizeGrip)
+            {
+                return record;
+            }
+        }
+
+        return HitTestOversizedRecordHeaderDivider(point);
+    }
+
+    /// <summary>
+    /// When a row is taller than the viewport, its divider can sit below the visible body.
+    /// Treat the visible record-header edge as the resize grip for that row.
+    /// </summary>
+    private int HitTestOversizedRecordHeaderDivider(Point point)
+    {
+        if (point.X < 0 || point.X > _recordHeaderWidth)
+        {
+            return -1;
+        }
+
+        var scrollViewportHeight = GetScrollRecordsViewportHeight();
+        if (scrollViewportHeight <= 0)
+        {
+            return -1;
+        }
+
+        var clientBottom = ScaledFieldHeaderHeight + _viewportBodyHeight;
+        for (var record = 0; record < Records.Count; record++)
+        {
+            var height = GetRecordHeight(record);
+            if (height <= scrollViewportHeight + 1e-9)
+            {
+                continue;
+            }
+
+            var headerRect = GetRecordHeaderRect(record);
+            if (headerRect.IsEmpty || headerRect.Bottom <= ScaledFieldHeaderHeight + 1e-9)
+            {
+                continue;
+            }
+
+            var visibleBottom = Math.Min(headerRect.Bottom, clientBottom);
+            if (visibleBottom <= headerRect.Top + 1e-9)
+            {
+                continue;
+            }
+
+            if (point.Y >= headerRect.Top - ScaledResizeGrip
+                && Math.Abs(point.Y - visibleBottom) <= ScaledResizeGrip)
             {
                 return record;
             }

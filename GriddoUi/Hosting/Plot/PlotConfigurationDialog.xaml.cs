@@ -17,6 +17,7 @@ public partial class PlotConfigurationDialog : Window
 {
     private readonly IPlotFieldLayoutTarget _initial;
     private readonly IReadOnlyList<IGriddoFieldView> _allFields;
+    private readonly IReadOnlyList<IGriddoFieldView> _pointLabelFields;
     private readonly List<PlotTitleFieldEditRecord> _rows = [];
     private readonly Action<PlotFieldDialogResult>? _previewApply;
 
@@ -25,11 +26,13 @@ public partial class PlotConfigurationDialog : Window
     public PlotConfigurationDialog(
         IPlotFieldLayoutTarget initial,
         IReadOnlyList<IGriddoFieldView> allFields,
-        Action<PlotFieldDialogResult>? previewApply = null)
+        Action<PlotFieldDialogResult>? previewApply = null,
+        IReadOnlyList<IGriddoFieldView>? pointLabelFields = null)
     {
         InitializeComponent();
         _initial = initial;
         _allFields = allFields;
+        _pointLabelFields = pointLabelFields ?? allFields;
         _previewApply = previewApply;
         BuildTitleFieldGridFields();
         BuildPointLabelFieldGridFields();
@@ -140,31 +143,22 @@ public partial class PlotConfigurationDialog : Window
         var savedByIndex = _initial.CalibrationPointLabelSegments
             .GroupBy(s => s.SourceFieldIndex)
             .ToDictionary(g => g.Key, g => g.First());
-        var excluded = new HashSet<int>();
-        for (var sourceFieldIndex = 0; sourceFieldIndex < _allFields.Count; sourceFieldIndex++)
-        {
-            var field = _allFields[sourceFieldIndex];
-            if (ReferenceEquals(field, _initial) || field is IHtmlFieldLayoutTarget || field is IPlotFieldLayoutTarget)
-            {
-                excluded.Add(sourceFieldIndex);
-            }
-        }
 
         var configuredOrder = _initial.CalibrationPointLabelSegments
-            .Select(ResolveSourceFieldIndex)
-            .Where(i => i >= 0 && i < _allFields.Count && !excluded.Contains(i))
+            .Select(ResolvePointLabelFieldIndex)
+            .Where(i => i >= 0 && i < _pointLabelFields.Count)
             .Distinct()
             .ToList();
-        var remainingOrder = Enumerable.Range(0, _allFields.Count)
-            .Where(i => !excluded.Contains(i) && !configuredOrder.Contains(i))
+        var remainingOrder = Enumerable.Range(0, _pointLabelFields.Count)
+            .Where(i => !configuredOrder.Contains(i))
             .ToList();
         var orderedSourceIndices = configuredOrder.Concat(remainingOrder);
 
         foreach (var sourceFieldIndex in orderedSourceIndices)
         {
-            var field = _allFields[sourceFieldIndex];
+            var field = _pointLabelFields[sourceFieldIndex];
 
-            var sourceFieldKey = ResolveSourceFieldKey(sourceFieldIndex);
+            var sourceFieldKey = ResolvePointLabelFieldKey(sourceFieldIndex);
             var saved =
                 (!string.IsNullOrWhiteSpace(sourceFieldKey) && savedByKey.TryGetValue(sourceFieldKey, out var byKey))
                     ? byKey
@@ -294,8 +288,8 @@ public partial class PlotConfigurationDialog : Window
             .OfType<PlotTitleFieldEditRecord>()
             .Select(r =>
             {
-                var field = r.SourceFieldIndex >= 0 && r.SourceFieldIndex < _allFields.Count
-                    ? _allFields[r.SourceFieldIndex]
+                var field = r.SourceFieldIndex >= 0 && r.SourceFieldIndex < _pointLabelFields.Count
+                    ? _pointLabelFields[r.SourceFieldIndex]
                     : null;
                 var sourceObjectName = field is IGriddoFieldSourceObject so ? so.SourceObjectName.Trim() : string.Empty;
                 var propertyName = field is IGriddoFieldSourceMember sm ? sm.SourceMemberName.Trim() : string.Empty;
@@ -384,6 +378,16 @@ public partial class PlotConfigurationDialog : Window
             segment.SourceFieldIndex);
     }
 
+    private int ResolvePointLabelFieldIndex(PlotTitleSegmentConfiguration segment)
+    {
+        return HostingSegmentFieldResolver.Resolve(
+            _pointLabelFields,
+            segment.SourceObjectName,
+            segment.PropertyName,
+            segment.SourceFieldKey,
+            segment.SourceFieldIndex);
+    }
+
     private string ResolveSourceFieldKey(int sourceFieldIndex)
     {
         if (sourceFieldIndex < 0 || sourceFieldIndex >= _allFields.Count)
@@ -392,6 +396,22 @@ public partial class PlotConfigurationDialog : Window
         }
 
         var field = _allFields[sourceFieldIndex];
+        if (field is IGriddoFieldSourceMember sourceMember && !string.IsNullOrWhiteSpace(sourceMember.SourceMemberName))
+        {
+            return sourceMember.SourceMemberName;
+        }
+
+        return !string.IsNullOrWhiteSpace(field.Header) ? field.Header : sourceFieldIndex.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private string ResolvePointLabelFieldKey(int sourceFieldIndex)
+    {
+        if (sourceFieldIndex < 0 || sourceFieldIndex >= _pointLabelFields.Count)
+        {
+            return string.Empty;
+        }
+
+        var field = _pointLabelFields[sourceFieldIndex];
         if (field is IGriddoFieldSourceMember sourceMember && !string.IsNullOrWhiteSpace(sourceMember.SourceMemberName))
         {
             return sourceMember.SourceMemberName;
