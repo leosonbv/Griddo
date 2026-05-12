@@ -98,6 +98,7 @@ public sealed partial class Griddo
             }
 
             _hostedCells.Remove(key);
+            _hostedCellPayloadFingerprints.Remove(key);
         }
 
         foreach (var addr in needed)
@@ -124,9 +125,21 @@ public sealed partial class Griddo
             var recordData = Records[addr.RecordIndex];
             var isSelected = _selectedCells.Contains(addr);
             var isCurrent = _currentCell == addr;
-            hostedField.UpdateHostElement(host, recordData, isSelected, isCurrent);
-            hostedField.ApplyPlotDirectEditOption(host, HostedPlotDirectEditOnMouseDown);
-            hostedField.SyncHostedUiScale(host, ContentScale);
+            var scale = ContentScale;
+            var plotDirectEdit = HostedPlotDirectEditOnMouseDown;
+
+            if (!_hostedCellPayloadFingerprints.TryGetValue(addr, out var lastPush)
+                || !ReferenceEquals(lastPush.Record, recordData)
+                || lastPush.Selected != isSelected
+                || lastPush.Current != isCurrent
+                || lastPush.Scale != scale
+                || lastPush.HostedPlotDirectEdit != plotDirectEdit)
+            {
+                hostedField.UpdateHostElement(host, recordData, isSelected, isCurrent);
+                hostedField.ApplyPlotDirectEditOption(host, plotDirectEdit);
+                hostedField.SyncHostedUiScale(host, scale);
+                _hostedCellPayloadFingerprints[addr] = (recordData, isSelected, isCurrent, scale, plotDirectEdit);
+            }
 
             var rect = GetCellRect(addr.RecordIndex, addr.FieldIndex);
             if (rect.IsEmpty)
@@ -259,5 +272,6 @@ public sealed partial class Griddo
         }
 
         _hostedCells.Clear();
+        _hostedCellPayloadFingerprints.Clear();
     }
 }

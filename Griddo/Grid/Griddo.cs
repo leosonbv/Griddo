@@ -97,6 +97,9 @@ public sealed partial class Griddo : FrameworkElement
         Focusable = false
     };
     private readonly Dictionary<GriddoCellAddress, FrameworkElement> _hostedCells = [];
+
+    /// <summary>Deduplicates redundant hosted-element pushes while scrolling/layout stabilize.</summary>
+    private readonly Dictionary<GriddoCellAddress, (object? Record, bool Selected, bool Current, double Scale, bool HostedPlotDirectEdit)> _hostedCellPayloadFingerprints = [];
     private readonly List<GriddoSortDescriptor> _sortDescriptors = [];
     private readonly ScrollBar _horizontalScrollBar;
     private readonly ScrollBar _verticalScrollBar;

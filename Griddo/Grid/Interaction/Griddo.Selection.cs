@@ -494,10 +494,16 @@ public sealed partial class Griddo
         finalOrder.AddRange(unselected.Skip(insertionPoint));
 
         var currentOrder = Enumerable.Range(0, count).ToList();
+        var itemPositionOfKey = new int[count];
+        for (var p = 0; p < currentOrder.Count; p++)
+        {
+            itemPositionOfKey[currentOrder[p]] = p;
+        }
+
         for (var newIndex = 0; newIndex < finalOrder.Count; newIndex++)
         {
             var item = finalOrder[newIndex];
-            var currentIndex = currentOrder.IndexOf(item);
+            var currentIndex = itemPositionOfKey[item];
             if (currentIndex < 0 || currentIndex == newIndex)
             {
                 continue;
@@ -506,6 +512,10 @@ public sealed partial class Griddo
             mover((currentIndex, newIndex));
             currentOrder.RemoveAt(currentIndex);
             currentOrder.Insert(newIndex, item);
+            for (var j = 0; j < currentOrder.Count; j++)
+            {
+                itemPositionOfKey[currentOrder[j]] = j;
+            }
         }
 
         var oldToNew = new int[count];

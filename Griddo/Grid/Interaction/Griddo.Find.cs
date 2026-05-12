@@ -97,11 +97,14 @@ public sealed partial class Griddo
         }
 
         var normalizedNeedle = _findText.Trim();
-        for (var record = 0; record < Records.Count; record++)
+        // Inner-most iterate rows once per column so Fields[col] is resolved fewer times than row-major GetCellFindText.
+        for (var col = 0; col < Fields.Count; col++)
         {
-            for (var col = 0; col < Fields.Count; col++)
+            var field = Fields[col];
+            for (var record = 0; record < Records.Count; record++)
             {
-                var text = GetCellFindText(record, col);
+                var value = field.GetValue(Records[record]);
+                var text = field.FormatValue(value) ?? string.Empty;
                 if (text.IndexOf(normalizedNeedle, StringComparison.CurrentCultureIgnoreCase) >= 0)
                 {
                     _findMatchedCells.Add(new GriddoCellAddress(record, col));
