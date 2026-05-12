@@ -314,7 +314,14 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
 
     private void BindCalibrationSeries(CalibrationCurveControl chart, object recordSource)
     {
-        var raw = _signalProvider.GetPoints(recordSource).ToList();
+        var raw = _signalProvider.GetPoints(recordSource);
+        var fitMode = _signalProvider.GetFitMode(recordSource);
+
+        if (TryReuseCalibrationPoints(chart, raw, fitMode))
+        {
+            return;
+        }
+
         List<CalibrationPoint> points = [];
         for (var i = 0; i < raw.Count; i++)
         {
@@ -355,7 +362,67 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
         }
 
         chart.CalibrationPoints = points;
-        chart.FitMode = _signalProvider.GetFitMode(recordSource);
+        chart.FitMode = fitMode;
+    }
+
+    private bool TryReuseCalibrationPoints(
+        CalibrationCurveControl chart,
+        IReadOnlyList<CalibrationSignalPoint> raw,
+        CalibrationFitMode fitMode)
+    {
+        var existing = chart.CalibrationPoints;
+        if (existing.Count != raw.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < raw.Count; i++)
+        {
+            var p = raw[i];
+            var e = existing[i];
+            if (p.X != e.X || p.Y != e.Y || p.Enabled != e.IsEnabled || p.PointKind != e.PointKind)
+            {
+                return false;
+            }
+        }
+
+        if (chart.FitMode != fitMode)
+        {
+            chart.FitMode = fitMode;
+        }
+
+        var useRichLabels = ShowCalibrationPointLabels
+            && CalibrationPointLabelSegments.Count > 0
+            && CalibrationPointLabelSegments.Exists(static s => s.Enabled);
+
+        if (useRichLabels)
+        {
+            return false;
+        }
+
+        if (!ShowCalibrationPointLabels)
+        {
+            for (var i = 0; i < raw.Count; i++)
+            {
+                if (!string.IsNullOrEmpty(existing[i].LabelPlainText))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        for (var i = 0; i < raw.Count; i++)
+        {
+            var expected = raw[i].DefaultLabel ?? string.Empty;
+            if (!string.Equals(existing[i].LabelPlainText ?? string.Empty, expected, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private void ApplyCurveOverlay(CalibrationCurveControl chart, object recordSource)

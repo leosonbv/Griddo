@@ -85,7 +85,8 @@ public sealed partial class Griddo
         Process.Start(new ProcessStartInfo
         {
             FileName = tempFile,
-            UseShellExecute = true
+            UseShellExecute = true,
+            CreateNoWindow = true,
         });
     }
 

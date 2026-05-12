@@ -113,6 +113,18 @@ public class CalibrationCurveControl : SkiaChartBaseControl
 
     private readonly List<(CalibrationPoint Point, SKRect Bounds)> _calibrationLabelHitRegions = [];
 
+    private int _calibrationPointLabelOrderVersion;
+    private int _cachedCalibrationPointLabelOrderSeq = -1;
+    private int[]? _cachedCalibrationPointLabelDrawOrder;
+
+    private int _labelPlacementGeomSeq = -1;
+    private float _cachedLabelGeomUiScale;
+    private float _cachedLabelGeomMarkerR;
+    private float _cachedLabelPad;
+    private SKRect _cachedLabelPlotRect;
+    private List<SKPoint>? _cachedCurvePxForLabels;
+    private List<(float X, float Y, float Radius)>? _cachedMarkerObstaclesForLabels;
+
     private int _curveLineMutationSeq;
     private int _cachedCurveLineSeq = -1;
     private ChartPoint[] _cachedResolvedCurvePoints = [];
@@ -771,12 +783,11 @@ public class CalibrationCurveControl : SkiaChartBaseControl
         var pad = 4f * PlotUiScale;
         var borderMargin = 6f * PlotUiScale;
         var placementBounds = GetLabelPlacementBounds(plotRect, borderMargin);
-        var curvePx = BuildCurvePolylinePixels(plotRect);
-        var markerObstacles = BuildCalibrationMarkerObstacles(plotRect, markerRadiusPx, pad);
+        var (curvePx, markerObstacles) = GetOrBuildLabelPlacementGeometry(plotRect, markerRadiusPx, pad);
         var occupied = new List<SKRect>();
 
-        var indices = Enumerable.Range(0, CalibrationPoints.Count).OrderByDescending(i => CalibrationPoints[i].Y).ToList();
-        foreach (var i in indices)
+        var labelOrder = GetOrBuildCalibrationLabelDrawOrder();
+        foreach (var i in labelOrder)
         {
             var point = CalibrationPoints[i];
             var text = point.LabelPlainText?.Trim() ?? string.Empty;
@@ -831,6 +842,69 @@ public class CalibrationCurveControl : SkiaChartBaseControl
             _calibrationLabelHitRegions.Add((point, OutsetRect(r, hitPad, hitPad)));
         }
     }
+
+    private int[] GetOrBuildCalibrationLabelDrawOrder()
+    {
+        var count = CalibrationPoints.Count;
+        if (count == 0)
+        {
+            return [];
+        }
+
+        if (_cachedCalibrationPointLabelDrawOrder is { Length: var n }
+            && n == count
+            && _cachedCalibrationPointLabelOrderSeq == _calibrationPointLabelOrderVersion)
+        {
+            return _cachedCalibrationPointLabelDrawOrder;
+        }
+
+        var indices = new int[count];
+        for (var i = 0; i < count; i++)
+        {
+            indices[i] = i;
+        }
+
+        Array.Sort(indices, (a, b) => CalibrationPoints[b].Y.CompareTo(CalibrationPoints[a].Y));
+
+        _cachedCalibrationPointLabelDrawOrder = indices;
+        _cachedCalibrationPointLabelOrderSeq = _calibrationPointLabelOrderVersion;
+        return indices;
+    }
+
+    private (IReadOnlyList<SKPoint> curvePx, IReadOnlyList<(float X, float Y, float Radius)> obstacles) GetOrBuildLabelPlacementGeometry(
+        SKRect plotRect,
+        float markerRadiusPx,
+        float pad)
+    {
+        var ui = (float)PlotUiScale;
+        if (_labelPlacementGeomSeq == _curveLineMutationSeq
+            && RectApproxEquals(plotRect, _cachedLabelPlotRect)
+            && Math.Abs(markerRadiusPx - _cachedLabelGeomMarkerR) < 0.01f
+            && Math.Abs(pad - _cachedLabelPad) < 0.01f
+            && Math.Abs(ui - _cachedLabelGeomUiScale) < 0.001f
+            && _cachedCurvePxForLabels is not null
+            && _cachedMarkerObstaclesForLabels is not null)
+        {
+            return (_cachedCurvePxForLabels, _cachedMarkerObstaclesForLabels);
+        }
+
+        var curvePx = BuildCurvePolylinePixels(plotRect);
+        var obstacles = BuildCalibrationMarkerObstacles(plotRect, markerRadiusPx, pad);
+        _cachedCurvePxForLabels = curvePx;
+        _cachedMarkerObstaclesForLabels = obstacles;
+        _labelPlacementGeomSeq = _curveLineMutationSeq;
+        _cachedLabelPlotRect = plotRect;
+        _cachedLabelGeomMarkerR = markerRadiusPx;
+        _cachedLabelPad = pad;
+        _cachedLabelGeomUiScale = ui;
+        return (curvePx, obstacles);
+    }
+
+    private static bool RectApproxEquals(SKRect a, SKRect b) =>
+        Math.Abs(a.Left - b.Left) < 0.5f
+        && Math.Abs(a.Top - b.Top) < 0.5f
+        && Math.Abs(a.Right - b.Right) < 0.5f
+        && Math.Abs(a.Bottom - b.Bottom) < 0.5f;
 
     private SKRect GetLabelPlacementBounds(SKRect plotRect, float margin)
     {
@@ -1464,6 +1538,7 @@ public class CalibrationCurveControl : SkiaChartBaseControl
     private static void OnCalibrationChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var c = (CalibrationCurveControl)d;
+        c._calibrationPointLabelOrderVersion++;
         c.BumpResolvedCurveLineCache();
         c.SyncChartPointsFromCalibration();
         if (c._suppressCalibrationViewportFitDepth == 0)
