@@ -7,6 +7,39 @@ namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
+    private bool _fieldFillWidthCacheValid;
+    private int _cachedTotalFieldFillWeight;
+    private double _cachedNonFillFieldWidthSum;
+
+    private void InvalidateFieldFillWidthCache() => _fieldFillWidthCacheValid = false;
+
+    private void EnsureFieldFillWidthCache()
+    {
+        if (_fieldFillWidthCacheValid)
+        {
+            return;
+        }
+
+        var totalFill = 0;
+        var nonFill = 0.0;
+        for (var i = 0; i < Fields.Count; i++)
+        {
+            var fillW = GetFieldFillWeight(Fields[i]);
+            if (fillW <= 0)
+            {
+                nonFill += GetFieldBaseWidth(i);
+            }
+            else
+            {
+                totalFill += fillW;
+            }
+        }
+
+        _cachedTotalFieldFillWeight = totalFill;
+        _cachedNonFillFieldWidthSum = nonFill;
+        _fieldFillWidthCacheValid = true;
+    }
+
     private double GetFieldWidth(int fieldIndex)
     {
         if (fieldIndex >= 0 && fieldIndex < Fields.Count)
@@ -24,33 +57,16 @@ public sealed partial class Griddo
     private static int GetFieldFillWeight(IGriddoFieldView field) =>
         field.FieldFill <= 0 ? 0 : Math.Min(field.FieldFill, 3);
 
-    private int GetTotalFieldFillWeight()
-    {
-        var total = 0;
-        for (var i = 0; i < Fields.Count; i++)
-        {
-            total += GetFieldFillWeight(Fields[i]);
-        }
-
-        return total;
-    }
-
     private double GetWeightedFillFieldWidth(int fillWeight)
     {
-        var totalFillWeight = GetTotalFieldFillWeight();
+        EnsureFieldFillWidthCache();
+        var totalFillWeight = _cachedTotalFieldFillWeight;
         if (totalFillWeight <= 0)
         {
             return MinFieldWidth * ContentScale;
         }
 
-        var nonFillWidth = 0.0;
-        for (var i = 0; i < Fields.Count; i++)
-        {
-            if (GetFieldFillWeight(Fields[i]) <= 0)
-            {
-                nonFillWidth += GetFieldBaseWidth(i);
-            }
-        }
+        var nonFillWidth = _cachedNonFillFieldWidthSum;
 
         var viewportAlongFieldAxis = IsBodyTransposed ? _viewportBodyHeight : _viewportBodyWidth;
         return GridFieldWidthService.ResolveWeightedFillFieldWidth(
@@ -82,6 +98,7 @@ public sealed partial class Griddo
 
         var field = Fields[fieldIndex];
         _fieldWidthOverrides[field] = Math.Max(MinFieldWidth, screenPixelWidth / ContentScale);
+        InvalidateFieldFillWidthCache();
         UpdateScrollBars();
     }
 
@@ -118,6 +135,7 @@ public sealed partial class Griddo
         }
 
         _fieldWidthOverrides.Clear();
+        InvalidateFieldFillWidthCache();
         UpdateScrollBars();
         InvalidateMeasure();
         InvalidateVisual();

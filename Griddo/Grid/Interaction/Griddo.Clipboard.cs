@@ -242,6 +242,15 @@ public sealed partial class Griddo
         var minCol = _selectedCells.Min(c => c.FieldIndex);
         var maxCol = _selectedCells.Max(c => c.FieldIndex);
 
+        var selectedInBounds = new HashSet<GriddoCellAddress>();
+        foreach (var c in _selectedCells)
+        {
+            if (c.RecordIndex >= minRecord && c.RecordIndex <= maxRecord && c.FieldIndex >= minCol && c.FieldIndex <= maxCol)
+            {
+                selectedInBounds.Add(c);
+            }
+        }
+
         var lines = new List<string>();
         var tableHtml = new StringBuilder();
         tableHtml.Append(
@@ -274,7 +283,7 @@ public sealed partial class Griddo
             for (var col = minCol; col <= maxCol; col++)
             {
                 var address = new GriddoCellAddress(record, col);
-                if (!_selectedCells.Contains(address))
+                if (!selectedInBounds.Contains(address))
                 {
                     values.Add(string.Empty);
                     tableHtml.Append("<td></td>");

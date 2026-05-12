@@ -79,6 +79,15 @@ public sealed partial class Griddo : FrameworkElement
     private readonly Dictionary<IGriddoFieldView, double> _fieldWidthOverrides = [];
     /// <summary>Grid field indices that should not receive initial sample auto-width (e.g. width restored from persistence).</summary>
     private readonly HashSet<IGriddoFieldView> _suppressInitialAutoWidthFields = [];
+    private Pen? _cachedGridLinePen;
+    private Brush? _cachedGridLinePenBrush;
+    private double _cachedGridLinePenThickness = double.NaN;
+    private Pen? _cachedFixedFieldRightPen;
+    private Brush? _cachedFixedFieldRightPenBrush;
+    private double _cachedFixedFieldRightPenThickness = double.NaN;
+    private Pen? _cachedFixedRecordBottomPen;
+    private Brush? _cachedFixedRecordBottomPenBrush;
+    private double _cachedFixedRecordBottomPenThickness = double.NaN;
     private readonly GriddoTextEditSession _editSession = new();
     private ContextMenu? _activeEditOptionsMenu;
     private readonly VisualCollection _children;
@@ -637,6 +646,7 @@ public sealed partial class Griddo : FrameworkElement
         _verticalScrollBar.Background = HeaderBackground;
         _verticalScrollBar.Foreground = HeaderForeground;
 
+        InvalidateCachedMetricPens();
         InvalidateVisual();
     }
 
@@ -717,6 +727,7 @@ public sealed partial class Griddo : FrameworkElement
             }
 
             _contentScale = v;
+            InvalidateFieldFillWidthCache();
             UpdateRecordHeaderWidth();
             InvalidateMeasure();
             InvalidateVisual();
@@ -790,6 +801,11 @@ public sealed partial class Griddo : FrameworkElement
     {
         _ = sender;
         _ = e;
+        if (ReferenceEquals(sender, Fields))
+        {
+            InvalidateFieldFillWidthCache();
+        }
+
         if (_suspendGridCollectionChanged > 0)
         {
             return;

@@ -197,6 +197,10 @@ internal static class PlotTitleHtmlBuilder
               + "</tbody></table>";
     }
 
+    private static readonly Regex HtmlTableRowRegex = new("<tr[^>]*>(.*?)</tr>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
+    private static readonly Regex HtmlTableCellRegex = new("<td[^>]*>(.*?)</td>", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
     private static readonly Regex HtmlTagStripRegex = new("<[^>]+>", RegexOptions.Compiled);
 
     /// <summary>Flattens plot title HTML (especially table rows) to newline-separated plain text for Skia overlays.</summary>
@@ -212,7 +216,7 @@ internal static class PlotTitleHtmlBuilder
             return HtmlDecodeStripTags(html);
         }
 
-        var rows = Regex.Matches(html, "<tr[^>]*>(.*?)</tr>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        var rows = HtmlTableRowRegex.Matches(html);
         if (rows.Count == 0)
         {
             return HtmlDecodeStripTags(html);
@@ -222,7 +226,7 @@ internal static class PlotTitleHtmlBuilder
         foreach (Match row in rows)
         {
             var rowHtml = row.Groups[1].Value;
-            var cells = Regex.Matches(rowHtml, "<td[^>]*>(.*?)</td>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            var cells = HtmlTableCellRegex.Matches(rowHtml);
             if (cells.Count >= 2)
             {
                 var parts = new List<string>();

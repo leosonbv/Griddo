@@ -113,6 +113,36 @@ public class CalibrationCurveControl : SkiaChartBaseControl
 
     private readonly List<(CalibrationPoint Point, SKRect Bounds)> _calibrationLabelHitRegions = [];
 
+    private int _curveLineMutationSeq;
+    private int _cachedCurveLineSeq = -1;
+    private ChartPoint[] _cachedResolvedCurvePoints = [];
+
+    private void BumpResolvedCurveLineCache() => _curveLineMutationSeq++;
+
+    private ChartPoint[] GetOrBuildResolvedCurvePoints()
+    {
+        if (_cachedCurveLineSeq == _curveLineMutationSeq)
+        {
+            return _cachedResolvedCurvePoints;
+        }
+
+        if (CurveOverlayPoints is { Count: >= 2 } overlay)
+        {
+            _cachedResolvedCurvePoints = overlay is ChartPoint[] arr ? arr : overlay.ToArray();
+        }
+        else
+        {
+            _cachedResolvedCurvePoints = CalibrationPoints
+                .Where(static p => p.IsEnabled && p.PointKind == CalibrationPlotPointKind.CalibrationStandard)
+                .OrderBy(static p => p.X)
+                .Select(static p => new ChartPoint(p.X, p.Y))
+                .ToArray();
+        }
+
+        _cachedCurveLineSeq = _curveLineMutationSeq;
+        return _cachedResolvedCurvePoints;
+    }
+
     private int _suppressCalibrationViewportFitDepth;
 
     /// <summary>
@@ -343,6 +373,7 @@ public class CalibrationCurveControl : SkiaChartBaseControl
             return;
         }
 
+        BumpResolvedCurveLineCache();
         nearest.IsEnabled = !nearest.IsEnabled;
         CalibrationPointToggled?.Invoke(this, new CalibrationPointEventArgs(nearest));
         RequestRender();
@@ -362,14 +393,8 @@ public class CalibrationCurveControl : SkiaChartBaseControl
     protected override void DrawSeries(SKCanvas canvas, IReadOnlyList<ChartPoint> points, SKRect plotRect)
     {
         _ = points;
-        IReadOnlyList<ChartPoint> line = CurveOverlayPoints is { Count: >= 2 } overlay
-            ? overlay
-            : CalibrationPoints
-                .Where(static p => p.IsEnabled && p.PointKind == CalibrationPlotPointKind.CalibrationStandard)
-                .OrderBy(static p => p.X)
-                .Select(static p => new ChartPoint(p.X, p.Y))
-                .ToArray();
-        if (line.Count < 2)
+        var line = GetOrBuildResolvedCurvePoints();
+        if (line.Length < 2)
         {
             return;
         }
@@ -990,19 +1015,13 @@ public class CalibrationCurveControl : SkiaChartBaseControl
 
     private List<SKPoint> BuildCurvePolylinePixels(SKRect plotRect)
     {
-        var line = CurveOverlayPoints is { Count: >= 2 } overlay
-            ? overlay
-            : CalibrationPoints
-                .Where(static p => p.IsEnabled && p.PointKind == CalibrationPlotPointKind.CalibrationStandard)
-                .OrderBy(static p => p.X)
-                .Select(static p => new ChartPoint(p.X, p.Y))
-                .ToArray();
-        if (line.Count < 2)
+        var line = GetOrBuildResolvedCurvePoints();
+        if (line.Length < 2)
         {
             return [];
         }
 
-        List<SKPoint> pts = new(line.Count);
+        List<SKPoint> pts = new(line.Length);
         foreach (var p in line)
         {
             pts.Add(new SKPoint(ToPixelX(p.X, plotRect), ToPixelY(p.Y, plotRect)));
@@ -1246,16 +1265,8 @@ public class CalibrationCurveControl : SkiaChartBaseControl
 
     private IReadOnlyList<ChartPoint> GetCurveChartPoints()
     {
-        if (CurveOverlayPoints is { Count: >= 2 } overlay)
-        {
-            return overlay;
-        }
-
-        return CalibrationPoints
-            .Where(static p => p.IsEnabled && p.PointKind == CalibrationPlotPointKind.CalibrationStandard)
-            .OrderBy(static p => p.X)
-            .Select(static p => new ChartPoint(p.X, p.Y))
-            .ToArray();
+        var pts = GetOrBuildResolvedCurvePoints();
+        return pts.Length >= 2 ? pts : Array.Empty<ChartPoint>();
     }
 
     private static bool TryInterpolateCurveYAtX(IReadOnlyList<ChartPoint> curve, double x, out double y)
@@ -1453,6 +1464,7 @@ public class CalibrationCurveControl : SkiaChartBaseControl
     private static void OnCalibrationChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var c = (CalibrationCurveControl)d;
+        c.BumpResolvedCurveLineCache();
         c.SyncChartPointsFromCalibration();
         if (c._suppressCalibrationViewportFitDepth == 0)
         {
@@ -1473,6 +1485,7 @@ public class CalibrationCurveControl : SkiaChartBaseControl
     {
         _ = e;
         var c = (CalibrationCurveControl)d;
+        c.BumpResolvedCurveLineCache();
         if (c._suppressCalibrationViewportFitDepth == 0)
         {
             c.FitViewportToCalibrationPoints();

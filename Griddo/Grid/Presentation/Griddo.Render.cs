@@ -9,6 +9,67 @@ namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
+    private void InvalidateCachedMetricPens()
+    {
+        _cachedGridLinePen = null;
+        _cachedGridLinePenBrush = null;
+        _cachedGridLinePenThickness = double.NaN;
+        _cachedFixedFieldRightPen = null;
+        _cachedFixedFieldRightPenBrush = null;
+        _cachedFixedFieldRightPenThickness = double.NaN;
+        _cachedFixedRecordBottomPen = null;
+        _cachedFixedRecordBottomPenBrush = null;
+        _cachedFixedRecordBottomPenThickness = double.NaN;
+    }
+
+    private Pen ResolveGridLinePen()
+    {
+        var thickness = GridPenThickness;
+        var brush = GridLineBrush;
+        if (_cachedGridLinePen is null
+            || !ReferenceEquals(_cachedGridLinePenBrush, brush)
+            || Math.Abs(_cachedGridLinePenThickness - thickness) > 1e-9)
+        {
+            _cachedGridLinePen = new Pen(brush, thickness);
+            _cachedGridLinePenBrush = brush;
+            _cachedGridLinePenThickness = thickness;
+        }
+
+        return _cachedGridLinePen;
+    }
+
+    private Pen ResolveFixedFieldRightPen()
+    {
+        var thickness = GridPenThickness;
+        var brush = FixedFieldRightBorderBrush;
+        if (_cachedFixedFieldRightPen is null
+            || !ReferenceEquals(_cachedFixedFieldRightPenBrush, brush)
+            || Math.Abs(_cachedFixedFieldRightPenThickness - thickness) > 1e-9)
+        {
+            _cachedFixedFieldRightPen = new Pen(brush, thickness);
+            _cachedFixedFieldRightPenBrush = brush;
+            _cachedFixedFieldRightPenThickness = thickness;
+        }
+
+        return _cachedFixedFieldRightPen;
+    }
+
+    private Pen ResolveFixedRecordBottomPen()
+    {
+        var thickness = GridPenThickness;
+        var brush = FixedRecordBottomBorderBrush;
+        if (_cachedFixedRecordBottomPen is null
+            || !ReferenceEquals(_cachedFixedRecordBottomPenBrush, brush)
+            || Math.Abs(_cachedFixedRecordBottomPenThickness - thickness) > 1e-9)
+        {
+            _cachedFixedRecordBottomPen = new Pen(brush, thickness);
+            _cachedFixedRecordBottomPenBrush = brush;
+            _cachedFixedRecordBottomPenThickness = thickness;
+        }
+
+        return _cachedFixedRecordBottomPen;
+    }
+
     private bool ShouldShowSelectionVisuals()
     {
         return !HideSelectionWhenGridLosesFocus || IsKeyboardFocusWithin;
@@ -38,7 +99,7 @@ public sealed partial class Griddo
         var isSelectedHeader = ShouldShowSelectionVisuals() && IsFieldHeaderMarkedSelected(col) && ShowFieldHeaderSelectionColoring;
         var headerBackground = isSelectedHeader ? HeaderSelectionBackground : HeaderBackground;
         dc.DrawRectangle(headerBackground, null, rect);
-        var pen = new Pen(GridLineBrush, GridPenThickness);
+        var pen = ResolveGridLinePen();
         // Top edge of header strip is drawn once in DrawOuterWorksheetFrame (matches DrawLine rasterization for scroll fields).
         dc.DrawLine(pen, rect.TopRight, rect.BottomRight);
         if (col == 0)
@@ -74,7 +135,7 @@ public sealed partial class Griddo
         if (_fixedFieldCount > 0 && col == _fixedFieldCount - 1)
         {
             dc.DrawLine(
-                new Pen(FixedFieldRightBorderBrush, GridPenThickness),
+                ResolveFixedFieldRightPen(),
                 new Point(rect.Right, rect.Top),
                 new Point(rect.Right, rect.Bottom));
         }
@@ -141,12 +202,11 @@ public sealed partial class Griddo
         var rect = new Rect(x, y, cellW, cellH);
         var address = new GriddoCellAddress(record, col);
         var mergedRenderRect = GetMergedRecordCellRect(record, col, rect);
+        var mergeBand = Fields[col] as IGriddoRecordMergeBandView;
         var mergedWithPrevEarly = !IsBodyTransposed
-            && Fields[col] is IGriddoRecordMergeBandView earlyMergeBand
-            && earlyMergeBand.IsMergedWithPreviousRecord(Records, record);
+            && mergeBand?.IsMergedWithPreviousRecord(Records, record) == true;
         var mergedWithNextEarly = !IsBodyTransposed
-            && Fields[col] is IGriddoRecordMergeBandView earlyMergeBandNext
-            && earlyMergeBandNext.IsMergedWithNextRecord(Records, record);
+            && mergeBand?.IsMergedWithNextRecord(Records, record) == true;
         var isMergedBandCellEarly = mergedWithPrevEarly || mergedWithNextEarly;
         var mergedPaintRectEarly = isMergedBandCellEarly ? mergedRenderRect : rect;
         var isMergedRenderCarrier = true;
@@ -175,17 +235,17 @@ public sealed partial class Griddo
         if ((!isMergedBandCellEarly || isMergedRenderCarrier) && !isHostedCellEditing && ShowCellSelectionColoring && ShouldShowSelectionVisuals())
         {
             var drawSelection = _selectedCells.Contains(address);
-            if (!IsBodyTransposed && Fields[col] is IGriddoRecordMergeBandView)
+            if (mergeBand is not null && !IsBodyTransposed)
             {
                 drawSelection = false;
                 var top = record;
-                while (top > 0 && Fields[col] is IGriddoRecordMergeBandView m0 && m0.IsMergedWithPreviousRecord(Records, top))
+                while (top > 0 && mergeBand.IsMergedWithPreviousRecord(Records, top))
                 {
                     top--;
                 }
 
                 var bottom = record;
-                while (bottom < Records.Count - 1 && Fields[col] is IGriddoRecordMergeBandView m1 && m1.IsMergedWithNextRecord(Records, bottom))
+                while (bottom < Records.Count - 1 && mergeBand.IsMergedWithNextRecord(Records, bottom))
                 {
                     bottom++;
                 }
@@ -207,34 +267,31 @@ public sealed partial class Griddo
             }
         }
 
-        var mergeBand = Fields[col] as IGriddoRecordMergeBandView;
-        var mergedWithPrev = !IsBodyTransposed
-            && mergeBand?.IsMergedWithPreviousRecord(Records, record) == true;
-        var mergedWithNext = !IsBodyTransposed
-            && mergeBand?.IsMergedWithNextRecord(Records, record) == true;
+        var mergedWithPrev = mergedWithPrevEarly;
+        var mergedWithNext = mergedWithNextEarly;
+        var gridPen = ResolveGridLinePen();
         if (!mergedWithPrev && !mergedWithNext)
         {
-            dc.DrawRectangle(null, new Pen(GridLineBrush, GridPenThickness), rect);
+            dc.DrawRectangle(null, gridPen, rect);
         }
         else
         {
-            var pen = new Pen(GridLineBrush, GridPenThickness);
-            dc.DrawLine(pen, rect.TopLeft, rect.BottomLeft);
-            dc.DrawLine(pen, rect.TopRight, rect.BottomRight);
+            dc.DrawLine(gridPen, rect.TopLeft, rect.BottomLeft);
+            dc.DrawLine(gridPen, rect.TopRight, rect.BottomRight);
             if (!mergedWithPrev)
             {
-                dc.DrawLine(pen, rect.TopLeft, rect.TopRight);
+                dc.DrawLine(gridPen, rect.TopLeft, rect.TopRight);
             }
 
             if (!mergedWithNext)
             {
-                dc.DrawLine(pen, rect.BottomLeft, rect.BottomRight);
+                dc.DrawLine(gridPen, rect.BottomLeft, rect.BottomRight);
             }
         }
         if (!IsBodyTransposed && _fixedFieldCount > 0 && col == _fixedFieldCount - 1)
         {
             dc.DrawLine(
-                new Pen(FixedFieldRightBorderBrush, GridPenThickness),
+                ResolveFixedFieldRightPen(),
                 new Point(rect.Right, rect.Top),
                 new Point(rect.Right, rect.Bottom));
         }
@@ -242,7 +299,7 @@ public sealed partial class Griddo
         if (IsBodyTransposed && _fixedFieldCount > 0 && col == _fixedFieldCount - 1)
         {
             dc.DrawLine(
-                new Pen(FixedFieldRightBorderBrush, GridPenThickness),
+                ResolveFixedFieldRightPen(),
                 new Point(rect.Left, rect.Bottom),
                 new Point(rect.Right, rect.Bottom));
         }
@@ -603,7 +660,7 @@ public sealed partial class Griddo
         var recordHeaderClip = new Rect(0, ScaledFieldHeaderHeight, _recordHeaderWidth, _viewportBodyHeight);
         dc.PushClip(new RectangleGeometry(recordHeaderClip));
         {
-            var recordHeaderPen = new Pen(GridLineBrush, GridPenThickness);
+            var recordHeaderPen = ResolveGridLinePen();
             ForEachVisibleRecord(record =>
             {
                 var recordHeight = GetRecordHeight(record);
@@ -657,7 +714,7 @@ public sealed partial class Griddo
             var isSelectedRecordHeader = ShouldShowSelectionVisuals() && IsRecordHeaderMarkedSelected(record) && ShowRecordHeaderSelectionColoring;
             var recordHeaderBackground = isSelectedRecordHeader ? HeaderSelectionBackground : HeaderBackground;
             dc.DrawRectangle(recordHeaderBackground, null, rr);
-            var pen = new Pen(GridLineBrush, GridPenThickness);
+            var pen = ResolveGridLinePen();
             dc.DrawLine(pen, rr.TopLeft, rr.BottomLeft);
             dc.DrawLine(pen, rr.TopRight, rr.BottomRight);
             var visibleRect = Rect.Intersect(rr, clipIntersect);
@@ -723,7 +780,7 @@ public sealed partial class Griddo
             var isSelectedHeader = ShouldShowSelectionVisuals() && IsFieldHeaderMarkedSelected(col) && ShowFieldHeaderSelectionColoring;
             var headerBackground = isSelectedHeader ? HeaderSelectionBackground : HeaderBackground;
             dc.DrawRectangle(headerBackground, null, rr);
-            var pen = new Pen(GridLineBrush, GridPenThickness);
+            var pen = ResolveGridLinePen();
             dc.DrawLine(pen, rr.TopLeft, rr.TopRight);
             dc.DrawLine(pen, rr.BottomLeft, rr.BottomRight);
             var headerLabel = Fields[col] is IGriddoFieldTitleView titleView && !string.IsNullOrWhiteSpace(titleView.AbbreviatedHeader)
@@ -885,7 +942,7 @@ public sealed partial class Griddo
             return;
         }
 
-        var pen = new Pen(GridLineBrush, GridPenThickness);
+        var pen = ResolveGridLinePen();
         var topRight = Math.Max(0, ActualWidth - EffectiveVerticalScrollBarThickness);
         var stripBottom = ScaledFieldHeaderHeight + Math.Max(0, _viewportBodyHeight);
         var layoutBottom = Math.Max(0, ActualHeight - EffectiveHorizontalScrollBarThickness);
@@ -1082,7 +1139,7 @@ public sealed partial class Griddo
                 return;
             }
 
-            var transposePen = new Pen(FixedFieldRightBorderBrush, GridPenThickness);
+            var transposePen = ResolveFixedFieldRightPen();
             dc.DrawLine(
                 transposePen,
                 new Point(xLine, ScaledFieldHeaderHeight),
@@ -1108,7 +1165,7 @@ public sealed partial class Griddo
             return;
         }
 
-        var normalPen = new Pen(FixedRecordBottomBorderBrush, GridPenThickness);
+        var normalPen = ResolveFixedRecordBottomPen();
         dc.DrawLine(normalPen, new Point(_recordHeaderWidth, yLine), new Point(_recordHeaderWidth + _viewportBodyWidth, yLine));
     }
     private void DrawCurrentCellOverlay(DrawingContext dc)
@@ -1756,7 +1813,7 @@ public sealed partial class Griddo
             dc.DrawRectangle(HeaderBackground, null, bottomRightRect);
         }
 
-        var pen = new Pen(GridLineBrush, GridPenThickness);
+        var pen = ResolveGridLinePen();
 
         if (ShowVerticalScrollBar)
         {
