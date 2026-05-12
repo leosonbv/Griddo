@@ -6,7 +6,7 @@ using Griddo.Fields.Attributes;
 
 namespace Griddo.Fields;
 
-public sealed class GriddoEnumFieldView<TEnum> : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoDynamicFieldColorView, IGriddoFieldWrapView
+public sealed class GriddoEnumFieldView<TEnum> : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoDynamicFieldColorView, IGriddoFieldWrapView, IGriddoFieldAlignmentView
     where TEnum : struct, Enum
 {
     private readonly Func<object, TEnum> _valueGetter;
@@ -19,13 +19,13 @@ public sealed class GriddoEnumFieldView<TEnum> : IGriddoFieldView, IGriddoFieldS
         double width,
         Func<object, TEnum> valueGetter,
         Func<object, TEnum, bool> valueSetter,
-        bool fill = false,
+        int fieldFill = 0,
         string? sourceMemberName = null,
         string? sourceObjectName = null)
     {
         Header = header;
         Width = width;
-        Fill = fill;
+        FieldFill = fieldFill;
         SourceMemberName = sourceMemberName ?? string.Empty;
         SourceObjectName = sourceObjectName ?? string.Empty;
         _valueGetter = valueGetter;
@@ -47,9 +47,9 @@ public sealed class GriddoEnumFieldView<TEnum> : IGriddoFieldView, IGriddoFieldS
     public string SourceMemberName { get; }
     public string SourceObjectName { get; }
     public double Width { get; }
-    public bool Fill { get; set; }
+    public int FieldFill { get; set; }
     public bool IsHtml => false;
-    public TextAlignment ContentAlignment => TextAlignment.Left;
+    public TextAlignment ContentAlignment { get; set; } = TextAlignment.Left;
     public IGriddoCellEditor Editor => _editor;
 
     public object? GetValue(object recordSource) => _valueGetter(recordSource);
@@ -92,7 +92,7 @@ public sealed class GriddoEnumFieldView<TEnum> : IGriddoFieldView, IGriddoFieldS
     }
 }
 
-public sealed class GriddoFlagsFieldView<TEnum> : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoDynamicFieldColorView, IGriddoFieldWrapView
+public sealed class GriddoFlagsFieldView<TEnum> : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoDynamicFieldColorView, IGriddoFieldWrapView, IGriddoFieldAlignmentView
     where TEnum : struct, Enum
 {
     private readonly Func<object, TEnum> _valueGetter;
@@ -105,7 +105,7 @@ public sealed class GriddoFlagsFieldView<TEnum> : IGriddoFieldView, IGriddoField
         double width,
         Func<object, TEnum> valueGetter,
         Func<object, TEnum, bool> valueSetter,
-        bool fill = false,
+        int fieldFill = 0,
         string? sourceMemberName = null,
         string? sourceObjectName = null)
     {
@@ -116,7 +116,7 @@ public sealed class GriddoFlagsFieldView<TEnum> : IGriddoFieldView, IGriddoField
 
         Header = header;
         Width = width;
-        Fill = fill;
+        FieldFill = fieldFill;
         SourceMemberName = sourceMemberName ?? string.Empty;
         SourceObjectName = sourceObjectName ?? string.Empty;
         _valueGetter = valueGetter;
@@ -138,9 +138,9 @@ public sealed class GriddoFlagsFieldView<TEnum> : IGriddoFieldView, IGriddoField
     public string SourceMemberName { get; }
     public string SourceObjectName { get; }
     public double Width { get; }
-    public bool Fill { get; set; }
+    public int FieldFill { get; set; }
     public bool IsHtml => false;
-    public TextAlignment ContentAlignment => TextAlignment.Left;
+    public TextAlignment ContentAlignment { get; set; } = TextAlignment.Left;
     public IGriddoCellEditor Editor => _editor;
 
     public object? GetValue(object recordSource) => _valueGetter(recordSource);

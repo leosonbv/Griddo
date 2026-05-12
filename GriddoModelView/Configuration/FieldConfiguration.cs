@@ -4,7 +4,7 @@ public sealed class FieldConfiguration
 {
     public int SourceFieldIndex { get; set; }
     public string SourceFieldKey { get; set; } = string.Empty;
-    public bool Fill { get; set; }
+    public int FieldFill { get; set; }
     public bool Visible { get; set; }
     public double Width { get; set; }
     public int SortPriority { get; set; }

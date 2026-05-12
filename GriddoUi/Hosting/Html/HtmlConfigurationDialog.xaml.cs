@@ -400,7 +400,7 @@ public partial class HtmlConfigurationDialog : Window
 
         public string Header { get; set; } = "Value";
         public double Width => 260;
-        public bool Fill { get; set; }
+        public int FieldFill { get; set; }
         public bool IsHtml => false;
         public TextAlignment ContentAlignment => TextAlignment.Left;
         public IGriddoCellEditor Editor => _editor;

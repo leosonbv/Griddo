@@ -74,7 +74,7 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
     public string SourceObjectName { get; }
     public string SourceMemberName { get; }
     public double Width { get; }
-    public bool Fill { get; set; }
+    public int FieldFill { get; set; }
     public bool IsHtml => false;
     public TextAlignment ContentAlignment { get; }
     public IGriddoCellEditor Editor { get; }
@@ -381,10 +381,26 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
 
     private void ApplyChartSettings(SkiaChartBaseControl chart, object? recordSource)
     {
+        var xTitle = XAxisTitle;
+        var yTitle = YAxisTitle;
+        if (recordSource is not null
+            && _signalProvider.TryGetAxisTitles(recordSource, out var providerXTitle, out var providerYTitle))
+        {
+            if (!string.IsNullOrWhiteSpace(providerXTitle))
+            {
+                xTitle = providerXTitle;
+            }
+
+            if (!string.IsNullOrWhiteSpace(providerYTitle))
+            {
+                yTitle = providerYTitle;
+            }
+        }
+
         chart.ChartTitle = PlotTitleHtmlBuilder.BuildTitleHtml(recordSource, _allFieldsAccessor, TitleSegments);
         chart.ShowChartTitle = ShowTitle;
-        chart.AxisLabelX = ShowXAxisTitle ? XAxisTitle : string.Empty;
-        chart.AxisLabelY = ShowYAxisTitle ? YAxisTitle : string.Empty;
+        chart.AxisLabelX = ShowXAxisTitle ? xTitle : string.Empty;
+        chart.AxisLabelY = ShowYAxisTitle ? yTitle : string.Empty;
         chart.ChartLabel = Label;
         chart.AxisLabelPrecisionX = Math.Clamp(XAxisLabelPrecision, 0, 10);
         chart.AxisLabelPrecisionY = Math.Clamp(YAxisLabelPrecision, 0, 10);

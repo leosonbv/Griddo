@@ -93,6 +93,16 @@ public interface ICalibrationSignalProvider
     object? TryGetCalibrationPointLabelRecord(object recordSource, int pointIndex) => null;
 
     /// <summary>
+    /// Optional axis titles for calibration plots (e.g. ISTD-normalized ratio axes).
+    /// </summary>
+    bool TryGetAxisTitles(object recordSource, out string? xTitle, out string? yTitle)
+    {
+        xTitle = null;
+        yTitle = null;
+        return false;
+    }
+
+    /// <summary>
     /// Optional current-quantifier sample position for axis-to-curve guide lines on calibration plots.
     /// </summary>
     bool TryGetCurrentQuantifierGuide(object recordSource, out double x, out double y)

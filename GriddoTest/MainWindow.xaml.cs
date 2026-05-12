@@ -164,13 +164,13 @@ public partial class MainWindow : Window
         {
             Header = "Fill size for selected field(s)",
             IsCheckable = true,
-            IsChecked = targetFields.All(c => c.Fill)
+            IsChecked = targetFields.All(c => c.FieldFill > 0)
         };
         fillItem.Click += (_, _) =>
         {
             foreach (var target in targetFields)
             {
-                target.Fill = fillItem.IsChecked;
+                target.FieldFill = fillItem.IsChecked ? 1 : 0;
             }
 
             targetGrid.InvalidateMeasure();
@@ -349,7 +349,7 @@ public partial class MainWindow : Window
             Header = "Fill grid",
             IsCheckable = true,
             StaysOpenOnClick = true,
-            IsChecked = targetFields.Count > 0 && targetFields.All(f => f.Fill),
+            IsChecked = targetFields.Count > 0 && targetFields.All(f => f.FieldFill > 0),
         };
         fillGridItem.Click += (_, _) =>
         {
@@ -358,7 +358,7 @@ public partial class MainWindow : Window
             {
                 if (targetGrid.Fields.Contains(f))
                 {
-                    f.Fill = on;
+                    f.FieldFill = on ? 1 : 0;
                 }
             }
 
@@ -1736,7 +1736,7 @@ public partial class MainWindow : Window
                 continue;
             }
 
-            record.Fill = state.Fill;
+            record.FieldFill = state.FieldFill;
             record.Visible = state.Visible;
             record.Width = Math.Max(28, state.Width);
             record.SortPriority = Math.Max(0, state.SortPriority);
@@ -2029,7 +2029,7 @@ public partial class MainWindow : Window
                 continue;
             }
 
-            record.Fill = state.Fill;
+            record.FieldFill = state.FieldFill;
             record.Visible = state.Visible;
             record.Width = Math.Max(28, state.Width);
             record.SortPriority = Math.Max(0, state.SortPriority);
@@ -2091,7 +2091,7 @@ public partial class MainWindow : Window
             {
                 SourceFieldIndex = r.SourceFieldIndex,
                 SourceFieldKey = ResolvePropertyViewKeyForRecord(r),
-                Fill = r.Fill,
+                FieldFill = r.FieldFill,
                 Visible = r.Visible,
                 Width = r.Width,
                 SortPriority = r.SortPriority,
@@ -2481,7 +2481,7 @@ public partial class MainWindow : Window
         public bool NoWrap { get; set; } = true;
         public bool IsTable { get; set; } = true;
         public bool IsCategoryField { get; set; }
-        public bool Fill { get; set; }
+        public int FieldFill { get; set; }
         public bool IsHtml => true;
         public TextAlignment ContentAlignment => TextAlignment.Left;
         public IGriddoCellEditor Editor => GriddoCellEditors.Text;
@@ -2826,7 +2826,7 @@ public partial class MainWindow : Window
         public string ForegroundColor { get; set; } = string.Empty;
         public string BackgroundColor { get; set; } = string.Empty;
         public double Width { get; }
-        public bool Fill { get; set; }
+        public int FieldFill { get; set; }
         public bool IsHtml => false;
         public TextAlignment ContentAlignment { get; } = TextAlignment.Left;
         public IGriddoCellEditor Editor => GriddoCellEditors.Text;

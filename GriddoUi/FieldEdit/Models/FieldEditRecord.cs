@@ -1,5 +1,6 @@
 namespace GriddoUi.FieldEdit.Models;
 
+using System.Windows;
 using Griddo.Fields;
 using GriddoUi.FieldEdit.Dialog;
 
@@ -20,7 +21,7 @@ public sealed class FieldEditRecord
 
     public bool Visible { get; set; } = true;
 
-    public bool Fill { get; set; }
+    public int FieldFill { get; set; }
 
     public double Width { get; set; } = 140;
     public string AbbreviatedTitle { get; set; } = string.Empty;
@@ -37,6 +38,7 @@ public sealed class FieldEditRecord
     public bool IsFlagsEnumProperty { get; init; }
     public int SortPriority { get; set; }
     public bool SortAscending { get; set; } = true;
+    public TextAlignment ContentAlignment { get; set; } = TextAlignment.Left;
 
     /// <summary>Formatted sample from the first data record, if one was supplied when the dialog was built.</summary>
     public string SampleDisplay { get; init; } = string.Empty;
@@ -52,7 +54,7 @@ public sealed class FieldEditRecord
         Title = Title,
         Description = Description,
         Visible = Visible,
-        Fill = Fill,
+        FieldFill = FieldFill,
         Width = Width,
         AbbreviatedTitle = AbbreviatedTitle,
         FormatString = FormatString,
@@ -68,6 +70,7 @@ public sealed class FieldEditRecord
         IsFlagsEnumProperty = IsFlagsEnumProperty,
         SortPriority = SortPriority,
         SortAscending = SortAscending,
+        ContentAlignment = ContentAlignment,
         SampleDisplay = SampleDisplay,
         SampleValue = SampleValue,
         SampleRecordSource = SampleRecordSource,

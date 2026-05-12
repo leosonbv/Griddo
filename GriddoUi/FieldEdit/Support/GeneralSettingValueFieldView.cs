@@ -18,7 +18,7 @@ public sealed class GeneralSettingValueFieldView : IGriddoFieldView, IGriddoChec
     public string Header { get; set; }
     public string Description { get; set; } = string.Empty;
     public double Width { get; }
-    public bool Fill { get; set; }
+    public int FieldFill { get; set; }
     public bool IsHtml => false;
     public TextAlignment ContentAlignment { get; } = TextAlignment.Right;
     public IGriddoCellEditor Editor => GriddoCellEditors.Number;

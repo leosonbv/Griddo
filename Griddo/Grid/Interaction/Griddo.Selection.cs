@@ -377,6 +377,55 @@ public sealed partial class Griddo
         InvalidateVisual();
     }
 
+    /// <summary>
+    /// Restores the current body cell and selected body cells after grid records are reloaded.
+    /// </summary>
+    public void RestoreBodyCellSelection(
+        int currentRecordIndex,
+        int currentFieldIndex,
+        IReadOnlyCollection<GriddoCellAddress> selectedCells)
+    {
+        if (Records.Count == 0 || Fields.Count == 0)
+        {
+            return;
+        }
+
+        ClearHeaderFocus();
+        ClearHeaderAuxiliarySelectionState();
+        _hasKeyboardSelectionAnchor = false;
+        _isEditing = false;
+
+        currentRecordIndex = Math.Clamp(currentRecordIndex, 0, Records.Count - 1);
+        currentFieldIndex = Math.Clamp(currentFieldIndex, 0, Fields.Count - 1);
+        AssignCurrentCell(new GriddoCellAddress(currentRecordIndex, currentFieldIndex));
+
+        _selectedCells.Clear();
+        if (selectedCells.Count > 0)
+        {
+            foreach (var address in selectedCells)
+            {
+                if (address.RecordIndex < 0 || address.RecordIndex >= Records.Count)
+                {
+                    continue;
+                }
+
+                var fieldIndex = Math.Clamp(address.FieldIndex, 0, Fields.Count - 1);
+                _selectedCells.Add(new GriddoCellAddress(address.RecordIndex, fieldIndex));
+            }
+        }
+
+        if (_selectedCells.Count == 0)
+        {
+            _selectedCells.Add(_currentCell);
+        }
+        else if (!_selectedCells.Contains(_currentCell))
+        {
+            _selectedCells.Add(_currentCell);
+        }
+
+        InvalidateVisual();
+    }
+
     /// <summary>Moves all selected records up (<paramref name="direction"/> = -1) or down (+1), matching record-header drag behavior.</summary>
     /// <returns>True if a move was applied.</returns>
     public bool TryMoveSelectedRecordsStep(int direction)
@@ -603,6 +652,15 @@ public sealed partial class Griddo
             {
                 _recordHeaderRightClickOutline.Add(r);
             }
+        }
+
+        if (_hasKeyboardSelectionAnchor
+            && _keyboardSelectionAnchor.RecordIndex >= 0
+            && _keyboardSelectionAnchor.RecordIndex < oldToNew.Length)
+        {
+            _keyboardSelectionAnchor = new GriddoCellAddress(
+                oldToNew[_keyboardSelectionAnchor.RecordIndex],
+                _keyboardSelectionAnchor.FieldIndex);
         }
     }
 

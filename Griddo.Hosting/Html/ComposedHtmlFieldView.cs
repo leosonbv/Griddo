@@ -33,7 +33,7 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
     public string SourceMemberName { get; }
     public string SourceObjectName { get; }
     public double Width { get; }
-    public bool Fill { get; set; }
+    public int FieldFill { get; set; }
     public bool IsHtml => true;
     public TextAlignment ContentAlignment => TextAlignment.Left;
     public IGriddoCellEditor Editor => GriddoCellEditors.Text;
@@ -100,6 +100,7 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
         }
 
         var style = BuildSelfStyle();
+        var tableWidthStyle = "width:60%;";
         if (!IsTable)
         {
             return BuildDivLikeMarkup(pairs, style);
@@ -108,7 +109,7 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
         var rows = pairs
             .Select(p => $"<tr><td><b>{WebUtility.HtmlEncode(p.Label)}</b></td><td>{p.Rendered}</td></tr>")
             .ToList();
-        return $"<table style='border-collapse:collapse;border:none;{style}'><tbody>{string.Join(string.Empty, rows)}</tbody></table>";
+        return $"<table style='border-collapse:collapse;border:none;{tableWidthStyle}{style}'><tbody>{string.Join(string.Empty, rows)}</tbody></table>";
     }
 
     private static string BuildDivLikeMarkup(

@@ -21,7 +21,15 @@ public class CalibrationCurveControl : SkiaChartBaseControl
     {
         IsAntialias = true,
         Style = SKPaintStyle.Fill,
-        Color = new SKColor(160, 45, 45, 180)
+        Color = SKColors.Black
+    };
+
+    private readonly SKPaint _pointDisabledStrokePaint = new()
+    {
+        IsAntialias = true,
+        Style = SKPaintStyle.Stroke,
+        StrokeWidth = 1f,
+        Color = SKColors.Black
     };
 
     private readonly SKPaint _fitPaint = new()
@@ -91,6 +99,8 @@ public class CalibrationCurveControl : SkiaChartBaseControl
         IsAntialias = true,
         Style = SKPaintStyle.Stroke,
         StrokeWidth = 2.25f,
+        StrokeCap = SKStrokeCap.Round,
+        StrokeJoin = SKStrokeJoin.Round,
         Color = new SKColor(90, 90, 90, 200)
     };
 
@@ -237,6 +247,29 @@ public class CalibrationCurveControl : SkiaChartBaseControl
     protected override bool CanInteract() =>
         EnableMouseInteractions && EnableInlineEditing;
 
+    public override void ZoomOutCompletely()
+    {
+        if (!CanInteract())
+        {
+            return;
+        }
+
+        FitViewportToCalibrationPoints();
+        NotifyViewportChanged();
+        InvalidateVisual();
+    }
+
+    protected override void ApplyViewportInteractionClamp()
+    {
+        if (!TryGetCalibrationZoomExtents(out var xMinLim, out var xMaxLim, out _, out _))
+        {
+            base.ApplyViewportInteractionClamp();
+            return;
+        }
+
+        ClampViewportToCustomXWheelZoomLimits(xMinLim, xMaxLim);
+    }
+
     /// <summary>
     /// Wheel zoom on X by default; Ctrl+wheel zooms Y (see <see cref="ApplyWheelZoomFromRoute"/>).
     /// </summary>
@@ -322,7 +355,7 @@ public class CalibrationCurveControl : SkiaChartBaseControl
             CalibrationPlotPointKind.CurrentSample => ( _pointCurrentPaint, _pointCurrentStrokePaint ),
             _ => (
                 point.IsEnabled ? _pointEnabledPaint : _pointDisabledPaint,
-                _pointStrokePaint),
+                point.IsEnabled ? _pointStrokePaint : _pointDisabledStrokePaint),
         };
 
     /// <summary>Draws <see cref="CurveOverlayPoints"/> when provided; otherwise a polyline through enabled calibration points.</summary>
@@ -341,7 +374,62 @@ public class CalibrationCurveControl : SkiaChartBaseControl
             return;
         }
 
-        ChartSkiaLineSeries.DrawPolyline(canvas, line, plotRect, ToPixelX, ToPixelY, _fitPaint);
+        var displayLine = ExtendCalibrationCurveForDisplay(line);
+        ChartSkiaLineSeries.DrawPolyline(canvas, displayLine, plotRect, ToPixelX, ToPixelY, _fitPaint);
+    }
+
+    private static IReadOnlyList<ChartPoint> ExtendCalibrationCurveForDisplay(IReadOnlyList<ChartPoint> line)
+    {
+        if (line.Count < 2)
+        {
+            return line;
+        }
+
+        var minX = line[0].X;
+        var maxX = line[0].X;
+        for (var i = 1; i < line.Count; i++)
+        {
+            var p = line[i];
+            if (p.X < minX)
+            {
+                minX = p.X;
+            }
+
+            if (p.X > maxX)
+            {
+                maxX = p.X;
+            }
+        }
+
+        var spanX = Math.Max(1e-12, maxX - minX);
+        var extendX = spanX * 0.05;
+        var extended = new List<ChartPoint>(line.Count + 2);
+        if (TryExtrapolateCurveToX(line[0], line[1], minX - extendX, out var left))
+        {
+            extended.Add(left);
+        }
+
+        extended.AddRange(line);
+        if (TryExtrapolateCurveToX(line[^2], line[^1], maxX + extendX, out var right))
+        {
+            extended.Add(right);
+        }
+
+        return extended;
+    }
+
+    private static bool TryExtrapolateCurveToX(ChartPoint from, ChartPoint to, double targetX, out ChartPoint extrapolated)
+    {
+        var dx = to.X - from.X;
+        if (Math.Abs(dx) <= 1e-12)
+        {
+            extrapolated = default;
+            return false;
+        }
+
+        var t = (targetX - from.X) / dx;
+        extrapolated = new ChartPoint(targetX, from.Y + t * (to.Y - from.Y));
+        return true;
     }
 
     protected override void DrawAxes(SKCanvas canvas, SKRect plotRect)
@@ -656,8 +744,10 @@ public class CalibrationCurveControl : SkiaChartBaseControl
         using var font = new SKFont(typeface, fontPx);
         var lineHeight = fontPx * 1.25f;
         var pad = 4f * PlotUiScale;
-
+        var borderMargin = 6f * PlotUiScale;
+        var placementBounds = GetLabelPlacementBounds(plotRect, borderMargin);
         var curvePx = BuildCurvePolylinePixels(plotRect);
+        var markerObstacles = BuildCalibrationMarkerObstacles(plotRect, markerRadiusPx, pad);
         var occupied = new List<SKRect>();
 
         var indices = Enumerable.Range(0, CalibrationPoints.Count).OrderByDescending(i => CalibrationPoints[i].Y).ToList();
@@ -681,72 +771,26 @@ public class CalibrationCurveControl : SkiaChartBaseControl
             }
 
             var blockH = lines.Length * lineHeight;
-            var labelStandoff = markerRadiusPx + 40f * PlotUiScale;
-            var markerClearance = markerRadiusPx + 10f * PlotUiScale;
-
-            SKRect? placed = null;
-            for (var attempt = 0; attempt < 96 && placed is null; attempt++)
+            var wBox = blockW + 2f * pad;
+            var hBox = blockH + 2f * pad;
+            var markerClearance = markerRadiusPx + 8f * PlotUiScale;
+            if (!TryPlaceCalibrationLabelRect(
+                    ax,
+                    ay,
+                    wBox,
+                    hBox,
+                    markerRadiusPx,
+                    markerClearance,
+                    placementBounds,
+                    occupied,
+                    curvePx,
+                    markerObstacles,
+                    out var r))
             {
-                var angle = attempt * (MathF.PI / 12f);
-                var radius = labelStandoff + attempt * (12f * PlotUiScale);
-                var ox = MathF.Cos(angle) * radius;
-                var oy = MathF.Sin(angle) * radius;
-                var left = ax + ox - blockW * 0.5f - pad;
-                var top = ay + oy - blockH * 0.5f - pad;
-                var rect = SKRect.Create(left, top, blockW + 2f * pad, blockH + 2f * pad);
-                rect = ClampRectToPlot(rect, plotRect, pad);
-                rect = NudgeLabelRectOutsideMarker(rect, ax, ay, markerClearance, plotRect, pad);
-                if (IntersectsOccupied(rect, occupied, pad)
-                    || RectTooCloseToPolyline(rect, curvePx)
-                    || LabelRectIntrudesMarker(rect, ax, ay, markerClearance))
-                {
-                    continue;
-                }
-
-                placed = rect;
+                continue;
             }
 
-            if (placed is null)
-            {
-                var wBox = blockW + 2f * pad;
-                var hBox = blockH + 2f * pad;
-                ReadOnlySpan<SKRect> rawCandidates =
-                [
-                    SKRect.Create(ax + labelStandoff, ay - blockH * 0.5f - pad, wBox, hBox),
-                    SKRect.Create(ax - labelStandoff - wBox, ay - blockH * 0.5f - pad, wBox, hBox),
-                    SKRect.Create(ax - wBox * 0.5f, ay - labelStandoff - hBox, wBox, hBox),
-                    SKRect.Create(ax - wBox * 0.5f, ay + labelStandoff, wBox, hBox),
-                ];
-
-                foreach (var raw in rawCandidates)
-                {
-                    var rect = ClampRectToPlot(raw, plotRect, pad);
-                    rect = NudgeLabelRectOutsideMarker(rect, ax, ay, markerClearance, plotRect, pad);
-                    if (IntersectsOccupied(rect, occupied, pad)
-                        || RectTooCloseToPolyline(rect, curvePx)
-                        || LabelRectIntrudesMarker(rect, ax, ay, markerClearance))
-                    {
-                        continue;
-                    }
-
-                    placed = rect;
-                    break;
-                }
-
-                if (placed is null)
-                {
-                    var rect = ClampRectToPlot(rawCandidates[0], plotRect, pad);
-                    rect = NudgeLabelRectOutsideMarker(rect, ax, ay, markerClearance, plotRect, pad);
-                    placed = rect;
-                }
-            }
-
-            var r = placed.Value;
             occupied.Add(r);
-
-            var start = PointOnCircleToward(ax, ay, markerRadiusPx, r.MidX, r.MidY);
-            var end = ClosestPointOnRectBorder(r, start);
-            canvas.DrawLine(start, end, _labelConnectorPaint);
 
             var textLeft = r.Left + pad;
             var baseline = r.Top + pad + font.Size * 0.75f;
@@ -756,9 +800,174 @@ public class CalibrationCurveControl : SkiaChartBaseControl
                 baseline += lineHeight;
             }
 
+            DrawCalibrationLabelConnector(canvas, new SKPoint(ax, ay), markerRadiusPx, r);
+
             var hitPad = 3f * PlotUiScale;
             _calibrationLabelHitRegions.Add((point, OutsetRect(r, hitPad, hitPad)));
         }
+    }
+
+    private SKRect GetLabelPlacementBounds(SKRect plotRect, float margin)
+    {
+        var zs = PlotUiScale;
+        var axisInset = ChartPlotLayout.AxisLabelInsetFromPlotLeft(zs);
+        var left = plotRect.Left + margin + axisInset;
+        var right = plotRect.Right - margin;
+        var top = plotRect.Top + margin;
+        var bottom = plotRect.Bottom - margin;
+        if (right <= left || bottom <= top)
+        {
+            return SKRect.Create(plotRect.MidX, plotRect.MidY, 0, 0);
+        }
+
+        return SKRect.Create(left, top, right - left, bottom - top);
+    }
+
+    private List<(float X, float Y, float Radius)> BuildCalibrationMarkerObstacles(
+        SKRect plotRect,
+        float markerRadiusPx,
+        float pad)
+    {
+        var clearance = markerRadiusPx + pad;
+        var obstacles = new List<(float X, float Y, float Radius)>();
+        foreach (var point in CalibrationPoints)
+        {
+            if (point.PointKind == CalibrationPlotPointKind.CurrentSample)
+            {
+                continue;
+            }
+
+            obstacles.Add((ToPixelX(point.X, plotRect), ToPixelY(point.Y, plotRect), clearance));
+        }
+
+        return obstacles;
+    }
+
+    private bool TryPlaceCalibrationLabelRect(
+        float ax,
+        float ay,
+        float width,
+        float height,
+        float markerRadiusPx,
+        float markerClearance,
+        SKRect placementBounds,
+        IReadOnlyList<SKRect> occupied,
+        IReadOnlyList<SKPoint> curvePx,
+        IReadOnlyList<(float X, float Y, float Radius)> markerObstacles,
+        out SKRect rect)
+    {
+        rect = default;
+        if (placementBounds.Width < width || placementBounds.Height < height)
+        {
+            return false;
+        }
+
+        var spiralStartRadius = markerRadiusPx + 10f * PlotUiScale;
+        var angleStep = MathF.PI / 10f;
+        var radiusGrowthPerRadian = 5f * PlotUiScale;
+        var theta = 0f;
+        var bestDistanceSq = float.MaxValue;
+        var found = false;
+        for (var step = 0; step < 320; step++)
+        {
+            var radius = spiralStartRadius + radiusGrowthPerRadian * theta;
+            var ox = MathF.Cos(theta) * radius;
+            var oy = MathF.Sin(theta) * radius;
+            theta += angleStep;
+
+            var candidate = SKRect.Create(ax + ox - width * 0.5f, ay + oy - height * 0.5f, width, height);
+            var clamped = ClampRectToBounds(candidate, placementBounds);
+            if (!IsCalibrationLabelPlacementValid(
+                    clamped,
+                    ax,
+                    ay,
+                    markerClearance,
+                    occupied,
+                    curvePx,
+                    markerObstacles))
+            {
+                continue;
+            }
+
+            var dx = clamped.MidX - ax;
+            var dy = clamped.MidY - ay;
+            var distanceSq = dx * dx + dy * dy;
+            if (distanceSq >= bestDistanceSq)
+            {
+                continue;
+            }
+
+            bestDistanceSq = distanceSq;
+            rect = clamped;
+            found = true;
+        }
+
+        return found;
+    }
+
+    private static bool IsCalibrationLabelPlacementValid(
+        SKRect rect,
+        float markerX,
+        float markerY,
+        float markerClearance,
+        IReadOnlyList<SKRect> occupied,
+        IReadOnlyList<SKPoint> curvePx,
+        IReadOnlyList<(float X, float Y, float Radius)> markerObstacles)
+    {
+        if (rect.Width <= 0f || rect.Height <= 0f)
+        {
+            return false;
+        }
+
+        if (LabelRectIntrudesMarker(rect, markerX, markerY, markerClearance))
+        {
+            return false;
+        }
+
+        if (IntersectsOccupied(rect, occupied, 4f))
+        {
+            return false;
+        }
+
+        if (RectTooCloseToPolyline(rect, curvePx))
+        {
+            return false;
+        }
+
+        foreach (var (x, y, radius) in markerObstacles)
+        {
+            if (RectOverlapsCircle(rect, x, y, radius))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool RectOverlapsCircle(SKRect rect, float cx, float cy, float radius)
+    {
+        var qx = Math.Clamp(cx, rect.Left, rect.Right);
+        var qy = Math.Clamp(cy, rect.Top, rect.Bottom);
+        var dx = cx - qx;
+        var dy = cy - qy;
+        return dx * dx + dy * dy < radius * radius;
+    }
+
+    private static SKRect ClampRectToBounds(SKRect rect, SKRect bounds)
+    {
+        if (bounds.Width <= 0f || bounds.Height <= 0f)
+        {
+            return SKRect.Create(bounds.MidX, bounds.MidY, 0, 0);
+        }
+
+        var width = Math.Min(rect.Width, bounds.Width);
+        var height = Math.Min(rect.Height, bounds.Height);
+        var maxLeft = bounds.Right - width;
+        var maxTop = bounds.Bottom - height;
+        var left = maxLeft < bounds.Left ? bounds.Left : Math.Clamp(rect.Left, bounds.Left, maxLeft);
+        var top = maxTop < bounds.Top ? bounds.Top : Math.Clamp(rect.Top, bounds.Top, maxTop);
+        return SKRect.Create(left, top, width, height);
     }
 
     private static SKRect OutsetRect(SKRect r, float dx, float dy) =>
@@ -777,32 +986,6 @@ public class CalibrationCurveControl : SkiaChartBaseControl
         var dx = ax - qx;
         var dy = ay - qy;
         return dx * dx + dy * dy < forbiddenRadiusPx * forbiddenRadiusPx;
-    }
-
-    private SKRect NudgeLabelRectOutsideMarker(SKRect rect, float ax, float ay, float forbiddenRadiusPx, SKRect plotRect, float margin)
-    {
-        var step = 8f * PlotUiScale;
-        for (var i = 0; i < 36 && LabelRectIntrudesMarker(rect, ax, ay, forbiddenRadiusPx); i++)
-        {
-            var mx = rect.MidX;
-            var my = rect.MidY;
-            var rdx = mx - ax;
-            var rdy = my - ay;
-            var len = Math.Sqrt(rdx * rdx + rdy * rdy);
-            if (len < 1e-3)
-            {
-                rdx = 1f;
-                rdy = 0f;
-                len = 1;
-            }
-
-            var dx = (float)(rdx / len * step);
-            var dy = (float)(rdy / len * step);
-            rect = SKRect.Create(rect.Left + dx, rect.Top + dy, rect.Width, rect.Height);
-            rect = ClampRectToPlot(rect, plotRect, margin);
-        }
-
-        return rect;
     }
 
     private List<SKPoint> BuildCurvePolylinePixels(SKRect plotRect)
@@ -828,32 +1011,7 @@ public class CalibrationCurveControl : SkiaChartBaseControl
         return pts;
     }
 
-    private static SKRect ClampRectToPlot(SKRect rect, SKRect plotRect, float margin)
-    {
-        if (plotRect.Width <= 0 || plotRect.Height <= 0)
-        {
-            return rect;
-        }
-
-        var minX = plotRect.Left + margin;
-        var maxX = plotRect.Right - margin;
-        var minY = plotRect.Top + margin;
-        var maxY = plotRect.Bottom - margin;
-        if (maxX <= minX || maxY <= minY)
-        {
-            return SKRect.Create(plotRect.MidX, plotRect.MidY, 0, 0);
-        }
-
-        var w = Math.Min(rect.Width, maxX - minX);
-        var h = Math.Min(rect.Height, maxY - minY);
-        var maxLeft = maxX - w;
-        var maxTop = maxY - h;
-        var left = maxLeft < minX ? minX : Math.Clamp(rect.Left, minX, maxLeft);
-        var top = maxTop < minY ? minY : Math.Clamp(rect.Top, minY, maxTop);
-        return SKRect.Create(left, top, w, h);
-    }
-
-    private static bool IntersectsOccupied(SKRect rect, List<SKRect> occupied, float pad)
+    private static bool IntersectsOccupied(SKRect rect, IReadOnlyList<SKRect> occupied, float pad)
     {
         var inflated = OutsetRect(rect, pad, pad);
         foreach (var o in occupied)
@@ -918,44 +1076,127 @@ public class CalibrationCurveControl : SkiaChartBaseControl
         return (float)Math.Sqrt(qx * qx + qy * qy);
     }
 
-    private static SKPoint PointOnCircleToward(float cx, float cy, float r, float tx, float ty)
+    private void DrawCalibrationLabelConnector(SKCanvas canvas, SKPoint markerCenter, float markerRadiusPx, SKRect labelRect)
     {
-        var dx = tx - cx;
-        var dy = ty - cy;
-        var len = (float)Math.Sqrt(dx * dx + dy * dy);
-        if (len < 1e-3f)
+        var labelCenter = new SKPoint(labelRect.MidX, labelRect.MidY);
+        if (!TryGetMarkerLabelConnectorPoints(markerCenter, markerRadiusPx, labelCenter, labelRect, out var start, out var end))
         {
-            return new SKPoint(cx + r, cy);
+            return;
         }
 
-        return new SKPoint(cx + r * (dx / len), cy + r * (dy / len));
+        var dx = end.X - start.X;
+        var dy = end.Y - start.Y;
+        if (dx * dx + dy * dy < 1f)
+        {
+            return;
+        }
+
+        canvas.DrawLine(start, end, _labelConnectorPaint);
     }
 
-    private static SKPoint ClosestPointOnRectBorder(SKRect r, SKPoint from)
+    private static bool TryGetMarkerLabelConnectorPoints(
+        SKPoint markerCenter,
+        float markerRadiusPx,
+        SKPoint labelCenter,
+        SKRect labelRect,
+        out SKPoint start,
+        out SKPoint end)
     {
-        var cx = Math.Clamp(from.X, r.Left, r.Right);
-        var cy = Math.Clamp(from.Y, r.Top, r.Bottom);
-        if (from.X < r.Left || from.X > r.Right || from.Y < r.Top || from.Y > r.Bottom)
+        start = default;
+        end = default;
+        var dx = labelCenter.X - markerCenter.X;
+        var dy = labelCenter.Y - markerCenter.Y;
+        var distanceSq = dx * dx + dy * dy;
+        if (distanceSq < 1e-6f)
         {
-            return new SKPoint(cx, cy);
+            return false;
         }
 
-        var dl = from.X - r.Left;
-        var dr = r.Right - from.X;
-        var dt = from.Y - r.Top;
-        var db = r.Bottom - from.Y;
-        var m = Math.Min(Math.Min(dl, dr), Math.Min(dt, db));
-        if (m == dl)
+        var distance = MathF.Sqrt(distanceSq);
+        var minT = markerRadiusPx / distance;
+        if (minT >= 1f - 1e-4f)
         {
-            return new SKPoint(r.Left, cy);
+            return false;
         }
 
-        if (m == dr)
+        start = new SKPoint(markerCenter.X + dx * minT, markerCenter.Y + dy * minT);
+        if (!TryGetSegmentRectBorderIntersection(markerCenter, labelCenter, labelRect, minT, out end))
         {
-            return new SKPoint(r.Right, cy);
+            return false;
         }
 
-        return m == dt ? new SKPoint(cx, r.Top) : new SKPoint(cx, r.Bottom);
+        return true;
+    }
+
+    private static bool TryGetSegmentRectBorderIntersection(
+        SKPoint from,
+        SKPoint to,
+        SKRect rect,
+        float minNormalizedT,
+        out SKPoint hit)
+    {
+        hit = default;
+        var dx = to.X - from.X;
+        var dy = to.Y - from.Y;
+        if (MathF.Abs(dx) < 1e-3f && MathF.Abs(dy) < 1e-3f)
+        {
+            return false;
+        }
+
+        var bestT = float.PositiveInfinity;
+        var found = false;
+        var hitPoint = default(SKPoint);
+        const float edgeTolerance = 0.75f;
+        const float tEpsilon = 1e-4f;
+
+        void Consider(float t, float x, float y)
+        {
+            if (t <= minNormalizedT + tEpsilon || t > 1f + tEpsilon || t >= bestT)
+            {
+                return;
+            }
+
+            bestT = t;
+            found = true;
+            hitPoint = new SKPoint(x, y);
+        }
+
+        if (MathF.Abs(dx) > 1e-3f)
+        {
+            var tLeft = (rect.Left - from.X) / dx;
+            var yLeft = from.Y + dy * tLeft;
+            if (yLeft >= rect.Top - edgeTolerance && yLeft <= rect.Bottom + edgeTolerance)
+            {
+                Consider(tLeft, rect.Left, yLeft);
+            }
+
+            var tRight = (rect.Right - from.X) / dx;
+            var yRight = from.Y + dy * tRight;
+            if (yRight >= rect.Top - edgeTolerance && yRight <= rect.Bottom + edgeTolerance)
+            {
+                Consider(tRight, rect.Right, yRight);
+            }
+        }
+
+        if (MathF.Abs(dy) > 1e-3f)
+        {
+            var tTop = (rect.Top - from.Y) / dy;
+            var xTop = from.X + dx * tTop;
+            if (xTop >= rect.Left - edgeTolerance && xTop <= rect.Right + edgeTolerance)
+            {
+                Consider(tTop, xTop, rect.Top);
+            }
+
+            var tBottom = (rect.Bottom - from.Y) / dy;
+            var xBottom = from.X + dx * tBottom;
+            if (xBottom >= rect.Left - edgeTolerance && xBottom <= rect.Right + edgeTolerance)
+            {
+                Consider(tBottom, xBottom, rect.Bottom);
+            }
+        }
+
+        hit = hitPoint;
+        return found;
     }
 
     /// <summary>
@@ -976,15 +1217,25 @@ public class CalibrationCurveControl : SkiaChartBaseControl
             return;
         }
 
-        if (TryInterpolateCurveYAtX(curve, guideX, out var curveYAtGuideX))
+        if (TryEvaluateCurveYAtX(curve, guideX, out var curveYAtGuideX))
         {
             var px = ToPixelX(guideX, plotRect);
             var pyAxis = plotRect.Bottom;
             var pyCurve = ToPixelY(curveYAtGuideX, plotRect);
             canvas.DrawLine(px, pyAxis, px, pyCurve, _currentQuantifierGuidePaint);
-        }
 
-        if (TryInterpolateCurveXAtY(curve, guideY, guideX, out var curveXAtGuideY))
+            if (TryEvaluateCurveXAtY(curve, guideY, guideX, out var curveXAtGuideY))
+            {
+                var pxCurve = ToPixelX(curveXAtGuideY, plotRect);
+                var py = ToPixelY(guideY, plotRect);
+                canvas.DrawLine(plotRect.Left, py, pxCurve, py, _currentQuantifierGuidePaint);
+            }
+            else
+            {
+                canvas.DrawLine(plotRect.Left, pyCurve, px, pyCurve, _currentQuantifierGuidePaint);
+            }
+        }
+        else if (TryEvaluateCurveXAtY(curve, guideY, guideX, out var curveXAtGuideY))
         {
             var pxAxis = plotRect.Left;
             var pxCurve = ToPixelX(curveXAtGuideY, plotRect);
@@ -1033,6 +1284,102 @@ public class CalibrationCurveControl : SkiaChartBaseControl
         }
 
         return false;
+    }
+
+    private static bool TryEvaluateCurveYAtX(IReadOnlyList<ChartPoint> curve, double x, out double y)
+    {
+        if (TryInterpolateCurveYAtX(curve, x, out y))
+        {
+            return true;
+        }
+
+        if (curve.Count < 2)
+        {
+            return false;
+        }
+
+        var first = curve[0];
+        var second = curve[1];
+        if (x < Math.Min(first.X, second.X) - 1e-12)
+        {
+            return TryExtrapolateLinearY(first, second, x, out y);
+        }
+
+        var last = curve[^1];
+        var previous = curve[^2];
+        if (x > Math.Max(last.X, previous.X) + 1e-12)
+        {
+            return TryExtrapolateLinearY(previous, last, x, out y);
+        }
+
+        return false;
+    }
+
+    private static bool TryEvaluateCurveXAtY(
+        IReadOnlyList<ChartPoint> curve,
+        double y,
+        double preferredX,
+        out double x)
+    {
+        if (TryInterpolateCurveXAtY(curve, y, preferredX, out x))
+        {
+            return true;
+        }
+
+        if (curve.Count < 2)
+        {
+            return false;
+        }
+
+        var bestDistance = double.PositiveInfinity;
+        var found = false;
+        for (var i = 0; i < curve.Count - 1; i++)
+        {
+            var a = curve[i];
+            var b = curve[i + 1];
+            if (!TryExtrapolateLinearX(a, b, y, out var candidateX))
+            {
+                continue;
+            }
+
+            var distance = Math.Abs(candidateX - preferredX);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                x = candidateX;
+                found = true;
+            }
+        }
+
+        return found;
+    }
+
+    private static bool TryExtrapolateLinearY(ChartPoint a, ChartPoint b, double x, out double y)
+    {
+        y = 0;
+        if (Math.Abs(b.X - a.X) <= 1e-12)
+        {
+            y = (a.Y + b.Y) * 0.5;
+            return double.IsFinite(y);
+        }
+
+        var t = (x - a.X) / (b.X - a.X);
+        y = a.Y + t * (b.Y - a.Y);
+        return double.IsFinite(y);
+    }
+
+    private static bool TryExtrapolateLinearX(ChartPoint a, ChartPoint b, double y, out double x)
+    {
+        x = 0;
+        if (Math.Abs(b.Y - a.Y) <= 1e-12)
+        {
+            x = (a.X + b.X) * 0.5;
+            return double.IsFinite(x);
+        }
+
+        var t = (y - a.Y) / (b.Y - a.Y);
+        x = a.X + t * (b.X - a.X);
+        return double.IsFinite(x);
     }
 
     private static bool TryInterpolateCurveXAtY(
@@ -1148,7 +1495,7 @@ public class CalibrationCurveControl : SkiaChartBaseControl
 
     private void FitViewportToCalibrationPoints()
     {
-        if (!CalibrationViewportBounds.TryGetZoomOutExtents(CalibrationPoints, CurveOverlayPoints, out var xMin, out var xMax, out var yMin, out var yMax))
+        if (!TryGetCalibrationZoomExtents(out var xMin, out var xMax, out var yMin, out var yMax))
         {
             Viewport.XMin = 0;
             Viewport.XMax = 1;
@@ -1163,6 +1510,55 @@ public class CalibrationCurveControl : SkiaChartBaseControl
         Viewport.XMax = xMax;
         Viewport.YMax = yMax;
         Viewport.EnsureMinimumSize();
+    }
+
+    private bool TryGetCalibrationZoomExtents(
+        out double xMin,
+        out double xMax,
+        out double yMin,
+        out double yMax) =>
+        CalibrationViewportBounds.TryGetZoomOutExtents(
+            CalibrationPoints,
+            CurveOverlayPoints,
+            BuildQuantifierGuideExtentPoints(),
+            out xMin,
+            out xMax,
+            out yMin,
+            out yMax);
+
+    private ChartPoint[]? BuildQuantifierGuideExtentPoints()
+    {
+        var guideX = CurrentQuantifierGuideX;
+        var guideY = CurrentQuantifierGuideY;
+        if (!double.IsFinite(guideX) || !double.IsFinite(guideY))
+        {
+            return null;
+        }
+
+        var extents = new List<ChartPoint>(3) { new(guideX, guideY) };
+        var curve = GetCurveChartPoints();
+        if (curve.Count >= 2)
+        {
+            if (TryInterpolateCurveYAtX(curve, guideX, out var curveYAtGuideX))
+            {
+                extents.Add(new ChartPoint(guideX, curveYAtGuideX));
+            }
+            else if (TryEvaluateCurveYAtX(curve, guideX, out var extrapolatedYAtGuideX))
+            {
+                extents.Add(new ChartPoint(guideX, extrapolatedYAtGuideX));
+            }
+
+            if (TryInterpolateCurveXAtY(curve, guideY, guideX, out var curveXAtGuideY))
+            {
+                extents.Add(new ChartPoint(curveXAtGuideY, guideY));
+            }
+            else if (TryEvaluateCurveXAtY(curve, guideY, guideX, out var extrapolatedXAtGuideY))
+            {
+                extents.Add(new ChartPoint(extrapolatedXAtGuideY, guideY));
+            }
+        }
+
+        return extents.ToArray();
     }
 
     private CalibrationPoint? FindNearest(ChartPoint clicked, double normalizedDistanceThreshold)

@@ -9,12 +9,57 @@ public sealed partial class Griddo
 {
     private double GetFieldWidth(int fieldIndex)
     {
-        if (fieldIndex >= 0 && fieldIndex < Fields.Count && Fields[fieldIndex].Fill)
+        if (fieldIndex >= 0 && fieldIndex < Fields.Count)
         {
-            return GetFillFieldWidth();
+            var fillWeight = GetFieldFillWeight(Fields[fieldIndex]);
+            if (fillWeight > 0)
+            {
+                return GetWeightedFillFieldWidth(fillWeight);
+            }
         }
 
         return GetFieldBaseWidth(fieldIndex);
+    }
+
+    private static int GetFieldFillWeight(IGriddoFieldView field) =>
+        field.FieldFill <= 0 ? 0 : Math.Min(field.FieldFill, 3);
+
+    private int GetTotalFieldFillWeight()
+    {
+        var total = 0;
+        for (var i = 0; i < Fields.Count; i++)
+        {
+            total += GetFieldFillWeight(Fields[i]);
+        }
+
+        return total;
+    }
+
+    private double GetWeightedFillFieldWidth(int fillWeight)
+    {
+        var totalFillWeight = GetTotalFieldFillWeight();
+        if (totalFillWeight <= 0)
+        {
+            return MinFieldWidth * ContentScale;
+        }
+
+        var nonFillWidth = 0.0;
+        for (var i = 0; i < Fields.Count; i++)
+        {
+            if (GetFieldFillWeight(Fields[i]) <= 0)
+            {
+                nonFillWidth += GetFieldBaseWidth(i);
+            }
+        }
+
+        var viewportAlongFieldAxis = IsBodyTransposed ? _viewportBodyHeight : _viewportBodyWidth;
+        return GridFieldWidthService.ResolveWeightedFillFieldWidth(
+            fillWeight,
+            totalFillWeight,
+            nonFillWidth,
+            viewportAlongFieldAxis,
+            MinFieldWidth,
+            ContentScale);
     }
 
     private double GetFieldBaseWidth(int fieldIndex)
@@ -24,32 +69,6 @@ public sealed partial class Griddo
             field.Width,
             _fieldWidthOverrides.TryGetValue(field, out var o),
             o,
-            MinFieldWidth,
-            ContentScale);
-    }
-
-    private double GetFillFieldWidth()
-    {
-        var fillCount = Fields.Count(c => c.Fill);
-        if (fillCount <= 0)
-        {
-            return MinFieldWidth * ContentScale;
-        }
-
-        var nonFillWidth = 0.0;
-        for (var i = 0; i < Fields.Count; i++)
-        {
-            if (!Fields[i].Fill)
-            {
-                nonFillWidth += GetFieldBaseWidth(i);
-            }
-        }
-
-        var viewportAlongFieldAxis = IsBodyTransposed ? _viewportBodyHeight : _viewportBodyWidth;
-        return GridFieldWidthService.ResolveFillFieldWidth(
-            fillCount,
-            nonFillWidth,
-            viewportAlongFieldAxis,
             MinFieldWidth,
             ContentScale);
     }

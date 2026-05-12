@@ -13,7 +13,7 @@ public static class GriddoNamedSourceFields
         double width,
         IGriddoCellEditor? editor = null,
         System.Windows.TextAlignment? contentAlignment = null,
-        bool fill = false)
+        int fieldFill = 0)
     {
         var getter = CreateGetter(sourceObjectName, sourceMemberName);
         var setter = CreateSetter(sourceObjectName, sourceMemberName);
@@ -24,7 +24,7 @@ public static class GriddoNamedSourceFields
             valueSetter: setter,
             editor: editor,
             contentAlignment: contentAlignment,
-            fill: fill,
+            fieldFill: fieldFill,
             sourceMemberName: sourceMemberName,
             sourceObjectName: sourceObjectName);
     }

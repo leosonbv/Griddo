@@ -524,4 +524,12 @@ public static class GriddoCellEditors
     public static readonly IGriddoCellEditor DialogLauncher = new GriddoDialogLauncherCellEditor();
     public static readonly IGriddoCellEditor KnownColorsDropdown = new GriddoKnownColorCellEditor();
     public static readonly IGriddoCellEditor FormatStringOptions = new GriddoFormatStringCellEditor();
+    public static readonly IGriddoCellEditor TextAlignmentOptions = new GriddoOptionsCellEditor(
+        ["Left", "Center", "Right"],
+        allowMultiple: false,
+        allowEmpty: false);
+    public static readonly IGriddoCellEditor FieldFillOptions = new GriddoOptionsCellEditor(
+        ["None", "1", "2", "3"],
+        allowMultiple: false,
+        allowEmpty: false);
 }

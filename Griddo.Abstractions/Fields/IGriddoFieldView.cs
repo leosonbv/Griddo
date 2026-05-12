@@ -8,7 +8,8 @@ public interface IGriddoFieldView
 {
     string Header { get; set; }
     double Width { get; }
-    bool Fill { get; set; }
+    /// <summary>Share of leftover viewport width along the field axis: 0 = none, otherwise proportional to this weight (1–3).</summary>
+    int FieldFill { get; set; }
     bool IsHtml { get; }
     TextAlignment ContentAlignment { get; }
     IGriddoCellEditor Editor { get; }

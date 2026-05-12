@@ -220,73 +220,26 @@ public partial class FieldConfigurator : Window
                 ((FieldEditRecord)r).Visible = b;
                 return true;
             }));
-        AddField(new GriddoBoolFieldView(
-            "Fill",
-            44,
-            r => ((FieldEditRecord)r).Fill,
+        AddField(new ReadonlyField("Source", 120, r => r.SourceObjectName));
+        AddField(new ReadonlyField("Property", 140, r => r.PropertyName));
+        AddField(new GriddoFieldView(
+            "Header",
+            150,
+            r => ((FieldEditRecord)r).Title,
             (r, v) =>
             {
-                if (v is not bool b)
-                {
-                    return false;
-                }
-
-                ((FieldEditRecord)r).Fill = b;
+                ((FieldEditRecord)r).Title = v?.ToString() ?? string.Empty;
                 return true;
             }));
         AddField(new GriddoFieldView(
-            "Size",
-            72,
-            r => ((FieldEditRecord)r).Width,
+            "Abbr",
+            100,
+            r => ((FieldEditRecord)r).AbbreviatedTitle,
             (r, v) =>
             {
-                if (v is double d)
-                {
-                    ((FieldEditRecord)r).Width = Math.Max(28, d);
-                    return true;
-                }
-
-                if (double.TryParse(v?.ToString(), out var x))
-                {
-                    ((FieldEditRecord)r).Width = Math.Max(28, x);
-                    return true;
-                }
-
-                return false;
-            },
-            GriddoCellEditors.Number,
-            TextAlignment.Right)
-        {
-            FormatString = "F0"
-        });
-        _fontFieldIndex = FieldGrid.Fields.Count;
-        AddField(new GriddoFieldView(
-            "Font",
-            220,
-            r => FormatFontSummary((FieldEditRecord)r),
-            (r, v) =>
-            {
-                var record = (FieldEditRecord)r;
-                if (string.Equals(v?.ToString(), "...", StringComparison.Ordinal))
-                {
-                    OpenFontEditor(ResolveTargetsForEdit(record));
-                    return true;
-                }
-
-                return FontSummaryParser.TryApplyFontSummaryText(record, v?.ToString() ?? string.Empty);
-            },
-            new FontSummaryDialogCellEditor()));
-        _backColorFieldIndex = FieldGrid.Fields.Count;
-        AddField(new GriddoFieldView(
-            "Back color",
-            130,
-            r => FormatOneColor(((FieldEditRecord)r).BackgroundColor),
-            (r, v) =>
-            {
-                ((FieldEditRecord)r).BackgroundColor = NormalizeBackColor(v?.ToString());
+                ((FieldEditRecord)r).AbbreviatedTitle = v?.ToString() ?? string.Empty;
                 return true;
-            },
-            GriddoCellEditors.KnownColorsDropdown));
+            }));
         AddField(new GriddoFieldView(
             "Format",
             140,
@@ -302,6 +255,21 @@ public partial class FieldConfigurator : Window
                 return true;
             },
             GriddoCellEditors.FormatStringOptions));
+        AddField(new GriddoFieldView(
+            "Align",
+            68,
+            r => FormatTextAlignment(((FieldEditRecord)r).ContentAlignment),
+            (r, v) =>
+            {
+                if (!TryParseTextAlignment(v, out var alignment))
+                {
+                    return false;
+                }
+
+                ((FieldEditRecord)r).ContentAlignment = alignment;
+                return true;
+            },
+            GriddoCellEditors.TextAlignmentOptions));
         AddField(new GriddoBoolFieldView(
             "Wrap",
             74,
@@ -316,8 +284,26 @@ public partial class FieldConfigurator : Window
                 ((FieldEditRecord)r).NoWrap = !b;
                 return true;
             }));
+        _valueFieldIndex = FieldGrid.Fields.Count;
+        AddField(new ValuePreviewField("Value", 220));
         AddField(new GriddoFieldView(
-            "Sort#",
+            "Fill",
+            58,
+            r => FormatFieldFill(((FieldEditRecord)r).FieldFill),
+            (r, v) =>
+            {
+                if (!TryParseFieldFill(v, out var fieldFill))
+                {
+                    return false;
+                }
+
+                ((FieldEditRecord)r).FieldFill = fieldFill;
+                return true;
+            },
+            GriddoCellEditors.FieldFillOptions,
+            TextAlignment.Center));
+        AddField(new GriddoFieldView(
+            "Sort",
             58,
             r => ((FieldEditRecord)r).SortPriority,
             (r, v) =>
@@ -352,26 +338,31 @@ public partial class FieldConfigurator : Window
                 ((FieldEditRecord)r).SortAscending = b;
                 return true;
             }));
-        AddField(new ReadonlyField("Source", 120, r => r.SourceObjectName));
-        AddField(new ReadonlyField("Property", 140, r => r.PropertyName));
         AddField(new GriddoFieldView(
-            "Header",
-            150,
-            r => ((FieldEditRecord)r).Title,
+            "Size",
+            72,
+            r => ((FieldEditRecord)r).Width,
             (r, v) =>
             {
-                ((FieldEditRecord)r).Title = v?.ToString() ?? string.Empty;
-                return true;
-            }));
-        AddField(new GriddoFieldView(
-            "Abbrev",
-            100,
-            r => ((FieldEditRecord)r).AbbreviatedTitle,
-            (r, v) =>
-            {
-                ((FieldEditRecord)r).AbbreviatedTitle = v?.ToString() ?? string.Empty;
-                return true;
-            }));
+                if (v is double d)
+                {
+                    ((FieldEditRecord)r).Width = Math.Max(28, d);
+                    return true;
+                }
+
+                if (double.TryParse(v?.ToString(), out var x))
+                {
+                    ((FieldEditRecord)r).Width = Math.Max(28, x);
+                    return true;
+                }
+
+                return false;
+            },
+            GriddoCellEditors.Number,
+            TextAlignment.Right)
+        {
+            FormatString = "F0"
+        });
         AddField(new GriddoFieldView(
             "Description",
             260,
@@ -381,8 +372,34 @@ public partial class FieldConfigurator : Window
                 ((FieldEditRecord)r).Description = v?.ToString() ?? string.Empty;
                 return true;
             }));
-        _valueFieldIndex = FieldGrid.Fields.Count;
-        AddField(new ValuePreviewField("Value", 220));
+        _fontFieldIndex = FieldGrid.Fields.Count;
+        AddField(new GriddoFieldView(
+            "Font",
+            220,
+            r => FormatFontSummary((FieldEditRecord)r),
+            (r, v) =>
+            {
+                var record = (FieldEditRecord)r;
+                if (string.Equals(v?.ToString(), "...", StringComparison.Ordinal))
+                {
+                    OpenFontEditor(ResolveTargetsForEdit(record));
+                    return true;
+                }
+
+                return FontSummaryParser.TryApplyFontSummaryText(record, v?.ToString() ?? string.Empty);
+            },
+            new FontSummaryDialogCellEditor()));
+        _backColorFieldIndex = FieldGrid.Fields.Count;
+        AddField(new GriddoFieldView(
+            "BackColor",
+            130,
+            r => FormatOneColor(((FieldEditRecord)r).BackgroundColor),
+            (r, v) =>
+            {
+                ((FieldEditRecord)r).BackgroundColor = NormalizeBackColor(v?.ToString());
+                return true;
+            },
+            GriddoCellEditors.KnownColorsDropdown));
     }
 
     private GriddoCellPropertyView? ResolveCellPropertyViewForConfigurator(object recordSource, int fieldIndex)
@@ -747,6 +764,66 @@ public partial class FieldConfigurator : Window
         return value.Trim();
     }
 
+    private static string FormatFieldFill(int fieldFill) =>
+        fieldFill switch
+        {
+            1 => "1",
+            2 => "2",
+            3 => "3",
+            _ => "None"
+        };
+
+    private static bool TryParseFieldFill(object? value, out int fieldFill)
+    {
+        var text = value?.ToString()?.Trim() ?? string.Empty;
+        if (text.Length == 0)
+        {
+            fieldFill = 0;
+            return false;
+        }
+
+        if (string.Equals(text, "None", StringComparison.OrdinalIgnoreCase))
+        {
+            fieldFill = 0;
+            return true;
+        }
+
+        if (int.TryParse(text, out fieldFill))
+        {
+            fieldFill = fieldFill <= 0 ? 0 : Math.Min(fieldFill, 3);
+            return true;
+        }
+
+        fieldFill = 0;
+        return false;
+    }
+
+    private static string FormatTextAlignment(TextAlignment alignment) =>
+        alignment switch
+        {
+            TextAlignment.Right => "Right",
+            TextAlignment.Center => "Center",
+            _ => "Left"
+        };
+
+    private static bool TryParseTextAlignment(object? value, out TextAlignment alignment)
+    {
+        var text = value?.ToString()?.Trim() ?? string.Empty;
+        if (text.Length == 0)
+        {
+            alignment = TextAlignment.Left;
+            return false;
+        }
+
+        if (Enum.TryParse(text, ignoreCase: true, out alignment))
+        {
+            return true;
+        }
+
+        alignment = TextAlignment.Left;
+        return false;
+    }
+
     private static bool TryFormatValue(string? value, out string normalized)
     {
         normalized = string.IsNullOrWhiteSpace(value) || string.Equals(value.Trim(), "(none)", StringComparison.OrdinalIgnoreCase)
@@ -841,7 +918,7 @@ public partial class FieldConfigurator : Window
         public string Header { get; set; }
         public string Description { get; set; } = string.Empty;
         public double Width { get; }
-        public bool Fill { get; set; }
+        public int FieldFill { get; set; }
         public bool IsHtml => false;
         public TextAlignment ContentAlignment { get; } = TextAlignment.Left;
         public IGriddoCellEditor Editor => GriddoCellEditors.Text;
@@ -871,7 +948,7 @@ public partial class FieldConfigurator : Window
         public string Header { get; set; }
         public string Description { get; set; } = string.Empty;
         public double Width { get; }
-        public bool Fill { get; set; }
+        public int FieldFill { get; set; }
         public bool IsHtml => false;
         public TextAlignment ContentAlignment { get; } = TextAlignment.Left;
         public IGriddoCellEditor Editor => GriddoCellEditors.Text;
@@ -935,7 +1012,7 @@ public partial class FieldConfigurator : Window
         public string Header { get; set; } = header;
         public string Description { get; set; } = string.Empty;
         public double Width { get; } = width;
-        public bool Fill { get; set; }
+        public int FieldFill { get; set; }
         public bool IsHtml => false;
         public TextAlignment ContentAlignment { get; } = TextAlignment.Left;
         public IGriddoCellEditor Editor => GriddoCellEditors.Text;
@@ -974,7 +1051,7 @@ public partial class FieldConfigurator : Window
         public string Header { get; set; } = header;
         public string Description { get; set; } = string.Empty;
         public double Width { get; } = width;
-        public bool Fill { get; set; }
+        public int FieldFill { get; set; }
         public bool IsHtml => false;
         public TextAlignment ContentAlignment { get; } = TextAlignment.Left;
         public IGriddoCellEditor Editor => GriddoCellEditors.Text;
@@ -1098,7 +1175,7 @@ public partial class FieldConfigurator : Window
                 var normalizedStyle = NormalizeStyle(_record.FontStyleName);
                 var underline = normalizedStyle.Contains("underline", StringComparison.Ordinal);
 
-                var alignment = sourceCol?.ContentAlignment ?? TextAlignment.Left;
+                var alignment = _record.ContentAlignment;
                 var vert = isGraphicOrSizedImage ? VerticalAlignment.Top : VerticalAlignment.Center;
 
                 GriddoValuePainter.Paint(

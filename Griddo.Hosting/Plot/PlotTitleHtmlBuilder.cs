@@ -129,6 +129,7 @@ internal static class PlotTitleHtmlBuilder
         var pointRow = signalProvider.TryGetCalibrationPointLabelRecord(recordSource, pointIndex);
 
         var rows = new List<string>(segments.Count);
+        var rowCells = new List<string>(segments.Count * 2);
         foreach (var segment in segments)
         {
             var sourceFieldIndex = HostingSegmentFieldResolver.Resolve(
@@ -176,7 +177,17 @@ internal static class PlotTitleHtmlBuilder
                 rendered = rendered.Replace(" ", "\u00A0", StringComparison.Ordinal);
             }
 
-            rows.Add($"<tr><td><b>{WebUtility.HtmlEncode(label)}</b></td><td>{rendered}</td></tr>");
+            rowCells.Add($"<td><b>{WebUtility.HtmlEncode(label)}</b></td><td>{rendered}</td>");
+            if (segment.AddLineBreakAfter)
+            {
+                rows.Add("<tr>" + string.Join(string.Empty, rowCells) + "</tr>");
+                rowCells.Clear();
+            }
+        }
+
+        if (rowCells.Count > 0)
+        {
+            rows.Add("<tr>" + string.Join(string.Empty, rowCells) + "</tr>");
         }
 
         return rows.Count == 0
@@ -214,14 +225,23 @@ internal static class PlotTitleHtmlBuilder
             var cells = Regex.Matches(rowHtml, "<td[^>]*>(.*?)</td>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
             if (cells.Count >= 2)
             {
-                var h = HtmlDecodeStripTags(cells[0].Groups[1].Value).Trim();
-                var v = HtmlDecodeStripTags(cells[1].Groups[1].Value).Trim();
-                if (string.IsNullOrWhiteSpace(h) && string.IsNullOrWhiteSpace(v))
+                var parts = new List<string>();
+                for (var c = 0; c + 1 < cells.Count; c += 2)
                 {
-                    continue;
+                    var h = HtmlDecodeStripTags(cells[c].Groups[1].Value).Trim();
+                    var v = HtmlDecodeStripTags(cells[c + 1].Groups[1].Value).Trim();
+                    if (string.IsNullOrWhiteSpace(h) && string.IsNullOrWhiteSpace(v))
+                    {
+                        continue;
+                    }
+
+                    parts.Add(string.IsNullOrWhiteSpace(h) ? v : $"{h}: {v}");
                 }
 
-                lines.Add(string.IsNullOrWhiteSpace(h) ? v : $"{h}: {v}");
+                if (parts.Count > 0)
+                {
+                    lines.Add(string.Join(' ', parts));
+                }
             }
             else if (cells.Count == 1)
             {

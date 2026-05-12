@@ -3,6 +3,8 @@ using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
+using System.Windows;
+using Griddo.Editing;
 using Griddo.Fields;
 using Griddo.Grid;
 using GriddoUi.FieldEdit.Models;
@@ -129,16 +131,21 @@ public static class FieldMetadataBuilder
             NoWrap = col is IGriddoFieldWrapView wrapView && wrapView.NoWrap,
             ForegroundColor = col is IGriddoFieldColorView colorView ? colorView.ForegroundColor : string.Empty,
             BackgroundColor = col is IGriddoFieldColorView colorView2 ? colorView2.BackgroundColor : string.Empty,
-            IsNumericProperty = IsNumericValueType(sampleRaw),
+            IsNumericProperty = IsNumericField(col, sampleRaw, recordType),
             IsDateTimeProperty = IsDateTimeValueType(sampleRaw),
             IsEnumProperty = IsEnumValueType(sampleRaw),
             IsFlagsEnumProperty = IsFlagsEnumValueType(sampleRaw),
             Description = col is IGriddoFieldDescriptionView descView ? descView.Description : string.Empty,
             Visible = visible,
-            Fill = col.Fill,
+            FieldFill = col.FieldFill,
             Width = gridFieldIndexForLiveWidth is int gfi ? grid.GetLogicalFieldWidth(gfi) : col.Width,
             SortPriority = sortMap.TryGetValue(sourceFieldIndex, out var sd) ? sd.Priority : 0,
             SortAscending = sortMap.TryGetValue(sourceFieldIndex, out var sd2) ? sd2.Ascending : true,
+            ContentAlignment = EnsureDefaultContentAlignment(
+                col is IGriddoFieldAlignmentView alignmentField ? alignmentField.ContentAlignment : TextAlignment.Left,
+                col,
+                sampleRaw,
+                recordType),
             SampleDisplay = sampleDisplay,
             SampleValue = sampleRaw,
             SampleRecordSource = sample,
@@ -343,8 +350,9 @@ public static class FieldMetadataBuilder
                 IsEnumProperty = IsEnumType(p.PropertyType),
                 IsFlagsEnumProperty = IsFlagsEnumType(p.PropertyType),
                 Visible = true,
-                Fill = false,
+                FieldFill = 0,
                 Width = 140,
+                ContentAlignment = IsNumericType(p.PropertyType) ? TextAlignment.Right : TextAlignment.Left,
                 SampleDisplay = sample,
                 SampleValue = sampleValue,
                 SampleRecordSource = sampleRecord
@@ -419,5 +427,186 @@ public static class FieldMetadataBuilder
     {
         var t = Nullable.GetUnderlyingType(type) ?? type;
         return t.IsEnum && t.GetCustomAttribute<FlagsAttribute>() is not null;
+    }
+
+    /// <summary>
+    /// Default cell alignment for grid settings and layout: numeric values right-align.
+    /// </summary>
+    public static TextAlignment ResolveDefaultContentAlignment(
+        IGriddoFieldView field,
+        object? sampleValue = null,
+        Type? recordType = null) =>
+        EnsureDefaultContentAlignment(TextAlignment.Left, field, sampleValue, recordType);
+
+    /// <summary>
+    /// Upgrades legacy left alignment on numeric fields to right while preserving explicit center/right choices.
+    /// </summary>
+    public static TextAlignment EnsureDefaultContentAlignment(
+        TextAlignment alignment,
+        IGriddoFieldView field,
+        object? sampleValue = null,
+        Type? recordType = null)
+    {
+        if (IsNumericField(field, sampleValue, recordType)
+            && alignment == TextAlignment.Left)
+        {
+            return TextAlignment.Right;
+        }
+
+        return alignment;
+    }
+
+    /// <summary>
+    /// Detects numeric grid fields from editor, sample value, bound CLR member, or numeric format string.
+    /// </summary>
+    public static bool IsNumericField(
+        IGriddoFieldView field,
+        object? sampleValue = null,
+        Type? recordType = null)
+    {
+        if (field.Editor is GriddoNumberCellEditor)
+        {
+            return true;
+        }
+
+        if (IsNumericValueType(sampleValue))
+        {
+            return true;
+        }
+
+        if (TryGetSourceMemberPropertyType(field, recordType, out var propertyType))
+        {
+            if (IsDateTimeType(propertyType))
+            {
+                return false;
+            }
+
+            if (IsEnumType(propertyType))
+            {
+                return false;
+            }
+
+            if (IsNumericType(propertyType))
+            {
+                return true;
+            }
+        }
+
+        if (field is IGriddoFieldFormatView formatView
+            && LooksLikeNumericFormatString(formatView.FormatString))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetSourceMemberPropertyType(
+        IGriddoFieldView field,
+        Type? recordType,
+        out Type propertyType)
+    {
+        propertyType = typeof(object);
+        if (recordType is null
+            || field is not IGriddoFieldSourceMember sourceMember
+            || string.IsNullOrEmpty(sourceMember.SourceMemberName))
+        {
+            return false;
+        }
+
+        foreach (var type in EnumerateTypeHierarchy(recordType))
+        {
+            var property = type.GetProperty(
+                sourceMember.SourceMemberName,
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly);
+            if (property is null)
+            {
+                continue;
+            }
+
+            propertyType = property.PropertyType;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static IEnumerable<Type> EnumerateTypeHierarchy(Type type)
+    {
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            yield return current;
+        }
+    }
+
+    private static bool LooksLikeNumericFormatString(string? formatString)
+    {
+        if (string.IsNullOrWhiteSpace(formatString))
+        {
+            return false;
+        }
+
+        var fmt = formatString.Trim();
+        if (fmt.Length == 0)
+        {
+            return false;
+        }
+
+        if (IsStandardNumericFormatString(fmt))
+        {
+            return true;
+        }
+
+        var hasDigitPlaceholder = false;
+        foreach (var ch in fmt)
+        {
+            switch (ch)
+            {
+                case '0':
+                case '#':
+                    hasDigitPlaceholder = true;
+                    break;
+                case '%':
+                case 'E':
+                case 'e':
+                    return true;
+            }
+        }
+
+        return hasDigitPlaceholder
+            && fmt.IndexOfAny(['0', '#', '.', ',', '%', 'E', 'e']) >= 0;
+    }
+
+    private static bool IsStandardNumericFormatString(string format)
+    {
+        if (format.Length == 0)
+        {
+            return false;
+        }
+
+        var index = 0;
+        switch (char.ToUpperInvariant(format[index]))
+        {
+            case 'C':
+            case 'D':
+            case 'E':
+            case 'F':
+            case 'G':
+            case 'N':
+            case 'P':
+            case 'R':
+            case 'X':
+                index++;
+                break;
+            default:
+                return false;
+        }
+
+        while (index < format.Length && char.IsDigit(format[index]))
+        {
+            index++;
+        }
+
+        return index == format.Length;
     }
 }

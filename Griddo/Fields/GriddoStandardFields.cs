@@ -4,7 +4,7 @@ using Griddo.Editing;
 
 namespace Griddo.Fields;
 
-public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoFieldWrapView
+public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoFieldWrapView, IGriddoFieldAlignmentView
 {
     private readonly Func<object, object?> _valueGetter;
     private readonly Func<object, object?, bool> _valueSetter;
@@ -16,13 +16,13 @@ public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember
         Func<object, object?, bool> valueSetter,
         IGriddoCellEditor? editor = null,
         TextAlignment? contentAlignment = null,
-        bool fill = false,
+        int fieldFill = 0,
         string? sourceMemberName = null,
         string? sourceObjectName = null)
     {
         Header = header;
         Width = width;
-        Fill = fill;
+        FieldFill = fieldFill;
         SourceMemberName = sourceMemberName ?? string.Empty;
         SourceObjectName = sourceObjectName ?? string.Empty;
         _valueGetter = valueGetter;
@@ -47,9 +47,9 @@ public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember
     public string SourceMemberName { get; }
     public string SourceObjectName { get; }
     public double Width { get; }
-    public bool Fill { get; set; }
+    public int FieldFill { get; set; }
     public bool IsHtml => false;
-    public TextAlignment ContentAlignment { get; }
+    public TextAlignment ContentAlignment { get; set; }
     public IGriddoCellEditor Editor { get; }
 
     public object? GetValue(object recordSource) => _valueGetter(recordSource);
@@ -80,7 +80,7 @@ public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember
     }
 }
 
-public sealed class HtmlGriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoFieldWrapView
+public sealed class HtmlGriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoFieldWrapView, IGriddoFieldAlignmentView
 {
     private readonly Func<object, string> _valueGetter;
     private readonly Func<object, string, bool> _valueSetter;
@@ -92,13 +92,13 @@ public sealed class HtmlGriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMe
         Func<object, string, bool> valueSetter,
         IGriddoCellEditor? editor = null,
         TextAlignment contentAlignment = TextAlignment.Left,
-        bool fill = false,
+        int fieldFill = 0,
         string? sourceMemberName = null,
         string? sourceObjectName = null)
     {
         Header = header;
         Width = width;
-        Fill = fill;
+        FieldFill = fieldFill;
         SourceMemberName = sourceMemberName ?? string.Empty;
         SourceObjectName = sourceObjectName ?? string.Empty;
         _valueGetter = valueGetter;
@@ -121,9 +121,9 @@ public sealed class HtmlGriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMe
     public string SourceMemberName { get; }
     public string SourceObjectName { get; }
     public double Width { get; }
-    public bool Fill { get; set; }
+    public int FieldFill { get; set; }
     public bool IsHtml => true;
-    public TextAlignment ContentAlignment { get; }
+    public TextAlignment ContentAlignment { get; set; }
     public IGriddoCellEditor Editor { get; }
 
     public object? GetValue(object recordSource) => _valueGetter(recordSource);
@@ -153,7 +153,7 @@ public sealed class HtmlGriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMe
 /// Boolean field: centered checkbox rendering, <see cref="GriddoCellEditors.Bool"/> for typed/F2 edits,
 /// Space / second click / double-click toggle in the grid.
 /// </summary>
-public sealed class GriddoBoolFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoCheckboxToggleFieldView, IGriddoFieldWrapView
+public sealed class GriddoBoolFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoCheckboxToggleFieldView, IGriddoFieldWrapView, IGriddoFieldAlignmentView
 {
     private readonly Func<object, object?> _valueGetter;
     private readonly Func<object, object?, bool> _valueSetter;
@@ -164,14 +164,14 @@ public sealed class GriddoBoolFieldView : IGriddoFieldView, IGriddoFieldSourceMe
         double width,
         Func<object, object?> valueGetter,
         Func<object, object?, bool> valueSetter,
-        bool fill = false,
+        int fieldFill = 0,
         string? sourceMemberName = null,
         string? sourceObjectName = null,
         Func<object, bool>? isCheckboxCell = null)
     {
         Header = header;
         Width = width;
-        Fill = fill;
+        FieldFill = fieldFill;
         SourceMemberName = sourceMemberName ?? string.Empty;
         SourceObjectName = sourceObjectName ?? string.Empty;
         _valueGetter = valueGetter;
@@ -195,9 +195,9 @@ public sealed class GriddoBoolFieldView : IGriddoFieldView, IGriddoFieldSourceMe
     public string SourceMemberName { get; }
     public string SourceObjectName { get; }
     public double Width { get; }
-    public bool Fill { get; set; }
+    public int FieldFill { get; set; }
     public bool IsHtml => false;
-    public TextAlignment ContentAlignment { get; }
+    public TextAlignment ContentAlignment { get; set; }
     public IGriddoCellEditor Editor { get; }
 
     public object? GetValue(object recordSource) => _valueGetter(recordSource);

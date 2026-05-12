@@ -721,7 +721,7 @@ public partial class PlotConfigurationDialog : Window
         private static readonly IGriddoCellEditor ContextualEditor = new PlotSpecificContextualValueEditor();
         public string Header { get; set; } = "Field";
         public double Width => 220;
-        public bool Fill { get; set; }
+        public int FieldFill { get; set; }
         public bool IsHtml => false;
         public TextAlignment ContentAlignment => TextAlignment.Left;
         public IGriddoCellEditor Editor => ContextualEditor;

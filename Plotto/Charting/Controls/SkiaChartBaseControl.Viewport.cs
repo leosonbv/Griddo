@@ -8,6 +8,8 @@ public abstract partial class SkiaChartBaseControl
     /// <summary>Fits the viewport to the current <see cref="Points"/> (margins + interaction clamp).</summary>
     public void FitViewportToCurrentPoints() => UpdateViewportFromData();
 
+    protected void NotifyViewportChanged() => ViewportChanged?.Invoke(this, EventArgs.Empty);
+
     private void UpdateViewportFromData()
     {
         var points = Points;
@@ -19,7 +21,7 @@ public abstract partial class SkiaChartBaseControl
 
         _viewportWheelClamp.FitViewportToSeriesMargins(Viewport, points);
         ApplyViewportInteractionClamp();
-        ViewportChanged?.Invoke(this, EventArgs.Empty);
+        NotifyViewportChanged();
     }
 
     /// <summary>After wheel zoom, pan, or drag-zoom; default uses point-based X/Y clamps.</summary>
@@ -31,6 +33,16 @@ public abstract partial class SkiaChartBaseControl
             clampYToDataFloor: !IsViewportClampAfterRectZoom);
     }
 
+    protected void ClampViewportToCustomXWheelZoomLimits(double xMinLim, double xMaxLim)
+    {
+        _viewportWheelClamp.ClampViewportToWheelZoomLimits(
+            Viewport,
+            Points,
+            xMinLim,
+            xMaxLim,
+            clampYToDataFloor: !IsViewportClampAfterRectZoom);
+    }
+
     protected void ZoomXAt(Point pivot, double scale)
     {
         var pivotData = ToChartPoint(pivot);
@@ -38,7 +50,7 @@ public abstract partial class SkiaChartBaseControl
         Viewport.XMin = pivotData.X - (pivotData.X - Viewport.XMin) * scale;
         Viewport.XMax = Viewport.XMin + xRange;
         ApplyViewportInteractionClamp();
-        ViewportChanged?.Invoke(this, EventArgs.Empty);
+        NotifyViewportChanged();
         InvalidateVisual();
     }
 
@@ -50,7 +62,7 @@ public abstract partial class SkiaChartBaseControl
         Viewport.YMax = Viewport.YMin + yRange;
         ApplyViewportInteractionClamp();
         OnAfterYZoom(scale);
-        ViewportChanged?.Invoke(this, EventArgs.Empty);
+        NotifyViewportChanged();
         InvalidateVisual();
     }
 
@@ -95,7 +107,7 @@ public abstract partial class SkiaChartBaseControl
             _viewportClampAfterRectZoom = false;
         }
 
-        ViewportChanged?.Invoke(this, EventArgs.Empty);
+        NotifyViewportChanged();
         InvalidateVisual();
     }
 
@@ -112,14 +124,14 @@ public abstract partial class SkiaChartBaseControl
         Viewport.YMin += yDelta;
         Viewport.YMax += yDelta;
         ApplyViewportInteractionClamp();
-        ViewportChanged?.Invoke(this, EventArgs.Empty);
+        NotifyViewportChanged();
         InvalidateVisual();
     }
 
     /// <summary>
     /// Fits the viewport to all data (full zoom out). Requires edit mode — use double right-click on the chart for reset while viewing in renderer mode.
     /// </summary>
-    public void ZoomOutCompletely()
+    public virtual void ZoomOutCompletely()
     {
         if (!CanInteract())
         {
@@ -151,7 +163,7 @@ public abstract partial class SkiaChartBaseControl
         Viewport.YMin = snapshot.YMin;
         Viewport.YMax = snapshot.YMax;
         Viewport.EnsureMinimumSize();
-        ViewportChanged?.Invoke(this, EventArgs.Empty);
+        NotifyViewportChanged();
         InvalidateVisual();
     }
 }

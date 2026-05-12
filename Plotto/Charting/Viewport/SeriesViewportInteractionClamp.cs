@@ -68,7 +68,31 @@ public sealed class SeriesViewportInteractionClamp
         }
 
         SyncZoomClampBoundsFromPoints(points);
+        ClampViewportToWheelZoomLimitsCore(viewport, points, clampYToDataFloor);
+    }
 
+    public void ClampViewportToWheelZoomLimits(
+        ChartViewport viewport,
+        IReadOnlyList<ChartPoint> points,
+        double customXMin,
+        double customXMax,
+        bool clampYToDataFloor = true)
+    {
+        if (points.Count == 0)
+        {
+            return;
+        }
+
+        _zoomClampXMin = customXMin;
+        _zoomClampXMax = customXMax;
+        ClampViewportToWheelZoomLimitsCore(viewport, points, clampYToDataFloor);
+    }
+
+    private void ClampViewportToWheelZoomLimitsCore(
+        ChartViewport viewport,
+        IReadOnlyList<ChartPoint> points,
+        bool clampYToDataFloor)
+    {
         ChartSeriesBounds.GetExtents(points, out _, out _, out var yminGlobal, out _);
 
         var limW = _zoomClampXMax - _zoomClampXMin;

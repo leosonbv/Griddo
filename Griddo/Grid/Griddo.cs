@@ -792,30 +792,14 @@ public sealed partial class Griddo : FrameworkElement
             return;
         }
 
-        _fixedFieldCount = Math.Clamp(_fixedFieldCount, 0, Math.Max(0, Fields.Count));
-        _fixedRecordCount = Math.Clamp(_fixedRecordCount, 0, Math.Max(0, Records.Count));
-        if (Records.Count == 0)
+        ApplyImmediateGridCollectionStateUpdates();
+        if (_bulkLoadDepth > 0)
         {
-            _hasAutoSizedFields = false;
-            _initialSampleAutoSizeScheduled = false;
-            _suppressInitialAutoWidthFields.Clear();
+            DeferGridCollectionLayoutAndSort();
+            return;
         }
 
-        if (Records.Count > 0 && Fields.Count > 0 && !_hasAutoSizedFields)
-        {
-            ScheduleInitialSampleAutoSize();
-        }
-
-        UpdateRecordHeaderWidth();
-        UpdateScrollBars();
-        UpdateHostCanvasClips();
-        InvalidateVisual();
-
-        // Keep rows ordered when sort keys are active (host bulk-add / Records.Add does not call SetSortDescriptors).
-        if (_sortDescriptors.Count > 0 && Records.Count > 1 && Fields.Count > 0)
-        {
-            ApplySorting();
-        }
+        ApplyDeferredGridCollectionUpdates();
     }
 
 }

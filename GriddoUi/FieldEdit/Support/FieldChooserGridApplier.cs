@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Windows;
 using Griddo.Fields;
 using Griddo.Grid;
 using GriddoUi.FieldEdit.Dialog;
@@ -64,7 +65,7 @@ public static class FieldChooserGridApplier
                 }
 
                 var c = snap[r.SourceFieldIndex];
-                c.Fill = r.Fill;
+                c.FieldFill = NormalizeFieldFill(r.FieldFill);
                 if (!string.IsNullOrWhiteSpace(r.Title))
                 {
                     c.Header = r.Title.Trim();
@@ -103,6 +104,15 @@ public static class FieldChooserGridApplier
                 {
                     colorView.ForegroundColor = r.ForegroundColor?.Trim() ?? string.Empty;
                     colorView.BackgroundColor = r.BackgroundColor?.Trim() ?? string.Empty;
+                }
+
+                if (c is IGriddoFieldAlignmentView alignmentView)
+                {
+                    alignmentView.ContentAlignment = FieldMetadataBuilder.EnsureDefaultContentAlignment(
+                        r.ContentAlignment,
+                        c,
+                        r.SampleValue,
+                        r.SampleRecordSource?.GetType());
                 }
 
                 grid.Fields.Add(c);
@@ -162,6 +172,9 @@ public static class FieldChooserGridApplier
     /// Maps persisted catalog index to current grid column index. Prefer the layout apply map; fall back to
     /// locating the same <see cref="IGriddoFieldView"/> instance in <paramref name="grid"/>.Fields (stable across reorder).
     /// </summary>
+    private static int NormalizeFieldFill(int fieldFill) =>
+        fieldFill <= 0 ? 0 : Math.Min(fieldFill, 3);
+
     private static bool TryResolveSortGridColumnIndex(
         int sourceFieldIndex,
         IReadOnlyDictionary<int, int> sourceToGridIndex,
