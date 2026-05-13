@@ -141,7 +141,7 @@ public abstract partial class SkiaChartBaseControl : SKElement
         }
     }
 
-    public void ApplyTheme(PlottoThemeKind theme)
+    public virtual void ApplyTheme(PlottoThemeKind theme)
     {
         _theme = theme;
         switch (theme)

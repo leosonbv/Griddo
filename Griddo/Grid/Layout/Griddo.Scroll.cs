@@ -34,6 +34,63 @@ public sealed partial class Griddo
         return cumulative;
     }
 
+    /// <summary>Smallest scroll offset &gt; <paramref name="currentOffsetPx"/> aligned to a scroll-column start (non-transposed).</summary>
+    private double GetNextHorizontalScrollColumnStart(double currentOffsetPx, double rawMaxHorizontal)
+    {
+        var cum = 0.0;
+        for (var col = _fixedFieldCount; col < Fields.Count; col++)
+        {
+            if (cum > currentOffsetPx + 1e-9)
+            {
+                return Math.Min(rawMaxHorizontal, cum);
+            }
+
+            cum += GetFieldWidth(col);
+        }
+
+        return rawMaxHorizontal;
+    }
+
+    /// <summary>Largest scroll offset &lt; <paramref name="currentOffsetPx"/> aligned to a scroll-column start (non-transposed).</summary>
+    private double GetPreviousHorizontalScrollColumnStart(double currentOffsetPx)
+    {
+        var cum = 0.0;
+        var prevStart = 0.0;
+        for (var col = _fixedFieldCount; col < Fields.Count; col++)
+        {
+            if (cum >= currentOffsetPx - 1e-9)
+            {
+                return prevStart;
+            }
+
+            prevStart = cum;
+            cum += GetFieldWidth(col);
+        }
+
+        return prevStart;
+    }
+
+    private static double GetNextTransposedHorizontalScrollRecordStep(double currentOffsetPx, double rawMax, double recordHeightPx)
+    {
+        if (recordHeightPx < 1e-9)
+        {
+            return Math.Min(rawMax, currentOffsetPx);
+        }
+
+        var step = Math.Ceiling((currentOffsetPx + 1e-9) / recordHeightPx) * recordHeightPx;
+        return Math.Min(rawMax, step);
+    }
+
+    private static double GetPreviousTransposedHorizontalScrollRecordStep(double currentOffsetPx, double recordHeightPx)
+    {
+        if (recordHeightPx < 1e-9)
+        {
+            return 0;
+        }
+
+        return Math.Max(0, Math.Floor((currentOffsetPx - 1e-9) / recordHeightPx) * recordHeightPx);
+    }
+
     private double GetTransposedRawMaxHorizontalScroll()
     {
         var fixedRecordsW = GetTransposeFixedRecordsWidth();
@@ -562,7 +619,44 @@ public sealed partial class Griddo
 
     private void OnHorizontalScrollChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        var harmonized = HarmonizeHorizontalScrollOffset(e.NewValue);
+        var target = e.NewValue;
+        var delta = e.NewValue - e.OldValue;
+        var sc = _horizontalScrollBar.SmallChange;
+        if (sc > 1e-9 && Math.Abs(Math.Abs(delta) - sc) < 1e-6)
+        {
+            if (_isTransposed)
+            {
+                if (Records.Count > 0 && _viewportBodyWidth > 1e-9)
+                {
+                    var h = GetRecordHeight(0);
+                    var rawMax = GetTransposedRawMaxHorizontalScroll();
+                    var hOld = HarmonizeHorizontalScrollOffset(e.OldValue);
+                    if (delta > 0)
+                    {
+                        target = GetNextTransposedHorizontalScrollRecordStep(hOld, rawMax, h);
+                    }
+                    else if (delta < 0)
+                    {
+                        target = GetPreviousTransposedHorizontalScrollRecordStep(hOld, h);
+                    }
+                }
+            }
+            else if (Fields.Count > _fixedFieldCount && _viewportBodyWidth > 1e-9)
+            {
+                var rawMax = Math.Max(0, GetScrollableContentWidth() - GetScrollViewportWidth());
+                var hOld = HarmonizeHorizontalScrollOffset(e.OldValue);
+                if (delta > 0)
+                {
+                    target = GetNextHorizontalScrollColumnStart(hOld, rawMax);
+                }
+                else if (delta < 0)
+                {
+                    target = GetPreviousHorizontalScrollColumnStart(hOld);
+                }
+            }
+        }
+
+        var harmonized = HarmonizeHorizontalScrollOffset(target);
         _horizontalOffset = harmonized;
         if (Math.Abs(e.NewValue - harmonized) > double.Epsilon && Math.Abs(_horizontalScrollBar.Value - harmonized) > double.Epsilon)
         {

@@ -124,7 +124,8 @@ public partial class PlotConfigurationDialog : Window
                 Header = field.Header ?? string.Empty,
                 AbbreviatedHeader = saved?.AbbreviatedHeaderOverride ?? string.Empty,
                 AddLineBreakAfter = saved?.AddLineBreakAfter ?? true,
-                WordWrap = saved?.WordWrap ?? true
+                WordWrap = saved?.WordWrap ?? true,
+                OmitLabelColumn = saved?.OmitLabelColumn ?? false
             };
             _rows.Add(row);
             TitleFieldsGrid.Records.Add(row);
@@ -171,7 +172,8 @@ public partial class PlotConfigurationDialog : Window
                 Header = field.Header ?? string.Empty,
                 AbbreviatedHeader = saved?.AbbreviatedHeaderOverride ?? string.Empty,
                 AddLineBreakAfter = saved?.AddLineBreakAfter ?? true,
-                WordWrap = saved?.WordWrap ?? true
+                WordWrap = saved?.WordWrap ?? true,
+                OmitLabelColumn = saved?.OmitLabelColumn ?? false
             };
             PointLabelFieldsGrid.Records.Add(row);
         }
@@ -279,7 +281,8 @@ public partial class PlotConfigurationDialog : Window
                     Enabled = r.Enabled,
                     AbbreviatedHeaderOverride = r.AbbreviatedHeader ?? string.Empty,
                     AddLineBreakAfter = r.AddLineBreakAfter,
-                    WordWrap = r.WordWrap
+                    WordWrap = r.WordWrap,
+                    OmitLabelColumn = r.OmitLabelColumn
                 };
             })
             .ToList();
@@ -302,7 +305,8 @@ public partial class PlotConfigurationDialog : Window
                     Enabled = r.Enabled,
                     AbbreviatedHeaderOverride = r.AbbreviatedHeader ?? string.Empty,
                     AddLineBreakAfter = r.AddLineBreakAfter,
-                    WordWrap = r.WordWrap
+                    WordWrap = r.WordWrap,
+                    OmitLabelColumn = r.OmitLabelColumn
                 };
             })
             .ToList();
@@ -325,8 +329,21 @@ public partial class PlotConfigurationDialog : Window
             XAxisLabelFormat: GetSpecificText(PlotSpecificSettingKind.XAxisFormat),
             YAxisLabelFormat: GetSpecificText(PlotSpecificSettingKind.YAxisFormat),
             ChromatogramShowPeaks: GetSpecificBool(PlotSpecificSettingKind.ChromatogramShowPeaks),
+            ChromatogramShowExpectedRtLine: _initial.PlotTypeKey == "Chromatogram"
+                ? GetSpecificBool(PlotSpecificSettingKind.ChromatogramShowExpectedRtLine)
+                : _initial.ChromatogramShowExpectedRtLine,
+            ChromatogramShowRtLimitLines: _initial.PlotTypeKey == "Chromatogram"
+                ? GetSpecificBool(PlotSpecificSettingKind.ChromatogramShowRtLimitLines)
+                : _initial.ChromatogramShowRtLimitLines,
+            ChromatogramShowSelectionCorrectedRtOnTic: _initial.PlotTypeKey == "Chromatogram"
+                ? (_initial is HostedChromatogramFieldView { SourceMemberName: "TotalIon" }
+                    ? GetSpecificBool(PlotSpecificSettingKind.ChromatogramShowSelectionCorrectedRtOnTic)
+                    : _initial.ChromatogramShowSelectionCorrectedRtOnTic)
+                : _initial.ChromatogramShowSelectionCorrectedRtOnTic,
             CalibrationShowRegression: GetSpecificBool(PlotSpecificSettingKind.CalibrationShowRegression),
-            ShowCalibrationPointLabels: GetSpecificBool(PlotSpecificSettingKind.CalibrationShowPointLabels),
+            ShowCalibrationPointLabels: _initial.PlotTypeKey == "Calibration curve"
+                ? GetSpecificBool(PlotSpecificSettingKind.CalibrationShowPointLabels)
+                : _initial.ShowCalibrationPointLabels,
             CalibrationPointLabelSegments: calibrationPointLabelSegments,
             SpectrumNormalizeIntensity: GetSpecificBool(PlotSpecificSettingKind.SpectrumNormalizeIntensity));
         return true;
@@ -531,6 +548,20 @@ public partial class PlotConfigurationDialog : Window
             },
             GriddoCellEditors.Text));
         PointLabelFieldsGrid.Fields.Add(new GriddoBoolFieldView(
+            "Value only",
+            90,
+            r => ((PlotTitleFieldEditRecord)r).OmitLabelColumn,
+            (r, v) =>
+            {
+                if (v is not bool b)
+                {
+                    return false;
+                }
+
+                ((PlotTitleFieldEditRecord)r).OmitLabelColumn = b;
+                return true;
+            }));
+        PointLabelFieldsGrid.Fields.Add(new GriddoBoolFieldView(
             "Wrap",
             70,
             r => ((PlotTitleFieldEditRecord)r).WordWrap,
@@ -595,12 +626,27 @@ public partial class PlotConfigurationDialog : Window
         if (_initial.PlotTypeKey == "Chromatogram")
         {
             SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
-                PlotSpecificSettingKind.ChromatogramShowPeaks, "Type", "Show peak overlay", boolValue: _initial.ChromatogramShowPeaks));
+                PlotSpecificSettingKind.ChromatogramShowPeaks, "Type", "Show peak fill", boolValue: _initial.ChromatogramShowPeaks));
+            SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+                PlotSpecificSettingKind.ChromatogramShowExpectedRtLine, "Markers", "Show expected RT line (corrected)", boolValue: _initial.ChromatogramShowExpectedRtLine));
+            SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+                PlotSpecificSettingKind.ChromatogramShowRtLimitLines, "Markers", "Show RT limit lines (±TimeWindow/2 on corrected RT)", boolValue: _initial.ChromatogramShowRtLimitLines));
+            if (_initial is HostedChromatogramFieldView { SourceMemberName: "TotalIon" })
+            {
+                SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+                    PlotSpecificSettingKind.ChromatogramShowSelectionCorrectedRtOnTic,
+                    "Markers",
+                    "Show compound-selection corrected RT on TIC",
+                    boolValue: _initial.ChromatogramShowSelectionCorrectedRtOnTic));
+            }
         }
         else if (_initial.PlotTypeKey == "Calibration curve")
         {
             SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
-                PlotSpecificSettingKind.CalibrationShowPointLabels, "Point labels", "Show point labels", boolValue: _initial.ShowCalibrationPointLabels));
+                PlotSpecificSettingKind.CalibrationShowPointLabels,
+                "Point labels",
+                "Show labels and connector lines",
+                boolValue: _initial.ShowCalibrationPointLabels));
             SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
                 PlotSpecificSettingKind.CalibrationShowRegression, "Type", "Show regression details", boolValue: _initial.CalibrationShowRegression));
         }
@@ -639,6 +685,9 @@ public partial class PlotConfigurationDialog : Window
     private enum PlotSpecificSettingKind
     {
         ChromatogramShowPeaks,
+        ChromatogramShowExpectedRtLine,
+        ChromatogramShowRtLimitLines,
+        ChromatogramShowSelectionCorrectedRtOnTic,
         CalibrationShowRegression,
         CalibrationShowPointLabels,
         SpectrumNormalizeIntensity,
@@ -682,6 +731,8 @@ public partial class PlotConfigurationDialog : Window
         public string AbbreviatedHeader { get; set; } = string.Empty;
         public bool AddLineBreakAfter { get; set; } = true;
         public bool WordWrap { get; set; } = true;
+        /// <summary>Calibration point labels: render value only (no header column in HTML / plain overlay).</summary>
+        public bool OmitLabelColumn { get; set; }
     }
 
     private sealed class PlotSpecificSettingRecord
@@ -707,7 +758,11 @@ public partial class PlotConfigurationDialog : Window
         public string TextValue { get; set; } = string.Empty;
         public bool IsBooleanSetting => Setting is
             PlotSpecificSettingKind.ChromatogramShowPeaks or
+            PlotSpecificSettingKind.ChromatogramShowExpectedRtLine or
+            PlotSpecificSettingKind.ChromatogramShowRtLimitLines or
+            PlotSpecificSettingKind.ChromatogramShowSelectionCorrectedRtOnTic or
             PlotSpecificSettingKind.CalibrationShowRegression or
+            PlotSpecificSettingKind.CalibrationShowPointLabels or
             PlotSpecificSettingKind.SpectrumNormalizeIntensity or
             PlotSpecificSettingKind.ShowTitle or
             PlotSpecificSettingKind.ShowXAxis or
@@ -837,6 +892,9 @@ public sealed record PlotFieldDialogResult(
     string XAxisLabelFormat,
     string YAxisLabelFormat,
     bool ChromatogramShowPeaks,
+    bool ChromatogramShowExpectedRtLine,
+    bool ChromatogramShowRtLimitLines,
+    bool ChromatogramShowSelectionCorrectedRtOnTic,
     bool CalibrationShowRegression,
     bool ShowCalibrationPointLabels,
     List<PlotTitleSegmentConfiguration> CalibrationPointLabelSegments,

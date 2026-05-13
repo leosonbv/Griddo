@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Reflection;
 using Griddo.Editing;
 
@@ -13,7 +14,8 @@ public static class GriddoNamedSourceFields
         double width,
         IGriddoCellEditor? editor = null,
         System.Windows.TextAlignment? contentAlignment = null,
-        int fieldFill = 0)
+        int fieldFill = 0,
+        IReadOnlyList<Type>? inferBooleanCheckboxFromMemberTypes = null)
     {
         var getter = CreateGetter(sourceObjectName, sourceMemberName);
         var setter = CreateSetter(sourceObjectName, sourceMemberName);
@@ -26,7 +28,8 @@ public static class GriddoNamedSourceFields
             contentAlignment: contentAlignment,
             fieldFill: fieldFill,
             sourceMemberName: sourceMemberName,
-            sourceObjectName: sourceObjectName);
+            sourceObjectName: sourceObjectName,
+            inferBooleanCheckboxFromMemberTypes: inferBooleanCheckboxFromMemberTypes);
     }
 
     private static Func<object, object?> CreateGetter(string sourceObjectName, string sourceMemberName)

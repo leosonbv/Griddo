@@ -327,6 +327,21 @@ public class CalibrationCurveControl : SkiaChartBaseControl
         _labelConnectorPaint.StrokeWidth = Math.Max(1f, 2.25f * s);
     }
 
+    public override void ApplyTheme(PlottoThemeKind theme)
+    {
+        base.ApplyTheme(theme);
+        if (theme == PlottoThemeKind.Vs2013DarkTheme)
+        {
+            _labelTextPaint.Color = new SKColor(230, 232, 238);
+            _labelConnectorPaint.Color = new SKColor(175, 182, 198, 210);
+        }
+        else
+        {
+            _labelTextPaint.Color = new SKColor(40, 40, 40);
+            _labelConnectorPaint.Color = new SKColor(90, 90, 90, 200);
+        }
+    }
+
     public override bool ApplyWheelZoomFromRoute(MouseWheelEventArgs e)
     {
         if (!CanUseScrollWheelZoom())

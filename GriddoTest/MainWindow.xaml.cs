@@ -1940,7 +1940,8 @@ public partial class MainWindow : Window
                     Enabled = s.Enabled,
                     AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
                     AddLineBreakAfter = s.AddLineBreakAfter,
-                    WordWrap = s.WordWrap
+                    WordWrap = s.WordWrap,
+                    OmitLabelColumn = s.OmitLabelColumn
                 })
                 .ToList();
             target.ShowXAxis = plot.ShowXAxis;
@@ -1959,7 +1960,11 @@ public partial class MainWindow : Window
             target.AxisFontSize = Math.Clamp(plot.AxisFontSize, 6d, 96d);
             target.TitleFontSize = Math.Clamp(plot.TitleFontSize, 6d, 120d);
             target.ChromatogramShowPeaks = plot.ChromatogramShowPeaks;
+            target.ChromatogramShowExpectedRtLine = plot.ChromatogramShowExpectedRtLine;
+            target.ChromatogramShowRtLimitLines = plot.ChromatogramShowRtLimitLines;
+            target.ChromatogramShowSelectionCorrectedRtOnTic = plot.ChromatogramShowSelectionCorrectedRtOnTic;
             target.CalibrationShowRegression = plot.CalibrationShowRegression;
+            target.ShowCalibrationPointLabels = plot.ShowCalibrationPointLabels;
             target.SpectrumNormalizeIntensity = plot.SpectrumNormalizeIntensity;
         }
         foreach (var html in layout.HtmlFields)
@@ -2117,7 +2122,8 @@ public partial class MainWindow : Window
                                 Enabled = s.Enabled,
                                 AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
                                 AddLineBreakAfter = s.AddLineBreakAfter,
-                                WordWrap = s.WordWrap
+                                WordWrap = s.WordWrap,
+                                OmitLabelColumn = s.OmitLabelColumn
                             })
                             .ToList(),
                         ShowXAxis = p.ShowXAxis,
@@ -2136,6 +2142,9 @@ public partial class MainWindow : Window
                         AxisFontSize = Math.Clamp(p.AxisFontSize, 6d, 96d),
                         TitleFontSize = Math.Clamp(p.TitleFontSize, 6d, 120d),
                         ChromatogramShowPeaks = p.ChromatogramShowPeaks,
+                        ChromatogramShowExpectedRtLine = p.ChromatogramShowExpectedRtLine,
+                        ChromatogramShowRtLimitLines = p.ChromatogramShowRtLimitLines,
+                        ChromatogramShowSelectionCorrectedRtOnTic = p.ChromatogramShowSelectionCorrectedRtOnTic,
                         CalibrationShowRegression = p.CalibrationShowRegression,
                         ShowCalibrationPointLabels = p.ShowCalibrationPointLabels,
                         CalibrationPointLabelSegments = p.CalibrationPointLabelSegments
@@ -2146,7 +2155,8 @@ public partial class MainWindow : Window
                                 Enabled = s.Enabled,
                                 AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
                                 AddLineBreakAfter = s.AddLineBreakAfter,
-                                WordWrap = s.WordWrap
+                                WordWrap = s.WordWrap,
+                                OmitLabelColumn = s.OmitLabelColumn
                             })
                             .ToList(),
                         SpectrumNormalizeIntensity = p.SpectrumNormalizeIntensity
@@ -2902,7 +2912,8 @@ public partial class MainWindow : Window
                 Enabled = s.Enabled,
                 AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
                 AddLineBreakAfter = s.AddLineBreakAfter,
-                WordWrap = s.WordWrap
+                WordWrap = s.WordWrap,
+                OmitLabelColumn = s.OmitLabelColumn
             })
             .ToList();
         target.Label = settings.Label ?? string.Empty;
@@ -2919,6 +2930,9 @@ public partial class MainWindow : Window
         target.AxisFontSize = Math.Clamp(settings.AxisFontSize, 6d, 96d);
         target.TitleFontSize = Math.Clamp(settings.TitleFontSize, 6d, 120d);
         target.ChromatogramShowPeaks = settings.ChromatogramShowPeaks;
+        target.ChromatogramShowExpectedRtLine = settings.ChromatogramShowExpectedRtLine;
+        target.ChromatogramShowRtLimitLines = settings.ChromatogramShowRtLimitLines;
+        target.ChromatogramShowSelectionCorrectedRtOnTic = settings.ChromatogramShowSelectionCorrectedRtOnTic;
         target.CalibrationShowRegression = settings.CalibrationShowRegression;
         target.ShowCalibrationPointLabels = settings.ShowCalibrationPointLabels;
         target.CalibrationPointLabelSegments = settings.CalibrationPointLabelSegments
@@ -2931,7 +2945,8 @@ public partial class MainWindow : Window
                 Enabled = s.Enabled,
                 AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
                 AddLineBreakAfter = s.AddLineBreakAfter,
-                WordWrap = s.WordWrap
+                WordWrap = s.WordWrap,
+                OmitLabelColumn = s.OmitLabelColumn
             })
             .ToList();
         target.SpectrumNormalizeIntensity = settings.SpectrumNormalizeIntensity;

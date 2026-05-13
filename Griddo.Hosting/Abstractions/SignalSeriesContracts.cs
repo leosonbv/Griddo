@@ -19,7 +19,11 @@ public readonly record struct CalibrationSignalPoint(
 public readonly record struct ChromatogramPeakOverlayRegion(
     IntegrationRegion Region,
     bool IsSelected,
-    bool IsManualIntegrated = false);
+    /// <summary>
+    /// When true, use the stronger overlay fill (manual peak integration and/or integration manually pinned as selected).
+    /// When false, use the lighter automatic fill for the same theme color.
+    /// </summary>
+    bool UseDarkerOverlayFill = false);
 
 public interface ITicPeakOverlayOptions
 {
@@ -28,17 +32,31 @@ public interface ITicPeakOverlayOptions
     bool OverlayTargetPeaks { get; set; }
 }
 
+/// <summary>Controls optional dashed vertical markers (expected RT, limits, TIC selection overlays).</summary>
+public readonly record struct ChromatogramVerticalMarkerOptions(
+    bool ShowExpectedRtLine,
+    bool ShowRtLimitLines,
+    bool ShowSelectionCorrectedRtOnTic);
+
+/// <summary>Optional dashed vertical markers at expected RT / integration window boundaries.</summary>
+public interface IChromatogramVerticalMarkersProvider
+{
+    IReadOnlyList<ChromatogramVerticalMarker> GetVerticalMarkers(
+        object recordSource,
+        ChromatogramVerticalMarkerOptions options);
+}
+
 public interface IChromatogramSignalProvider
 {
     IReadOnlyList<SignalPoint> GetPoints(object recordSource);
 
-    /// <summary>Peak integration bands drawn when chromatogram &quot;Show peak overlay&quot; is enabled (renderer mode only).</summary>
+    /// <summary>Peak integration regions for chromatogram overlay; fills respect &quot;Show peak fill&quot;, baselines draw whenever regions are supplied (renderer mode).</summary>
     IReadOnlyList<IntegrationRegion> GetPeakOverlayRegions(object recordSource) => [];
 
     /// <summary>Peak integration bands with selection state (selected vs alternative).</summary>
     IReadOnlyList<ChromatogramPeakOverlayRegion> GetPeakOverlayRegionsWithSelection(object recordSource) =>
         GetPeakOverlayRegions(recordSource)
-            .Select(static region => new ChromatogramPeakOverlayRegion(region, IsSelected: false, IsManualIntegrated: false))
+            .Select(static region => new ChromatogramPeakOverlayRegion(region, IsSelected: false, UseDarkerOverlayFill: false))
             .ToList();
 
     /// <summary>Optional per-region colored overlays (used for category-specific peak coloring, e.g. TIC).</summary>

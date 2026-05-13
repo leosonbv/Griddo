@@ -56,6 +56,9 @@ public sealed class HostedSpectrumFieldView : IGriddoHostedFieldView, IGriddoFie
     public double AxisFontSize { get; set; } = 15d;
     public double TitleFontSize { get; set; } = 16.5d;
     public bool ChromatogramShowPeaks { get; set; }
+    public bool ChromatogramShowExpectedRtLine { get; set; }
+    public bool ChromatogramShowRtLimitLines { get; set; }
+    public bool ChromatogramShowSelectionCorrectedRtOnTic { get; set; }
     public bool OverlayIstdPeaks { get; set; }
     public bool OverlaySurrogatePeaks { get; set; }
     public bool OverlayTargetPeaks { get; set; }

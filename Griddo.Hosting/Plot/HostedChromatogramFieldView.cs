@@ -58,6 +58,9 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
     public double AxisFontSize { get; set; } = 15d;
     public double TitleFontSize { get; set; } = 16.5d;
     public bool ChromatogramShowPeaks { get; set; }
+    public bool ChromatogramShowExpectedRtLine { get; set; } = true;
+    public bool ChromatogramShowRtLimitLines { get; set; } = true;
+    public bool ChromatogramShowSelectionCorrectedRtOnTic { get; set; } = true;
     public bool OverlayIstdPeaks { get; set; }
     public bool OverlaySurrogatePeaks { get; set; }
     public bool OverlayTargetPeaks { get; set; }
@@ -140,6 +143,16 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
 
         ApplyChartSettings(chart, recordSource);
         SyncPeakOverlay(chart, recordSource);
+        if (chart is ChromatogramControl chromMarkers)
+        {
+            var markerOptions = new ChromatogramVerticalMarkerOptions(
+                ChromatogramShowExpectedRtLine,
+                ChromatogramShowRtLimitLines,
+                ChromatogramShowSelectionCorrectedRtOnTic);
+            chromMarkers.VerticalMarkers = _signalProvider is IChromatogramVerticalMarkersProvider markersProvider
+                ? markersProvider.GetVerticalMarkers(recordSource, markerOptions)
+                : Array.Empty<ChromatogramVerticalMarker>();
+        }
 
         if (recordChanged)
         {
@@ -160,6 +173,16 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
             chart.IsHitTestVisible = true;
             chart.Focus();
             SyncPeakOverlay(chart, host.Tag);
+            if (chart is ChromatogramControl chromMarkers)
+            {
+                var markerOptions = new ChromatogramVerticalMarkerOptions(
+                    ChromatogramShowExpectedRtLine,
+                    ChromatogramShowRtLimitLines,
+                    ChromatogramShowSelectionCorrectedRtOnTic);
+                chromMarkers.VerticalMarkers = _signalProvider is IChromatogramVerticalMarkersProvider markersProvider && host.Tag is { } tag
+                    ? markersProvider.GetVerticalMarkers(tag, markerOptions)
+                    : Array.Empty<ChromatogramVerticalMarker>();
+            }
         }
     }
 
@@ -347,6 +370,7 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         chart.ShowYAxis = ShowYAxis;
         if (chart is ChromatogramControl chromatogram)
         {
+            chromatogram.ShowPeakRegionFill = ChromatogramShowPeaks;
             chromatogram.SetPeakOverlayColors(
                 new SkiaSharp.SKColor(SelectedPeakOverlayColor.R, SelectedPeakOverlayColor.G, SelectedPeakOverlayColor.B, SelectedPeakOverlayColor.A),
                 new SkiaSharp.SKColor(AlternativePeakOverlayColor.R, AlternativePeakOverlayColor.G, AlternativePeakOverlayColor.B, AlternativePeakOverlayColor.A),
@@ -373,18 +397,11 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
             chart.IntegrationRegionsManualIntegrated = Array.Empty<bool>();
             chart.AlternativeIntegrationRegionsManualIntegrated = Array.Empty<bool>();
             chart.ColoredIntegrationRegions = Array.Empty<ColoredIntegrationRegion>();
+            chart.VerticalMarkers = Array.Empty<ChromatogramVerticalMarker>();
             return;
         }
 
         chart.ColoredIntegrationRegions = _signalProvider.GetPeakOverlayRegionsColored(recordSource);
-        if (!ChromatogramShowPeaks)
-        {
-            chart.IntegrationRegions = Array.Empty<IntegrationRegion>();
-            chart.AlternativeIntegrationRegions = Array.Empty<IntegrationRegion>();
-            chart.IntegrationRegionsManualIntegrated = Array.Empty<bool>();
-            chart.AlternativeIntegrationRegionsManualIntegrated = Array.Empty<bool>();
-            return;
-        }
 
         var overlays = _signalProvider.GetPeakOverlayRegionsWithSelection(recordSource);
         static (double Begin, double End) RegionKey(IntegrationRegion r) =>
@@ -396,14 +413,14 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
             .ToHashSet();
 
         chart.IntegrationRegions = selectedOverlays.Select(static x => x.Region).ToList();
-        chart.IntegrationRegionsManualIntegrated = selectedOverlays.Select(static x => x.IsManualIntegrated).ToList();
+        chart.IntegrationRegionsManualIntegrated = selectedOverlays.Select(static x => x.UseDarkerOverlayFill).ToList();
 
         var alternativeOverlays = overlays
             .Where(static x => !x.IsSelected)
             .Where(x => !selectedKeys.Contains(RegionKey(x.Region)))
             .ToList();
         chart.AlternativeIntegrationRegions = alternativeOverlays.Select(static x => x.Region).ToList();
-        chart.AlternativeIntegrationRegionsManualIntegrated = alternativeOverlays.Select(static x => x.IsManualIntegrated).ToList();
+        chart.AlternativeIntegrationRegionsManualIntegrated = alternativeOverlays.Select(static x => x.UseDarkerOverlayFill).ToList();
     }
 
     private static object BuildRuntimePointsValue(IReadOnlyList<SignalPoint> points)

@@ -144,9 +144,12 @@ internal static class PlotTitleHtmlBuilder
             }
 
             var field = resolveFields[sourceFieldIndex];
-            var label = string.IsNullOrWhiteSpace(segment.AbbreviatedHeaderOverride)
-                ? (field.Header ?? string.Empty)
-                : segment.AbbreviatedHeaderOverride;
+            var valueOnlyLayout = segment.OmitLabelColumn;
+            var label = valueOnlyLayout
+                ? string.Empty
+                : (string.IsNullOrWhiteSpace(segment.AbbreviatedHeaderOverride)
+                    ? (field.Header ?? string.Empty)
+                    : segment.AbbreviatedHeaderOverride);
 
             var plainOverride = signalProvider.TryGetCalibrationPointSegmentPlainValue(
                 recordSource,
@@ -177,7 +180,15 @@ internal static class PlotTitleHtmlBuilder
                 rendered = rendered.Replace(" ", "\u00A0", StringComparison.Ordinal);
             }
 
-            rowCells.Add($"<td><b>{WebUtility.HtmlEncode(label)}</b></td><td>{rendered}</td>");
+            if (valueOnlyLayout)
+            {
+                rowCells.Add($"<td colspan=\"2\">{rendered}</td>");
+            }
+            else
+            {
+                rowCells.Add($"<td><b>{WebUtility.HtmlEncode(label)}</b></td><td>{rendered}</td>");
+            }
+
             if (segment.AddLineBreakAfter)
             {
                 rows.Add("<tr>" + string.Join(string.Empty, rowCells) + "</tr>");

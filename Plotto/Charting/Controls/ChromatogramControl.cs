@@ -82,6 +82,24 @@ public partial class ChromatogramControl : SkiaChartBaseControl
         Color = SKColors.Red
     };
 
+    private readonly SKPaint _verticalMarkerPaint = new()
+    {
+        IsAntialias = true,
+        Style = SKPaintStyle.Stroke,
+        StrokeWidth = 1.25f,
+        Color = new SKColor(30, 30, 30, 220),
+        PathEffect = SKPathEffect.CreateDash(new[] { 6f, 4f }, 0f)
+    };
+
+    private readonly SKPaint _verticalMarkerLightPaint = new()
+    {
+        IsAntialias = true,
+        Style = SKPaintStyle.Stroke,
+        StrokeWidth = 1f,
+        Color = new SKColor(100, 100, 100, 140),
+        PathEffect = SKPathEffect.CreateDash(new[] { 4f, 5f }, 0f)
+    };
+
     public event EventHandler<IntegrationRegionEventArgs>? IntegrationChanged;
     public event EventHandler<PeakSplitEventArgs>? PeakSplitRequested;
     public event EventHandler<PeakSelectionEventArgs>? PeakSelectionRequested;
@@ -113,11 +131,20 @@ public partial class ChromatogramControl : SkiaChartBaseControl
             manualIntegrationFill.Green,
             manualIntegrationFill.Blue,
             clampedAlpha);
-        _selectedPeakFillPaint.Color = new SKColor(selectedPeak.Red, selectedPeak.Green, selectedPeak.Blue, clampedAlpha);
-        _alternativePeakFillPaint.Color = new SKColor(alternativePeak.Red, alternativePeak.Green, alternativePeak.Blue, clampedAlpha);
-        _selectedManualPeakFillPaint.Color = DarkenPeakFillRgb(_selectedPeakFillPaint.Color, ManualIntegratedPeakFillRgbFactor);
-        _alternativeManualPeakFillPaint.Color = DarkenPeakFillRgb(_alternativePeakFillPaint.Color, ManualIntegratedPeakFillRgbFactor);
+        var selBase = new SKColor(selectedPeak.Red, selectedPeak.Green, selectedPeak.Blue, clampedAlpha);
+        _selectedPeakFillPaint.Color = LightenPeakFillRgb(selBase, 0.22f);
+        var altBase = new SKColor(alternativePeak.Red, alternativePeak.Green, alternativePeak.Blue, clampedAlpha);
+        _alternativePeakFillPaint.Color = LightenPeakFillRgb(altBase, 0.22f);
+        _selectedManualPeakFillPaint.Color = DarkenPeakFillRgb(selBase, ManualIntegratedPeakFillRgbFactor);
+        _alternativeManualPeakFillPaint.Color = DarkenPeakFillRgb(altBase, ManualIntegratedPeakFillRgbFactor);
         ApplyUiScaleToResources();
+    }
+
+    private static SKColor LightenPeakFillRgb(SKColor fill, float towardWhite)
+    {
+        towardWhite = Math.Clamp(towardWhite, 0f, 1f);
+        byte Blend(byte c) => (byte)Math.Clamp((int)Math.Round(c + (255 - c) * towardWhite), 0, 255);
+        return new SKColor(Blend(fill.Red), Blend(fill.Green), Blend(fill.Blue), fill.Alpha);
     }
 
     private static SKColor DarkenPeakFillRgb(SKColor fill, float rgbFactor)
@@ -131,6 +158,27 @@ public partial class ChromatogramControl : SkiaChartBaseControl
         return new SKColor(Scale(fill.Red), Scale(fill.Green), Scale(fill.Blue), fill.Alpha);
     }
 
+    public override void ApplyTheme(PlottoThemeKind theme)
+    {
+        base.ApplyTheme(theme);
+        ApplyVerticalMarkerTheme(theme);
+    }
+
+    private void ApplyVerticalMarkerTheme(PlottoThemeKind theme)
+    {
+        if (theme == PlottoThemeKind.Vs2013DarkTheme)
+        {
+            // Light dashed overlays on dark plot background (expected RT + RT window on chromatogram / TIC).
+            _verticalMarkerPaint.Color = new SKColor(200, 205, 215, 230);
+            _verticalMarkerLightPaint.Color = new SKColor(165, 172, 185, 170);
+        }
+        else
+        {
+            _verticalMarkerPaint.Color = new SKColor(30, 30, 30, 220);
+            _verticalMarkerLightPaint.Color = new SKColor(100, 100, 100, 140);
+        }
+    }
+
     protected override void ApplyUiScaleToResources()
     {
         base.ApplyUiScaleToResources();
@@ -139,6 +187,8 @@ public partial class ChromatogramControl : SkiaChartBaseControl
         _selectedPeakLinePaint.StrokeWidth = stroke;
         _alternativePeakLinePaint.StrokeWidth = stroke;
         _rendererIntegrationLinePaint.StrokeWidth = stroke;
+        _verticalMarkerPaint.StrokeWidth = Math.Max(0.75f, (float)(1.25 * PlotUiScale));
+        _verticalMarkerLightPaint.StrokeWidth = Math.Max(0.6f, (float)(1.0 * PlotUiScale));
     }
 
     /// <summary>
@@ -207,7 +257,7 @@ public partial class ChromatogramControl : SkiaChartBaseControl
 
     /// <summary>
     /// Parallel to <see cref="AlternativeIntegrationRegions"/>; when shorter than that list, missing entries are treated as false.
-    /// When true, the region fill uses the manual-integration color instead of the alternative-peak overlay color.
+    /// When true, the region fill uses the darker overlay tier (manual integration and/or integration manually pinned as selected).
     /// </summary>
     public IReadOnlyList<bool> AlternativeIntegrationRegionsManualIntegrated
     {
@@ -224,7 +274,7 @@ public partial class ChromatogramControl : SkiaChartBaseControl
 
     /// <summary>
     /// Parallel to <see cref="IntegrationRegions"/>; when shorter than that list, missing entries are treated as false.
-    /// When true, the region fill uses the manual-integration color instead of the selected-peak overlay color.
+    /// When true, the region fill uses the darker overlay tier (manual integration and/or integration manually pinned as selected).
     /// </summary>
     public IReadOnlyList<bool> IntegrationRegionsManualIntegrated
     {
@@ -251,6 +301,36 @@ public partial class ChromatogramControl : SkiaChartBaseControl
             typeof(IReadOnlyList<ColoredIntegrationRegion>),
             typeof(ChromatogramControl),
             new FrameworkPropertyMetadata(Array.Empty<ColoredIntegrationRegion>(), FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public IReadOnlyList<ChromatogramVerticalMarker> VerticalMarkers
+    {
+        get => (IReadOnlyList<ChromatogramVerticalMarker>)GetValue(VerticalMarkersProperty);
+        set => SetValue(VerticalMarkersProperty, value);
+    }
+
+    public static readonly DependencyProperty VerticalMarkersProperty =
+        DependencyProperty.Register(
+            nameof(VerticalMarkers),
+            typeof(IReadOnlyList<ChromatogramVerticalMarker>),
+            typeof(ChromatogramControl),
+            new FrameworkPropertyMetadata(Array.Empty<ChromatogramVerticalMarker>(), FrameworkPropertyMetadataOptions.AffectsRender));
+
+    /// <summary>
+    /// When false, renderer overlay peak fills (selected, alternative, and TIC-colored regions) are skipped;
+    /// integration baselines (and colored signal lines) still draw. Editor-mode drag preview is unchanged.
+    /// </summary>
+    public bool ShowPeakRegionFill
+    {
+        get => (bool)GetValue(ShowPeakRegionFillProperty);
+        set => SetValue(ShowPeakRegionFillProperty, value);
+    }
+
+    public static readonly DependencyProperty ShowPeakRegionFillProperty =
+        DependencyProperty.Register(
+            nameof(ShowPeakRegionFill),
+            typeof(bool),
+            typeof(ChromatogramControl),
+            new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));
 
     private void OnRenderModeChanged()
     {
@@ -286,6 +366,7 @@ public partial class ChromatogramControl : SkiaChartBaseControl
         IntegrationRegionsManualIntegrated = Array.Empty<bool>();
         AlternativeIntegrationRegionsManualIntegrated = Array.Empty<bool>();
         ColoredIntegrationRegions = Array.Empty<ColoredIntegrationRegion>();
+        VerticalMarkers = Array.Empty<ChromatogramVerticalMarker>();
         _activeRegion = null;
         InvalidateVisual();
     }
@@ -296,14 +377,18 @@ public partial class ChromatogramControl : SkiaChartBaseControl
             ? (IReadOnlyList<ChartPoint>)Array.Empty<ChartPoint>()
             : Points.OrderBy(p => p.X).ToList();
 
+        var showPeakFill = ShowPeakRegionFill;
         var altManualFlags = AlternativeIntegrationRegionsManualIntegrated;
-        for (var i = 0; i < AlternativeIntegrationRegions.Count; i++)
+        if (showPeakFill)
         {
-            var region = AlternativeIntegrationRegions[i];
-            var fillPaint = ManualIntegratedFlagAt(altManualFlags, i)
-                ? _alternativeManualPeakFillPaint
-                : _alternativePeakFillPaint;
-            ChartSkiaManualIntegration.DrawRegionFill(canvas, ordered, plotRect, region, ToPixelX, ToPixelY, fillPaint);
+            for (var i = 0; i < AlternativeIntegrationRegions.Count; i++)
+            {
+                var region = AlternativeIntegrationRegions[i];
+                var fillPaint = ManualIntegratedFlagAt(altManualFlags, i)
+                    ? _alternativeManualPeakFillPaint
+                    : _alternativePeakFillPaint;
+                ChartSkiaManualIntegration.DrawRegionFill(canvas, ordered, plotRect, region, ToPixelX, ToPixelY, fillPaint);
+            }
         }
 
         foreach (var region in AlternativeIntegrationRegions)
@@ -312,13 +397,16 @@ public partial class ChromatogramControl : SkiaChartBaseControl
         }
 
         var selManualFlags = IntegrationRegionsManualIntegrated;
-        for (var i = 0; i < IntegrationRegions.Count; i++)
+        if (showPeakFill)
         {
-            var region = IntegrationRegions[i];
-            var fillPaint = ManualIntegratedFlagAt(selManualFlags, i)
-                ? _selectedManualPeakFillPaint
-                : _selectedPeakFillPaint;
-            ChartSkiaManualIntegration.DrawRegionFill(canvas, ordered, plotRect, region, ToPixelX, ToPixelY, fillPaint);
+            for (var i = 0; i < IntegrationRegions.Count; i++)
+            {
+                var region = IntegrationRegions[i];
+                var fillPaint = ManualIntegratedFlagAt(selManualFlags, i)
+                    ? _selectedManualPeakFillPaint
+                    : _selectedPeakFillPaint;
+                ChartSkiaManualIntegration.DrawRegionFill(canvas, ordered, plotRect, region, ToPixelX, ToPixelY, fillPaint);
+            }
         }
 
         foreach (var region in IntegrationRegions)
@@ -347,14 +435,18 @@ public partial class ChromatogramControl : SkiaChartBaseControl
                 var fillAlpha = (byte)Math.Clamp(colored.A / 2, 16, 140);
                 fillPaint.Color = new SKColor(colored.R, colored.G, colored.B, fillAlpha);
                 linePaint.Color = new SKColor(colored.R, colored.G, colored.B, 255);
-                ChartSkiaManualIntegration.DrawRegionFill(
-                    canvas,
-                    shapePoints,
-                    plotRect,
-                    colored.Region,
-                    ToPixelX,
-                    ToPixelY,
-                    fillPaint);
+                if (showPeakFill)
+                {
+                    ChartSkiaManualIntegration.DrawRegionFill(
+                        canvas,
+                        shapePoints,
+                        plotRect,
+                        colored.Region,
+                        ToPixelX,
+                        ToPixelY,
+                        fillPaint);
+                }
+
                 ChartSkiaManualIntegration.DrawRegionBaseline(
                     canvas,
                     shapePoints,
@@ -373,6 +465,8 @@ public partial class ChromatogramControl : SkiaChartBaseControl
                     linePaint);
             }
         }
+
+        DrawVerticalMarkersInPlot(canvas, plotRect);
 
         if (RenderMode == ChartRenderMode.Renderer)
         {
@@ -424,6 +518,51 @@ public partial class ChromatogramControl : SkiaChartBaseControl
 
         region = default;
         return false;
+    }
+
+    private void DrawVerticalMarkersInPlot(SKCanvas canvas, SKRect plotRect)
+    {
+        var markers = VerticalMarkers;
+        if (markers is null || markers.Count == 0)
+        {
+            return;
+        }
+
+        var h = plotRect.Height;
+        if (h <= 0.5f)
+        {
+            return;
+        }
+
+        canvas.Save();
+        canvas.ClipRect(plotRect);
+        try
+        {
+            foreach (var m in markers)
+            {
+                if (!double.IsFinite(m.X))
+                {
+                    continue;
+                }
+
+                var px = ToPixelX(m.X, plotRect);
+                if (px < plotRect.Left - 1 || px > plotRect.Right + 1)
+                {
+                    continue;
+                }
+
+                var t0 = Math.Clamp(m.YStartFraction, 0f, 1f);
+                var t1 = Math.Clamp(m.YEndFraction, 0f, 1f);
+                var yTop = plotRect.Top + Math.Min(t0, t1) * h;
+                var yBottom = plotRect.Top + Math.Max(t0, t1) * h;
+                var paint = m.LightStroke ? _verticalMarkerLightPaint : _verticalMarkerPaint;
+                canvas.DrawLine(px, yTop, px, yBottom, paint);
+            }
+        }
+        finally
+        {
+            canvas.Restore();
+        }
     }
 
     /// <summary>

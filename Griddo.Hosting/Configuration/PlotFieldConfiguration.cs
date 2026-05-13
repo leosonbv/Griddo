@@ -14,6 +14,8 @@ public sealed class PlotTitleSegmentConfiguration
     public string AbbreviatedHeaderOverride { get; set; } = string.Empty;
     public bool AddLineBreakAfter { get; set; } = true;
     public bool WordWrap { get; set; } = true;
+    /// <summary>When true (calibration point labels only), HTML omits the header column so only the value is shown.</summary>
+    public bool OmitLabelColumn { get; set; }
 }
 
 public sealed class PlotFieldConfiguration
@@ -38,6 +40,9 @@ public sealed class PlotFieldConfiguration
     public double AxisFontSize { get; set; } = 21d;
     public double TitleFontSize { get; set; } = 21d;
     public bool ChromatogramShowPeaks { get; set; }
+    public bool ChromatogramShowExpectedRtLine { get; set; } = true;
+    public bool ChromatogramShowRtLimitLines { get; set; } = true;
+    public bool ChromatogramShowSelectionCorrectedRtOnTic { get; set; } = true;
     public bool CalibrationShowRegression { get; set; }
     public bool ShowCalibrationPointLabels { get; set; } = true;
     public List<PlotTitleSegmentConfiguration> CalibrationPointLabelSegments { get; set; } = [];
