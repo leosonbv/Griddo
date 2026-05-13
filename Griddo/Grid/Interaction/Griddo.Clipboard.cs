@@ -115,6 +115,11 @@ public sealed partial class Griddo
             }
 
             var field = Fields[address.FieldIndex];
+            if (!FieldAllowsCellEdit(field))
+            {
+                continue;
+            }
+
             var record = Records[address.RecordIndex];
             if (field.Editor.TryCommit(string.Empty, out var emptyValue) && field.TrySetValue(record, emptyValue))
             {
@@ -400,6 +405,11 @@ public sealed partial class Griddo
                 }
 
                 var field = Fields[targetCol];
+                if (!FieldAllowsCellEdit(field))
+                {
+                    continue;
+                }
+
                 if (field.Editor.TryCommit(cells[colOffset], out var parsed))
                 {
                     field.TrySetValue(Records[targetRecord], parsed);

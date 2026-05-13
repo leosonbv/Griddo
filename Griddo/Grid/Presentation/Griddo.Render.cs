@@ -92,6 +92,21 @@ public sealed partial class Griddo
         DrawScrollBarCorner(dc);
     }
 
+    private FontWeight ResolveFieldHeaderFontWeight(int col)
+    {
+        if (Fields[col] is IGriddoHostedFieldView)
+        {
+            return FontWeights.Bold;
+        }
+
+        if (Fields[col] is IGriddoFieldEditableHeaderView h && h.UseBoldColumnHeader)
+        {
+            return FontWeights.Bold;
+        }
+
+        return HeaderFontWeight;
+    }
+
     private void DrawFieldHeader(DrawingContext dc, int col, double x, Typeface typeface, Rect? clipRect = null)
     {
         var width = GetFieldWidth(col);
@@ -117,7 +132,7 @@ public sealed partial class Griddo
             EffectiveFontSize,
             ResolveHeaderForeground(isSelectedHeader),
             1.0);
-        headerText.SetFontWeight(HeaderFontWeight);
+        headerText.SetFontWeight(ResolveFieldHeaderFontWeight(col));
         headerText.TextAlignment = TextAlignment.Center;
         var visibleRect = clipRect.HasValue ? Rect.Intersect(rect, clipRect.Value) : rect;
         if (visibleRect.IsEmpty)
@@ -794,7 +809,7 @@ public sealed partial class Griddo
                 EffectiveFontSize,
                 ResolveHeaderForeground(isSelectedHeader),
                 1.0);
-            headerText.SetFontWeight(HeaderFontWeight);
+            headerText.SetFontWeight(ResolveFieldHeaderFontWeight(col));
             headerText.TextAlignment = TextAlignment.Center;
             var visibleRect = Rect.Intersect(rr, clipRect);
             if (visibleRect.IsEmpty)

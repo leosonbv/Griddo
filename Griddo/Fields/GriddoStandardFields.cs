@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
@@ -6,7 +7,7 @@ using Griddo.Editing;
 
 namespace Griddo.Fields;
 
-public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoCheckboxToggleFieldView, IGriddoFieldWrapView, IGriddoFieldAlignmentView
+public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoCheckboxToggleFieldView, IGriddoFieldWrapView, IGriddoFieldAlignmentView, IGriddoFieldEditableHeaderView
 {
     private readonly Func<object, object?> _valueGetter;
     private readonly Func<object, object?, bool> _valueSetter;
@@ -23,7 +24,8 @@ public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember
         int fieldFill = 0,
         string? sourceMemberName = null,
         string? sourceObjectName = null,
-        IReadOnlyList<Type>? inferBooleanCheckboxFromMemberTypes = null)
+        IReadOnlyList<Type>? inferBooleanCheckboxFromMemberTypes = null,
+        bool? allowCellEdit = null)
     {
         Header = header;
         Width = width;
@@ -48,7 +50,21 @@ public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember
 
         Editor = resolvedEditor;
         ContentAlignment = resolvedAlignment ?? (Editor is GriddoNumberCellEditor ? TextAlignment.Right : TextAlignment.Left);
+
+        var hasReflectedPublicSetter = inferBooleanCheckboxFromMemberTypes is { Count: > 0 }
+            && GriddoFieldReflectionHeader.HasPublicSetterForMember(SourceMemberName, inferBooleanCheckboxFromMemberTypes);
+        AllowCellEdit = allowCellEdit
+            ?? (inferBooleanCheckboxFromMemberTypes is null
+                || inferBooleanCheckboxFromMemberTypes.Count == 0
+                || hasReflectedPublicSetter);
+        UseBoldColumnHeader = hasReflectedPublicSetter && AllowCellEdit;
     }
+
+    /// <inheritdoc cref="IGriddoFieldEditableHeaderView.UseBoldColumnHeader"/>
+    public bool UseBoldColumnHeader { get; }
+
+    /// <inheritdoc cref="IGriddoFieldEditableHeaderView.AllowCellEdit"/>
+    public bool AllowCellEdit { get; }
 
     private static bool TryFindBooleanProperty(
         IReadOnlyList<Type>? declaringTypes,
@@ -277,7 +293,7 @@ public sealed class HtmlGriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMe
 /// Boolean field: centered checkbox rendering, <see cref="GriddoCellEditors.Bool"/> for typed/F2 edits,
 /// Space / second click / double-click toggle in the grid.
 /// </summary>
-public sealed class GriddoBoolFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoCheckboxToggleFieldView, IGriddoFieldWrapView, IGriddoFieldAlignmentView
+public sealed class GriddoBoolFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoCheckboxToggleFieldView, IGriddoFieldWrapView, IGriddoFieldAlignmentView, IGriddoFieldEditableHeaderView
 {
     private readonly Func<object, object?> _valueGetter;
     private readonly Func<object, object?, bool> _valueSetter;
@@ -291,7 +307,9 @@ public sealed class GriddoBoolFieldView : IGriddoFieldView, IGriddoFieldSourceMe
         int fieldFill = 0,
         string? sourceMemberName = null,
         string? sourceObjectName = null,
-        Func<object, bool>? isCheckboxCell = null)
+        Func<object, bool>? isCheckboxCell = null,
+        IReadOnlyList<Type>? inferDeclaringTypesForMemberHeader = null,
+        bool? allowCellEdit = null)
     {
         Header = header;
         Width = width;
@@ -303,7 +321,21 @@ public sealed class GriddoBoolFieldView : IGriddoFieldView, IGriddoFieldSourceMe
         _isCheckboxCell = isCheckboxCell;
         Editor = GriddoCellEditors.Bool;
         ContentAlignment = TextAlignment.Center;
+
+        var hasReflected = inferDeclaringTypesForMemberHeader is { Count: > 0 }
+            && GriddoFieldReflectionHeader.HasPublicSetterForMember(SourceMemberName, inferDeclaringTypesForMemberHeader);
+        AllowCellEdit = allowCellEdit
+            ?? (inferDeclaringTypesForMemberHeader is null
+                || inferDeclaringTypesForMemberHeader.Count == 0
+                || hasReflected);
+        UseBoldColumnHeader = hasReflected && AllowCellEdit;
     }
+
+    /// <inheritdoc cref="IGriddoFieldEditableHeaderView.UseBoldColumnHeader"/>
+    public bool UseBoldColumnHeader { get; }
+
+    /// <inheritdoc cref="IGriddoFieldEditableHeaderView.AllowCellEdit"/>
+    public bool AllowCellEdit { get; }
 
     public string Header { get; set; }
     public string AbbreviatedHeader { get; set; } = string.Empty;

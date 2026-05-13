@@ -159,6 +159,11 @@ public sealed partial class Griddo
                 continue;
             }
 
+            if (!FieldAllowsCellEdit(field))
+            {
+                continue;
+            }
+
             if (!increment)
             {
                 var sourceRecord = recordList[0];
@@ -182,6 +187,11 @@ public sealed partial class Griddo
 
     private int ApplyIncrementForField(IGriddoFieldView field, List<int> recordList, IncrementPaddingMode paddingMode)
     {
+        if (!FieldAllowsCellEdit(field))
+        {
+            return 0;
+        }
+
         var sourceRecord = recordList[0];
         var formatted = field.FormatValue(field.GetValue(Records[sourceRecord]));
         if (!TryFindLastIntegerSpan(formatted, out var intStart, out var intEnd, out var baseLong, out var minMagDigitsFromSource))

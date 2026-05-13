@@ -32,6 +32,11 @@ public sealed partial class Griddo
             return;
         }
 
+        if (!FieldAllowsCellEdit(field))
+        {
+            return;
+        }
+
         var record = Records[cell.RecordIndex];
         if (!field.IsCheckboxCell(record))
         {
