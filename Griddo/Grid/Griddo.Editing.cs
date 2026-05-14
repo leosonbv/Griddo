@@ -10,12 +10,6 @@ namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
-    /// <summary>Hosted plot/chart cells stay interactive regardless of <see cref="IGriddoFieldEditableHeaderView.AllowCellEdit"/>.</summary>
-    private static bool FieldAllowsCellEdit(IGriddoFieldView field) =>
-        field is IGriddoHostedFieldView
-        || field is not IGriddoFieldEditableHeaderView h
-        || h.AllowCellEdit;
-
     /// <summary>Starts edit mode for the current cell (same behavior as F2).</summary>
     public void EditCurrentCell() => BeginCurrentCellEdit();
 
@@ -36,6 +30,9 @@ public sealed partial class Griddo
             SetCurrentHostedCellEditMode(false);
         }
     }
+
+    /// <summary>Commits an in-progress scalar cell edit into the row (same as leaving the cell). Use before reading row state (e.g. field configurator OK/Apply).</summary>
+    public void CommitPendingCellEdit() => CommitEdit();
 
     private bool IsCurrentHostedCellInEditMode()
     {
@@ -102,7 +99,7 @@ public sealed partial class Griddo
             return;
         }
 
-        if (!FieldAllowsCellEdit(field))
+        if (!FieldAllowsCellEdit(_currentCell.FieldIndex))
         {
             return;
         }
@@ -146,7 +143,7 @@ public sealed partial class Griddo
             return;
         }
 
-        if (!FieldAllowsCellEdit(field))
+        if (!FieldAllowsCellEdit(_currentCell.FieldIndex))
         {
             return;
         }
@@ -182,7 +179,7 @@ public sealed partial class Griddo
         _isCommittingEdit = true;
         try
         {
-            if (field.Editor.TryCommit(_editSession.Buffer, out var newValue) && FieldAllowsCellEdit(field))
+            if (field.Editor.TryCommit(_editSession.Buffer, out var newValue) && FieldAllowsCellEdit(_currentCell.FieldIndex))
             {
                 field.TrySetValue(Records[_currentCell.RecordIndex], newValue);
             }

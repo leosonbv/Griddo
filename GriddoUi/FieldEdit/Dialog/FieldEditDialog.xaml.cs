@@ -220,6 +220,25 @@ public partial class FieldConfigurator : Window
                 ((FieldEditRecord)r).Visible = b;
                 return true;
             }));
+        AddField(new GriddoBoolFieldView(
+            "Lock",
+            44,
+            r => ((FieldEditRecord)r).SourceFieldView is IGriddoHostedFieldView ? false : ((FieldEditRecord)r).SuppressCellEdit,
+            (r, v) =>
+            {
+                if (v is not bool b)
+                {
+                    return false;
+                }
+
+                if (((FieldEditRecord)r).SourceFieldView is IGriddoHostedFieldView)
+                {
+                    return false;
+                }
+
+                ((FieldEditRecord)r).SuppressCellEdit = b;
+                return true;
+            }));
         AddField(new ReadonlyField("Source", 120, r => r.SourceObjectName));
         AddField(new ReadonlyField("Property", 140, r => r.PropertyName));
         AddField(new GriddoFieldView(
@@ -473,6 +492,8 @@ public partial class FieldConfigurator : Window
     {
         _ = sender;
         _ = e;
+        FieldGrid.CommitPendingCellEdit();
+        GeneralPropertyGrid.CommitPendingCellEdit();
         if (!TryCommitFrozenFields(out var frozenFields)
             || !TryCommitFrozenRecords(out var frozenRecords)
             || !TryCommitRecordThickness(out _)
@@ -491,6 +512,8 @@ public partial class FieldConfigurator : Window
     {
         _ = sender;
         _ = e;
+        FieldGrid.CommitPendingCellEdit();
+        GeneralPropertyGrid.CommitPendingCellEdit();
         if (!TryCommitFrozenFields(out var frozenFields)
             || !TryCommitFrozenRecords(out var frozenRecords)
             || !TryCommitRecordThickness(out _)
