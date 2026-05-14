@@ -94,12 +94,13 @@ public sealed partial class Griddo
 
     private FontWeight ResolveFieldHeaderFontWeight(int col)
     {
-        if (Fields[col] is IGriddoHostedFieldView)
+        if (GriddoFieldEditRules.IsHostedPlotColumn(Fields[col]))
         {
             return FontWeights.Bold;
         }
 
-        if (Fields[col] is IGriddoFieldEditableHeaderView h && h.UseBoldColumnHeader)
+        // Layout "Lock" (SuppressCellEdit): same visual weight as read-only columns, not the editable bold header.
+        if (Fields[col] is IGriddoFieldEditableHeaderView h && h.UseBoldColumnHeader && !IsCellEditSuppressedForColumn(col))
         {
             return FontWeights.Bold;
         }
@@ -145,7 +146,7 @@ public sealed partial class Griddo
         headerText.Trimming = TextTrimming.CharacterEllipsis;
         var headerY = visibleRect.Y + Math.Max(0, (visibleRect.Height - headerText.Height) / 2);
         dc.DrawText(headerText, new Point(visibleRect.X + 4, headerY));
-        DrawSortHeaderIndicator(dc, col, rect, typeface);
+        DrawSortHeaderIndicator(dc, col, rect, typeface, isSelectedHeader);
 
         if (_fixedFieldCount > 0 && col == _fixedFieldCount - 1)
         {
@@ -156,7 +157,7 @@ public sealed partial class Griddo
         }
     }
 
-    private void DrawSortHeaderIndicator(DrawingContext dc, int col, Rect rect, Typeface typeface)
+    private void DrawSortHeaderIndicator(DrawingContext dc, int col, Rect rect, Typeface typeface, bool isSelectedHeader)
     {
         if (!ShowSortingIndicators)
         {
@@ -169,8 +170,8 @@ public sealed partial class Griddo
             return;
         }
 
+        var indicatorBrush = ResolveHeaderForeground(isSelectedHeader);
         var arrecordText = ascending ? "▲" : "▼";
-        var indicatorBrush = new SolidColorBrush(Color.FromRgb(120, 120, 120));
         var arrecord = new FormattedText(
             arrecordText,
             System.Globalization.CultureInfo.CurrentCulture,
@@ -823,7 +824,7 @@ public sealed partial class Griddo
             var tx = visibleRect.X + 4;
             var ty = visibleRect.Y + Math.Max(0, (visibleRect.Height - headerText.Height) / 2);
             dc.DrawText(headerText, new Point(tx, ty));
-            DrawSortHeaderIndicator(dc, col, rr, typeface);
+            DrawSortHeaderIndicator(dc, col, rr, typeface, isSelectedHeader);
         }
 
         // Clip frozen vs scroll field headers separately so vertical scroll does not bleed into frozen bands.

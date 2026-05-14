@@ -30,6 +30,7 @@ public static class FieldChooserGridApplier
 
             if (snap.Count == 0)
             {
+                grid.ReplaceCellEditSuppressionLayout(Array.Empty<bool>());
                 grid.SetSortDescriptors([]);
                 ApplyFrozenOnly(grid, frozenFields, frozenRecords, generalOptions);
                 return;
@@ -38,6 +39,7 @@ public static class FieldChooserGridApplier
             var visible = orderedRecords.Where(static r => r.Visible).ToList();
             if (visible.Count == 0)
             {
+                grid.ReplaceCellEditSuppressionLayout(Array.Empty<bool>());
                 grid.SetSortDescriptors([]);
                 ApplyFrozenOnly(grid, frozenFields, frozenRecords, generalOptions);
                 return;
@@ -47,6 +49,7 @@ public static class FieldChooserGridApplier
             var canReorder = visible.All(r => r.SourceFieldIndex >= 0 && r.SourceFieldIndex < snapCount);
             if (!canReorder)
             {
+                grid.ReplaceCellEditSuppressionLayout(Array.Empty<bool>());
                 grid.SetSortDescriptors([]);
                 ApplyFrozenOnly(grid, frozenFields, frozenRecords, generalOptions);
                 return;
@@ -57,6 +60,7 @@ public static class FieldChooserGridApplier
 
             grid.Fields.Clear();
             var sourceToGridIndex = new Dictionary<int, int>();
+            var cellEditSuppress = new List<bool>();
             foreach (var r in visible)
             {
                 if (r.SourceFieldIndex < 0 || r.SourceFieldIndex >= snap.Count)
@@ -116,6 +120,7 @@ public static class FieldChooserGridApplier
                 }
 
                 grid.Fields.Add(c);
+                cellEditSuppress.Add(r.SuppressCellEdit);
                 sourceToGridIndex[r.SourceFieldIndex] = grid.Fields.Count - 1;
             }
 
@@ -126,11 +131,13 @@ public static class FieldChooserGridApplier
                     grid.Fields.Add(c);
                 }
 
+                grid.ReplaceCellEditSuppressionLayout(new bool[grid.Fields.Count]);
                 grid.SetSortDescriptors([]);
                 ApplyFrozenOnly(grid, frozenFields, frozenRecords, generalOptions);
                 return;
             }
 
+            grid.ReplaceCellEditSuppressionLayout(cellEditSuppress);
             for (var i = 0; i < grid.Fields.Count && i < visible.Count; i++)
             {
                 grid.SetLogicalFieldWidth(i, visible[i].Width);

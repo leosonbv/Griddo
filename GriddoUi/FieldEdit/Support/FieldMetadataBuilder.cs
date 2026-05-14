@@ -146,6 +146,7 @@ public static class FieldMetadataBuilder
                 col,
                 sampleRaw,
                 recordType),
+            SuppressCellEdit = gridFieldIndexForLiveWidth is int gix && grid.IsCellEditSuppressedForColumn(gix),
             SampleDisplay = sampleDisplay,
             SampleValue = sampleRaw,
             SampleRecordSource = sample,

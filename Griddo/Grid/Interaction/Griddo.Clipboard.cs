@@ -115,7 +115,7 @@ public sealed partial class Griddo
             }
 
             var field = Fields[address.FieldIndex];
-            if (!FieldAllowsCellEdit(field))
+            if (!FieldAllowsCellEdit(address.FieldIndex))
             {
                 continue;
             }
@@ -405,7 +405,7 @@ public sealed partial class Griddo
                 }
 
                 var field = Fields[targetCol];
-                if (!FieldAllowsCellEdit(field))
+                if (!FieldAllowsCellEdit(targetCol))
                 {
                     continue;
                 }

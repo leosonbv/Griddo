@@ -32,7 +32,7 @@ public sealed partial class Griddo
             return;
         }
 
-        if (!FieldAllowsCellEdit(field))
+        if (!FieldAllowsCellEdit(cell.FieldIndex))
         {
             return;
         }

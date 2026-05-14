@@ -104,7 +104,9 @@ internal static class PlotTitleHtmlBuilder
 
     /// <summary>
     /// Builds the same HTML table as <see cref="BuildTitleHtml"/>, but optional per-point plain values come from
-    /// <paramref name="signalProvider"/> (calibration bracket level). Styled like the resolved grid field.
+    /// <paramref name="signalProvider"/> (calibration bracket level). Values are read from the label-row field
+    /// (see <paramref name="calibrationLabelFieldsAccessor"/>), while numeric/text formatting and cell styling use the
+    /// matching column from <paramref name="allFieldsAccessor"/> (the hosting grid) when that column exists.
     /// </summary>
     public static string BuildCalibrationPointLabelHtml(
         object? recordSource,
@@ -119,7 +121,8 @@ internal static class PlotTitleHtmlBuilder
             return string.Empty;
         }
 
-        var resolveFields = calibrationLabelFieldsAccessor?.Invoke() ?? allFieldsAccessor();
+        var hostingFields = allFieldsAccessor();
+        var resolveFields = calibrationLabelFieldsAccessor?.Invoke() ?? hostingFields;
         var segments = titleSegments.Where(static s => s.Enabled).ToList();
         if (segments.Count == 0)
         {
@@ -138,12 +141,52 @@ internal static class PlotTitleHtmlBuilder
                 segment.PropertyName,
                 segment.SourceFieldKey,
                 segment.SourceFieldIndex);
+            // Legacy presets keyed the calibration dose axis as CalibrationPointLabelRow.Concentration.
+            if (sourceFieldIndex < 0
+                && string.Equals(segment.SourceFieldKey?.Trim(), "Concentration", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(segment.PropertyName?.Trim(), "Concentration", StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrWhiteSpace(segment.SourceObjectName))
+            {
+                sourceFieldIndex = HostingSegmentFieldResolver.Resolve(
+                    resolveFields,
+                    string.Empty,
+                    string.Empty,
+                    "Dose",
+                    segment.SourceFieldIndex);
+            }
+
             if (sourceFieldIndex < 0 || sourceFieldIndex >= resolveFields.Count)
             {
                 continue;
             }
 
             var field = resolveFields[sourceFieldIndex];
+            var hostingFieldIndex = HostingSegmentFieldResolver.Resolve(
+                hostingFields,
+                segment.SourceObjectName,
+                segment.PropertyName,
+                segment.SourceFieldKey,
+                segment.SourceFieldIndex);
+
+            // Prefer the compound grid "Dose" column (not "Conc") so per-column FormatString from the hosting grid applies.
+            if (!string.IsNullOrWhiteSpace(field.Header)
+                && string.Equals(field.Header.Trim(), "Dose", StringComparison.OrdinalIgnoreCase))
+            {
+                var doseIx = HostingSegmentFieldResolver.Resolve(
+                    hostingFields,
+                    "Quantification",
+                    "Dose",
+                    "Dose",
+                    -1);
+                if (doseIx >= 0 && doseIx < hostingFields.Count)
+                    hostingFieldIndex = doseIx;
+            }
+
+            var hostingField = hostingFieldIndex >= 0 && hostingFieldIndex < hostingFields.Count
+                ? hostingFields[hostingFieldIndex]
+                : null;
+            var displayField = hostingField ?? field;
+
             var valueOnlyLayout = segment.OmitLabelColumn;
             var label = valueOnlyLayout
                 ? string.Empty
@@ -159,7 +202,7 @@ internal static class PlotTitleHtmlBuilder
             string rendered;
             if (plainOverride != null)
             {
-                rendered = BuildStyledText(WebUtility.HtmlEncode(plainOverride), field);
+                rendered = BuildStyledText(WebUtility.HtmlEncode(plainOverride), displayField);
             }
             else if (pointRow is null)
             {
@@ -172,7 +215,7 @@ internal static class PlotTitleHtmlBuilder
             else
             {
                 var value = field.GetValue(pointRow);
-                rendered = BuildStyledText(WebUtility.HtmlEncode(field.FormatValue(value)), field);
+                rendered = BuildStyledText(WebUtility.HtmlEncode(displayField.FormatValue(value)), displayField);
             }
 
             if (!segment.WordWrap)

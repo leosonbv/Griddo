@@ -21,6 +21,12 @@ public sealed class FieldEditRecord
 
     public bool Visible { get; set; } = true;
 
+    /// <summary>
+    /// When true, scalar in-place edit, fill-series into cells, clipboard clear/paste, and checkbox toggles are disabled for this column.
+    /// Hosted plot/chart columns ignore this flag. Persisted in per-view layout JSON when the host application stores it on field rows.
+    /// </summary>
+    public bool SuppressCellEdit { get; set; }
+
     public int FieldFill { get; set; }
 
     public double Width { get; set; } = 140;
@@ -54,6 +60,7 @@ public sealed class FieldEditRecord
         Title = Title,
         Description = Description,
         Visible = Visible,
+        SuppressCellEdit = SuppressCellEdit,
         FieldFill = FieldFill,
         Width = Width,
         AbbreviatedTitle = AbbreviatedTitle,

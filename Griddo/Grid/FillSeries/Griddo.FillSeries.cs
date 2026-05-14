@@ -159,7 +159,7 @@ public sealed partial class Griddo
                 continue;
             }
 
-            if (!FieldAllowsCellEdit(field))
+            if (!FieldAllowsCellEdit(col))
             {
                 continue;
             }
@@ -178,16 +178,16 @@ public sealed partial class Griddo
             }
             else
             {
-                writes += ApplyIncrementForField(field, recordList, paddingMode);
+                writes += ApplyIncrementForField(col, field, recordList, paddingMode);
             }
         }
 
         return writes;
     }
 
-    private int ApplyIncrementForField(IGriddoFieldView field, List<int> recordList, IncrementPaddingMode paddingMode)
+    private int ApplyIncrementForField(int fieldIndex, IGriddoFieldView field, List<int> recordList, IncrementPaddingMode paddingMode)
     {
-        if (!FieldAllowsCellEdit(field))
+        if (!FieldAllowsCellEdit(fieldIndex))
         {
             return 0;
         }
