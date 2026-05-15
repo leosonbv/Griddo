@@ -148,6 +148,7 @@ public partial class HtmlConfigurationDialog : Window
                 AbbreviatedHeader = saved?.AbbreviatedHeaderOverride ?? string.Empty,
                 AddLineBreakAfter = saved?.AddLineBreakAfter ?? true,
                 WordWrap = saved?.WordWrap ?? true,
+                FormatString = saved?.FormatString ?? (field is IGriddoFieldFormatView fmt ? fmt.FormatString : null) ?? string.Empty,
                 Header = field.Header ?? string.Empty,
                 SourceAbbreviatedHeader = sourceTitle ?? string.Empty
             };
@@ -192,7 +193,8 @@ public partial class HtmlConfigurationDialog : Window
                         Enabled = r.Enabled,
                         AbbreviatedHeaderOverride = r.AbbreviatedHeader ?? string.Empty,
                         AddLineBreakAfter = r.AddLineBreakAfter,
-                        WordWrap = r.WordWrap
+                        WordWrap = r.WordWrap,
+                        FormatString = r.FormatString ?? string.Empty
                     };
                 })
                 .ToList()
@@ -245,6 +247,7 @@ public partial class HtmlConfigurationDialog : Window
         public string AbbreviatedHeader { get; set; } = string.Empty;
         public bool AddLineBreakAfter { get; set; } = true;
         public bool WordWrap { get; set; } = true;
+        public string FormatString { get; set; } = string.Empty;
         public string Header { get; set; } = string.Empty;
         public string SourceAbbreviatedHeader { get; set; } = string.Empty;
     }
@@ -315,6 +318,16 @@ public partial class HtmlConfigurationDialog : Window
             (r, v) =>
             {
                 ((HtmlSegmentEditRecord)r).AbbreviatedHeader = v?.ToString() ?? string.Empty;
+                return true;
+            },
+            GriddoCellEditors.Text));
+        SegmentsGrid.Fields.Add(new GriddoFieldView(
+            "Format",
+            120,
+            r => ((HtmlSegmentEditRecord)r).FormatString,
+            (r, v) =>
+            {
+                ((HtmlSegmentEditRecord)r).FormatString = v?.ToString() ?? string.Empty;
                 return true;
             },
             GriddoCellEditors.Text));

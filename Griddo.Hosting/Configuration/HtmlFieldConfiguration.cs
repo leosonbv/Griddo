@@ -15,6 +15,8 @@ public sealed class HtmlFieldSegmentConfiguration
     public string AbbreviatedHeaderOverride { get; set; } = string.Empty;
     public bool AddLineBreakAfter { get; set; } = true;
     public bool WordWrap { get; set; } = true;
+    /// <summary>When set, formats segment values independently of the source grid column format.</summary>
+    public string FormatString { get; set; } = string.Empty;
 }
 
 public sealed class HtmlFieldConfiguration

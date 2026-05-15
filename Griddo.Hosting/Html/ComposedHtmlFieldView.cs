@@ -84,7 +84,7 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
             var value = field.GetValue(recordSource);
             var rendered = field.IsHtml
                 ? (value?.ToString() ?? string.Empty)
-                : WebUtility.HtmlEncode(field.FormatValue(value));
+                : WebUtility.HtmlEncode(FormatSegmentValue(value, field, segment.FormatString));
 
             if (!segment.WordWrap)
             {
@@ -134,6 +134,26 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
 
     public bool TrySetValue(object recordSource, object? value) => false;
     public string FormatValue(object? value) => value?.ToString() ?? string.Empty;
+
+    private static string FormatSegmentValue(object? value, IGriddoFieldView field, string? segmentFormatString)
+    {
+        if (!string.IsNullOrWhiteSpace(segmentFormatString))
+        {
+            if (value is null or DBNull)
+            {
+                return string.Empty;
+            }
+
+            if (value is IFormattable formattable)
+            {
+                return formattable.ToString(segmentFormatString, CultureInfo.CurrentCulture) ?? string.Empty;
+            }
+
+            return value.ToString() ?? string.Empty;
+        }
+
+        return field.FormatValue(value);
+    }
 
     private string BuildSelfStyle()
     {
