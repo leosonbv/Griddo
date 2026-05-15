@@ -36,6 +36,17 @@ public static class FieldChooserGridApplier
                 return;
             }
 
+            var snapCount = snap.Count;
+            foreach (var r in orderedRecords)
+            {
+                if (r.SourceFieldIndex < 0 || r.SourceFieldIndex >= snapCount)
+                {
+                    continue;
+                }
+
+                ApplyFieldRecordToView(snap[r.SourceFieldIndex], r);
+            }
+
             var visible = orderedRecords.Where(static r => r.Visible).ToList();
             if (visible.Count == 0)
             {
@@ -45,7 +56,6 @@ public static class FieldChooserGridApplier
                 return;
             }
 
-            var snapCount = snap.Count;
             var canReorder = visible.All(r => r.SourceFieldIndex >= 0 && r.SourceFieldIndex < snapCount);
             if (!canReorder)
             {
@@ -69,56 +79,6 @@ public static class FieldChooserGridApplier
                 }
 
                 var c = snap[r.SourceFieldIndex];
-                c.FieldFill = NormalizeFieldFill(r.FieldFill);
-                if (!string.IsNullOrWhiteSpace(r.Title))
-                {
-                    c.Header = r.Title.Trim();
-                }
-                else
-                {
-                    c.Header = string.Empty;
-                }
-                if (c is IGriddoFieldTitleView titleView)
-                {
-                    titleView.AbbreviatedHeader = r.AbbreviatedTitle?.Trim() ?? string.Empty;
-                }
-
-                if (c is IGriddoFieldDescriptionView descriptionView)
-                {
-                    descriptionView.Description = r.Description?.Trim() ?? string.Empty;
-                }
-
-                if (c is IGriddoFieldFormatView formatView)
-                {
-                    formatView.FormatString = r.FormatString?.Trim() ?? string.Empty;
-                }
-
-                if (c is IGriddoFieldFontView fontView)
-                {
-                    fontView.FontFamilyName = r.FontFamilyName?.Trim() ?? string.Empty;
-                    fontView.FontSize = Math.Max(0, r.FontSize);
-                    fontView.FontStyleName = r.FontStyleName?.Trim() ?? string.Empty;
-                }
-                if (c is IGriddoFieldWrapView wrapView)
-                {
-                    wrapView.NoWrap = r.NoWrap;
-                }
-
-                if (c is IGriddoFieldColorView colorView)
-                {
-                    colorView.ForegroundColor = r.ForegroundColor?.Trim() ?? string.Empty;
-                    colorView.BackgroundColor = r.BackgroundColor?.Trim() ?? string.Empty;
-                }
-
-                if (c is IGriddoFieldAlignmentView alignmentView)
-                {
-                    alignmentView.ContentAlignment = FieldMetadataBuilder.EnsureDefaultContentAlignment(
-                        r.ContentAlignment,
-                        c,
-                        r.SampleValue,
-                        r.SampleRecordSource?.GetType());
-                }
-
                 grid.Fields.Add(c);
                 cellEditSuppress.Add(r.SuppressCellEdit);
                 sourceToGridIndex[r.SourceFieldIndex] = grid.Fields.Count - 1;
@@ -172,6 +132,62 @@ public static class FieldChooserGridApplier
         finally
         {
             grid.RefreshHostedCells();
+        }
+    }
+
+    /// <summary>Applies configurator/persisted presentation to a catalog field (visible or hidden).</summary>
+    private static void ApplyFieldRecordToView(IGriddoFieldView field, FieldEditRecord record)
+    {
+        field.FieldFill = NormalizeFieldFill(record.FieldFill);
+        if (!string.IsNullOrWhiteSpace(record.Title))
+        {
+            field.Header = record.Title.Trim();
+        }
+        else
+        {
+            field.Header = string.Empty;
+        }
+
+        if (field is IGriddoFieldTitleView titleView)
+        {
+            titleView.AbbreviatedHeader = record.AbbreviatedTitle?.Trim() ?? string.Empty;
+        }
+
+        if (field is IGriddoFieldDescriptionView descriptionView)
+        {
+            descriptionView.Description = record.Description?.Trim() ?? string.Empty;
+        }
+
+        if (field is IGriddoFieldFormatView formatView)
+        {
+            formatView.FormatString = record.FormatString?.Trim() ?? string.Empty;
+        }
+
+        if (field is IGriddoFieldFontView fontView)
+        {
+            fontView.FontFamilyName = record.FontFamilyName?.Trim() ?? string.Empty;
+            fontView.FontSize = Math.Max(0, record.FontSize);
+            fontView.FontStyleName = record.FontStyleName?.Trim() ?? string.Empty;
+        }
+
+        if (field is IGriddoFieldWrapView wrapView)
+        {
+            wrapView.NoWrap = record.NoWrap;
+        }
+
+        if (field is IGriddoFieldColorView colorView)
+        {
+            colorView.ForegroundColor = record.ForegroundColor?.Trim() ?? string.Empty;
+            colorView.BackgroundColor = record.BackgroundColor?.Trim() ?? string.Empty;
+        }
+
+        if (field is IGriddoFieldAlignmentView alignmentView)
+        {
+            alignmentView.ContentAlignment = FieldMetadataBuilder.EnsureDefaultContentAlignment(
+                record.ContentAlignment,
+                field,
+                record.SampleValue,
+                record.SampleRecordSource?.GetType());
         }
     }
 
