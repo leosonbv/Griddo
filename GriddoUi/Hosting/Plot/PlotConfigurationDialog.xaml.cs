@@ -129,7 +129,8 @@ public partial class PlotConfigurationDialog : Window
                 AbbreviatedHeader = saved?.AbbreviatedHeaderOverride ?? string.Empty,
                 AddLineBreakAfter = saved?.AddLineBreakAfter ?? true,
                 WordWrap = saved?.WordWrap ?? true,
-                OmitLabelColumn = saved?.OmitLabelColumn ?? false
+                OmitLabelColumn = saved?.OmitLabelColumn ?? false,
+                FormatString = saved?.FormatString ?? (field is IGriddoFieldFormatView fmt ? fmt.FormatString : null) ?? string.Empty
             };
             _rows.Add(row);
             TitleFieldsGrid.Records.Add(row);
@@ -190,7 +191,8 @@ public partial class PlotConfigurationDialog : Window
                 AbbreviatedHeader = saved?.AbbreviatedHeaderOverride ?? string.Empty,
                 AddLineBreakAfter = saved?.AddLineBreakAfter ?? true,
                 WordWrap = saved?.WordWrap ?? true,
-                OmitLabelColumn = saved?.OmitLabelColumn ?? false
+                OmitLabelColumn = saved?.OmitLabelColumn ?? false,
+                FormatString = saved?.FormatString ?? (field is IGriddoFieldFormatView fmt ? fmt.FormatString : null) ?? string.Empty
             };
             PointLabelFieldsGrid.Records.Add(row);
         }
@@ -298,7 +300,8 @@ public partial class PlotConfigurationDialog : Window
                     AbbreviatedHeaderOverride = r.AbbreviatedHeader ?? string.Empty,
                     AddLineBreakAfter = r.AddLineBreakAfter,
                     WordWrap = r.WordWrap,
-                    OmitLabelColumn = r.OmitLabelColumn
+                    OmitLabelColumn = r.OmitLabelColumn,
+                    FormatString = r.FormatString ?? string.Empty
                 };
             })
             .ToList();
@@ -322,7 +325,8 @@ public partial class PlotConfigurationDialog : Window
                     AbbreviatedHeaderOverride = r.AbbreviatedHeader ?? string.Empty,
                     AddLineBreakAfter = r.AddLineBreakAfter,
                     WordWrap = r.WordWrap,
-                    OmitLabelColumn = r.OmitLabelColumn
+                    OmitLabelColumn = r.OmitLabelColumn,
+                    FormatString = r.FormatString ?? string.Empty
                 };
             })
             .ToList();
@@ -500,6 +504,16 @@ public partial class PlotConfigurationDialog : Window
                 return true;
             },
             GriddoCellEditors.Text));
+        TitleFieldsGrid.Fields.Add(new GriddoFieldView(
+            "Format",
+            120,
+            r => ((PlotTitleFieldEditRecord)r).FormatString,
+            (r, v) =>
+            {
+                ((PlotTitleFieldEditRecord)r).FormatString = v?.ToString() ?? string.Empty;
+                return true;
+            },
+            GriddoCellEditors.Text));
         TitleFieldsGrid.Fields.Add(new GriddoBoolFieldView(
             "Wrap",
             70,
@@ -560,6 +574,16 @@ public partial class PlotConfigurationDialog : Window
             (r, v) =>
             {
                 ((PlotTitleFieldEditRecord)r).AbbreviatedHeader = v?.ToString() ?? string.Empty;
+                return true;
+            },
+            GriddoCellEditors.Text));
+        PointLabelFieldsGrid.Fields.Add(new GriddoFieldView(
+            "Format",
+            120,
+            r => ((PlotTitleFieldEditRecord)r).FormatString,
+            (r, v) =>
+            {
+                ((PlotTitleFieldEditRecord)r).FormatString = v?.ToString() ?? string.Empty;
                 return true;
             },
             GriddoCellEditors.Text));
@@ -754,6 +778,7 @@ public partial class PlotConfigurationDialog : Window
         public bool WordWrap { get; set; } = true;
         /// <summary>Calibration point labels: render value only (no header column in HTML / plain overlay).</summary>
         public bool OmitLabelColumn { get; set; }
+        public string FormatString { get; set; } = string.Empty;
     }
 
     private sealed class PlotSpecificSettingRecord

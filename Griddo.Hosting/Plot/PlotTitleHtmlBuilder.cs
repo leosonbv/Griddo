@@ -47,7 +47,7 @@ internal static class PlotTitleHtmlBuilder
             var value = field.GetValue(recordSource);
             var rendered = field.IsHtml
                 ? (value?.ToString() ?? string.Empty)
-                : BuildStyledText(WebUtility.HtmlEncode(field.FormatValue(value)), field);
+                : BuildStyledText(WebUtility.HtmlEncode(FormatSegmentValue(value, field, segment.FormatString)), field);
             if (!segment.WordWrap)
             {
                 rendered = rendered.Replace(" ", "\u00A0", StringComparison.Ordinal);
@@ -61,6 +61,26 @@ internal static class PlotTitleHtmlBuilder
             : "<table style='border-collapse:collapse;border:none'><tbody>"
               + string.Join(string.Empty, rows)
               + "</tbody></table>";
+    }
+
+    private static string FormatSegmentValue(object? value, IGriddoFieldView field, string? segmentFormatString)
+    {
+        if (!string.IsNullOrWhiteSpace(segmentFormatString))
+        {
+            if (value is null or DBNull)
+            {
+                return string.Empty;
+            }
+
+            if (value is IFormattable formattable)
+            {
+                return formattable.ToString(segmentFormatString, CultureInfo.CurrentCulture) ?? string.Empty;
+            }
+
+            return value.ToString() ?? string.Empty;
+        }
+
+        return field.FormatValue(value);
     }
 
     private static string BuildStyledText(string text, IGriddoFieldView field)
@@ -215,7 +235,9 @@ internal static class PlotTitleHtmlBuilder
             else
             {
                 var value = field.GetValue(pointRow);
-                rendered = BuildStyledText(WebUtility.HtmlEncode(displayField.FormatValue(value)), displayField);
+                rendered = BuildStyledText(
+                    WebUtility.HtmlEncode(FormatSegmentValue(value, displayField, segment.FormatString)),
+                    displayField);
             }
 
             if (!segment.WordWrap)
@@ -297,7 +319,7 @@ internal static class PlotTitleHtmlBuilder
             var value = field.GetValue(recordSource);
             var rendered = field.IsHtml
                 ? HtmlDecodeStripTags(value?.ToString() ?? string.Empty)
-                : field.FormatValue(value);
+                : FormatSegmentValue(value, field, segment.FormatString);
             if (string.IsNullOrWhiteSpace(rendered))
             {
                 continue;

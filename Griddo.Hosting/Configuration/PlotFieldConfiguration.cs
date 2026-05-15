@@ -16,6 +16,8 @@ public sealed class PlotTitleSegmentConfiguration
     public bool WordWrap { get; set; } = true;
     /// <summary>When true (calibration point labels only), HTML omits the header column so only the value is shown.</summary>
     public bool OmitLabelColumn { get; set; }
+    /// <summary>When set, formats segment values independently of the hosting grid column format.</summary>
+    public string FormatString { get; set; } = string.Empty;
 }
 
 public sealed class PlotFieldConfiguration
