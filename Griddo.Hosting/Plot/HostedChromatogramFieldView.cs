@@ -10,6 +10,7 @@ using Griddo.Hosting.Abstractions;
 using Griddo.Hosting.Configuration;
 using Plotto.Charting.Controls;
 using Plotto.Charting.Core;
+using Plotto.Charting.Rendering;
 
 namespace Griddo.Hosting.Plot;
 
@@ -371,6 +372,8 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         if (chart is ChromatogramControl chromatogram)
         {
             chromatogram.ShowPeakRegionFill = ChromatogramShowPeaks;
+            chromatogram.ShowPeakLabels = ShowCalibrationPointLabels;
+            chromatogram.PeakLabelFontSize = Math.Clamp(AxisFontSize * 0.85, 6d, 22d);
             chromatogram.SetPeakOverlayColors(
                 new SkiaSharp.SKColor(SelectedPeakOverlayColor.R, SelectedPeakOverlayColor.G, SelectedPeakOverlayColor.B, SelectedPeakOverlayColor.A),
                 new SkiaSharp.SKColor(AlternativePeakOverlayColor.R, AlternativePeakOverlayColor.G, AlternativePeakOverlayColor.B, AlternativePeakOverlayColor.A),
@@ -379,6 +382,110 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
                 OverlayLineWidth,
                 PeakFillAlpha);
         }
+    }
+
+    private IReadOnlyList<ChromatogramPeakLabel> BuildPeakLabels(ChromatogramControl chart, object recordSource)
+    {
+        if (!ShowCalibrationPointLabels
+            || CalibrationPointLabelSegments.Count == 0
+            || !CalibrationPointLabelSegments.Exists(static s => s.Enabled))
+        {
+            return Array.Empty<ChromatogramPeakLabel>();
+        }
+
+        var plain = PlotTitleHtmlBuilder.BuildRecordLabelPlainText(
+            recordSource,
+            _allFieldsAccessor,
+            CalibrationPointLabelSegments);
+        if (string.IsNullOrWhiteSpace(plain))
+        {
+            return Array.Empty<ChromatogramPeakLabel>();
+        }
+
+        var ordered = chart.Points.Count == 0
+            ? (IReadOnlyList<ChartPoint>)Array.Empty<ChartPoint>()
+            : chart.Points.OrderBy(static p => p.X).ToList();
+        var labels = new List<ChromatogramPeakLabel>();
+        var seen = new HashSet<(double X, double Y)>();
+
+        void AddForRegion(IntegrationRegion region)
+        {
+            if (!TryGetPeakLabelAnchor(region, ordered, out var x, out var y))
+            {
+                return;
+            }
+
+            var key = (Math.Round(x, 6), Math.Round(y, 6));
+            if (!seen.Add(key))
+            {
+                return;
+            }
+
+            labels.Add(new ChromatogramPeakLabel(x, y, plain));
+        }
+
+        foreach (var region in chart.IntegrationRegions)
+        {
+            AddForRegion(region);
+        }
+
+        foreach (var region in chart.AlternativeIntegrationRegions)
+        {
+            AddForRegion(region);
+        }
+
+        foreach (var colored in chart.ColoredIntegrationRegions)
+        {
+            AddForRegion(colored.Region);
+        }
+
+        return labels;
+    }
+
+    private static bool TryGetPeakLabelAnchor(
+        IntegrationRegion region,
+        IReadOnlyList<ChartPoint> orderedTrace,
+        out double anchorX,
+        out double anchorY)
+    {
+        anchorX = 0;
+        anchorY = 0;
+        var x0 = Math.Min(region.Start.X, region.End.X);
+        var x1 = Math.Max(region.Start.X, region.End.X);
+        if (!double.IsFinite(x0) || !double.IsFinite(x1) || x1 <= x0 + 1e-12)
+        {
+            return false;
+        }
+
+        anchorX = 0.5 * (x0 + x1);
+        anchorY = Math.Max(region.Start.Y, region.End.Y);
+        if (orderedTrace.Count > 0)
+        {
+            var peakY = double.MinValue;
+            foreach (var p in orderedTrace)
+            {
+                if (p.X < x0 - 1e-9 || p.X > x1 + 1e-9)
+                {
+                    continue;
+                }
+
+                if (p.Y > peakY)
+                {
+                    peakY = p.Y;
+                }
+            }
+
+            if (peakY > double.MinValue)
+            {
+                anchorY = peakY;
+            }
+            else
+            {
+                anchorY = Math.Max(anchorY, ChartSignalInterpolation.InterpolateYAtX(orderedTrace, anchorX));
+            }
+        }
+
+        return double.IsFinite(anchorX) && double.IsFinite(anchorY);
     }
 
     private void SyncPeakOverlay(ChromatogramControl chart, object? recordSource)
@@ -398,6 +505,7 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
             chart.AlternativeIntegrationRegionsManualIntegrated = Array.Empty<bool>();
             chart.ColoredIntegrationRegions = Array.Empty<ColoredIntegrationRegion>();
             chart.VerticalMarkers = Array.Empty<ChromatogramVerticalMarker>();
+            chart.PeakLabels = Array.Empty<ChromatogramPeakLabel>();
             return;
         }
 
@@ -421,6 +529,7 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
             .ToList();
         chart.AlternativeIntegrationRegions = alternativeOverlays.Select(static x => x.Region).ToList();
         chart.AlternativeIntegrationRegionsManualIntegrated = alternativeOverlays.Select(static x => x.UseDarkerOverlayFill).ToList();
+        chart.PeakLabels = BuildPeakLabels(chart, recordSource);
     }
 
     private static object BuildRuntimePointsValue(IReadOnlyList<SignalPoint> points)

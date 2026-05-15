@@ -257,6 +257,74 @@ internal static class PlotTitleHtmlBuilder
 
     private static readonly Regex HtmlTagStripRegex = new("<[^>]+>", RegexOptions.Compiled);
 
+    /// <summary>Builds enabled title/label segments for a grid row as plain text for Skia overlays.</summary>
+    public static string BuildRecordLabelPlainText(
+        object? recordSource,
+        Func<IReadOnlyList<IGriddoFieldView>>? allFieldsAccessor,
+        IReadOnlyList<PlotTitleSegmentConfiguration> segments)
+    {
+        if (recordSource is null || allFieldsAccessor is null)
+        {
+            return string.Empty;
+        }
+
+        var allFields = allFieldsAccessor();
+        var enabled = segments.Where(static s => s.Enabled).ToList();
+        if (enabled.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var lines = new List<string>();
+        var lineParts = new List<string>();
+        foreach (var segment in enabled)
+        {
+            var sourceFieldIndex = HostingSegmentFieldResolver.Resolve(
+                allFields,
+                segment.SourceObjectName,
+                segment.PropertyName,
+                segment.SourceFieldKey,
+                segment.SourceFieldIndex);
+            if (sourceFieldIndex < 0 || sourceFieldIndex >= allFields.Count)
+            {
+                continue;
+            }
+
+            var field = allFields[sourceFieldIndex];
+            var label = string.IsNullOrWhiteSpace(segment.AbbreviatedHeaderOverride)
+                ? (field.Header ?? string.Empty)
+                : segment.AbbreviatedHeaderOverride;
+            var value = field.GetValue(recordSource);
+            var rendered = field.IsHtml
+                ? HtmlDecodeStripTags(value?.ToString() ?? string.Empty)
+                : field.FormatValue(value);
+            if (string.IsNullOrWhiteSpace(rendered))
+            {
+                continue;
+            }
+
+            var part = segment.OmitLabelColumn || string.IsNullOrWhiteSpace(label)
+                ? rendered.Trim()
+                : $"{label.Trim()}: {rendered.Trim()}";
+            lineParts.Add(part);
+            if (segment.AddLineBreakAfter)
+            {
+                if (lineParts.Count > 0)
+                {
+                    lines.Add(string.Join(' ', lineParts));
+                    lineParts.Clear();
+                }
+            }
+        }
+
+        if (lineParts.Count > 0)
+        {
+            lines.Add(string.Join(' ', lineParts));
+        }
+
+        return lines.Count == 0 ? string.Empty : string.Join('\n', lines);
+    }
+
     /// <summary>Flattens plot title HTML (especially table rows) to newline-separated plain text for Skia overlays.</summary>
     public static string HtmlTableToPlainSummary(string? html)
     {

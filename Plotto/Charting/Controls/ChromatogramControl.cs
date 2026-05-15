@@ -100,6 +100,20 @@ public partial class ChromatogramControl : SkiaChartBaseControl
         PathEffect = SKPathEffect.CreateDash(new[] { 4f, 5f }, 0f)
     };
 
+    private readonly SKPaint _peakLabelTextPaint = new()
+    {
+        IsAntialias = true,
+        Color = new SKColor(40, 40, 40)
+    };
+
+    private readonly SKPaint _peakLabelConnectorPaint = new()
+    {
+        IsAntialias = true,
+        Style = SKPaintStyle.Stroke,
+        StrokeWidth = 1f,
+        Color = new SKColor(90, 90, 90, 200)
+    };
+
     public event EventHandler<IntegrationRegionEventArgs>? IntegrationChanged;
     public event EventHandler<PeakSplitEventArgs>? PeakSplitRequested;
     public event EventHandler<PeakSelectionEventArgs>? PeakSelectionRequested;
@@ -171,11 +185,15 @@ public partial class ChromatogramControl : SkiaChartBaseControl
             // Light dashed overlays on dark plot background (expected RT + RT window on chromatogram / TIC).
             _verticalMarkerPaint.Color = new SKColor(200, 205, 215, 230);
             _verticalMarkerLightPaint.Color = new SKColor(165, 172, 185, 170);
+            _peakLabelTextPaint.Color = new SKColor(230, 232, 238);
+            _peakLabelConnectorPaint.Color = new SKColor(165, 172, 185, 200);
         }
         else
         {
             _verticalMarkerPaint.Color = new SKColor(30, 30, 30, 220);
             _verticalMarkerLightPaint.Color = new SKColor(100, 100, 100, 140);
+            _peakLabelTextPaint.Color = new SKColor(40, 40, 40);
+            _peakLabelConnectorPaint.Color = new SKColor(90, 90, 90, 200);
         }
     }
 
@@ -332,6 +350,45 @@ public partial class ChromatogramControl : SkiaChartBaseControl
             typeof(ChromatogramControl),
             new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));
 
+    public bool ShowPeakLabels
+    {
+        get => (bool)GetValue(ShowPeakLabelsProperty);
+        set => SetValue(ShowPeakLabelsProperty, value);
+    }
+
+    public static readonly DependencyProperty ShowPeakLabelsProperty =
+        DependencyProperty.Register(
+            nameof(ShowPeakLabels),
+            typeof(bool),
+            typeof(ChromatogramControl),
+            new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public double PeakLabelFontSize
+    {
+        get => (double)GetValue(PeakLabelFontSizeProperty);
+        set => SetValue(PeakLabelFontSizeProperty, value);
+    }
+
+    public static readonly DependencyProperty PeakLabelFontSizeProperty =
+        DependencyProperty.Register(
+            nameof(PeakLabelFontSize),
+            typeof(double),
+            typeof(ChromatogramControl),
+            new FrameworkPropertyMetadata(13.5d, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public IReadOnlyList<ChromatogramPeakLabel> PeakLabels
+    {
+        get => (IReadOnlyList<ChromatogramPeakLabel>)GetValue(PeakLabelsProperty);
+        set => SetValue(PeakLabelsProperty, value ?? Array.Empty<ChromatogramPeakLabel>());
+    }
+
+    public static readonly DependencyProperty PeakLabelsProperty =
+        DependencyProperty.Register(
+            nameof(PeakLabels),
+            typeof(IReadOnlyList<ChromatogramPeakLabel>),
+            typeof(ChromatogramControl),
+            new FrameworkPropertyMetadata(Array.Empty<ChromatogramPeakLabel>(), FrameworkPropertyMetadataOptions.AffectsRender));
+
     private void OnRenderModeChanged()
     {
         _awaitingActivationClick = false;
@@ -367,6 +424,7 @@ public partial class ChromatogramControl : SkiaChartBaseControl
         AlternativeIntegrationRegionsManualIntegrated = Array.Empty<bool>();
         ColoredIntegrationRegions = Array.Empty<ColoredIntegrationRegion>();
         VerticalMarkers = Array.Empty<ChromatogramVerticalMarker>();
+        PeakLabels = Array.Empty<ChromatogramPeakLabel>();
         _activeRegion = null;
         InvalidateVisual();
     }
@@ -467,6 +525,20 @@ public partial class ChromatogramControl : SkiaChartBaseControl
         }
 
         DrawVerticalMarkersInPlot(canvas, plotRect);
+
+        if (ShowPeakLabels)
+        {
+            ChartSkiaPeakLabels.Draw(
+                canvas,
+                plotRect,
+                PeakLabels,
+                PlotUiScale,
+                PeakLabelFontSize,
+                ToPixelX,
+                ToPixelY,
+                _peakLabelTextPaint,
+                _peakLabelConnectorPaint);
+        }
 
         if (RenderMode == ChartRenderMode.Renderer)
         {

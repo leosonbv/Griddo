@@ -40,7 +40,7 @@ public partial class PlotConfigurationDialog : Window
         BuildSpecificGridFields();
         Loaded += (_, _) =>
         {
-            if (_initial.PlotTypeKey == "Calibration curve")
+            if (SupportsPointLabelTab())
             {
                 PointLabelsTab.Visibility = Visibility.Visible;
             }
@@ -57,11 +57,15 @@ public partial class PlotConfigurationDialog : Window
         UpdateMoveButtonsVisibility();
     }
 
+    private bool SupportsPointLabelTab() =>
+        _initial.PlotTypeKey is "Calibration curve" or "Chromatogram";
+
+    private const int PointLabelsTabIndex = 3;
+
     private void UpdateMoveButtonsVisibility()
     {
         var idx = MainTabs.SelectedIndex;
-        var cal = _initial.PlotTypeKey == "Calibration curve";
-        var show = idx == 0 || (cal && idx == 3);
+        var show = idx == 0 || (SupportsPointLabelTab() && idx == PointLabelsTabIndex);
         var visibility = show ? Visibility.Visible : Visibility.Collapsed;
         MoveUpButton.Visibility = visibility;
         MoveDownButton.Visibility = visibility;
@@ -137,6 +141,19 @@ public partial class PlotConfigurationDialog : Window
     private void SeedPointLabelRows()
     {
         PointLabelFieldsGrid.Records.Clear();
+        var excluded = new HashSet<int>();
+        if (_initial.PlotTypeKey == "Chromatogram")
+        {
+            for (var sourceFieldIndex = 0; sourceFieldIndex < _pointLabelFields.Count; sourceFieldIndex++)
+            {
+                var field = _pointLabelFields[sourceFieldIndex];
+                if (ReferenceEquals(field, _initial) || field is IHtmlFieldLayoutTarget || field is IPlotFieldLayoutTarget)
+                {
+                    excluded.Add(sourceFieldIndex);
+                }
+            }
+        }
+
         var savedByKey = _initial.CalibrationPointLabelSegments
             .Where(s => !string.IsNullOrWhiteSpace(s.SourceFieldKey))
             .GroupBy(s => s.SourceFieldKey, StringComparer.OrdinalIgnoreCase)
@@ -147,11 +164,11 @@ public partial class PlotConfigurationDialog : Window
 
         var configuredOrder = _initial.CalibrationPointLabelSegments
             .Select(ResolvePointLabelFieldIndex)
-            .Where(i => i >= 0 && i < _pointLabelFields.Count)
+            .Where(i => i >= 0 && i < _pointLabelFields.Count && !excluded.Contains(i))
             .Distinct()
             .ToList();
         var remainingOrder = Enumerable.Range(0, _pointLabelFields.Count)
-            .Where(i => !configuredOrder.Contains(i))
+            .Where(i => !excluded.Contains(i) && !configuredOrder.Contains(i))
             .ToList();
         var orderedSourceIndices = configuredOrder.Concat(remainingOrder);
 
@@ -223,11 +240,10 @@ public partial class PlotConfigurationDialog : Window
 
     private global::Griddo.Grid.Griddo? ActiveTitleLikeGrid()
     {
-        var cal = _initial.PlotTypeKey == "Calibration curve";
         return MainTabs.SelectedIndex switch
         {
             0 => TitleFieldsGrid,
-            3 when cal => PointLabelFieldsGrid,
+            PointLabelsTabIndex when SupportsPointLabelTab() => PointLabelFieldsGrid,
             _ => null
         };
     }
@@ -341,7 +357,7 @@ public partial class PlotConfigurationDialog : Window
                     : _initial.ChromatogramShowSelectionCorrectedRtOnTic)
                 : _initial.ChromatogramShowSelectionCorrectedRtOnTic,
             CalibrationShowRegression: GetSpecificBool(PlotSpecificSettingKind.CalibrationShowRegression),
-            ShowCalibrationPointLabels: _initial.PlotTypeKey == "Calibration curve"
+            ShowCalibrationPointLabels: SupportsPointLabelTab()
                 ? GetSpecificBool(PlotSpecificSettingKind.CalibrationShowPointLabels)
                 : _initial.ShowCalibrationPointLabels,
             CalibrationPointLabelSegments: calibrationPointLabelSegments,
@@ -625,6 +641,11 @@ public partial class PlotConfigurationDialog : Window
             PlotSpecificSettingKind.TitleFontSize, "Title", "Font size", textValue: _initial.TitleFontSize.ToString("0.##", CultureInfo.InvariantCulture)));
         if (_initial.PlotTypeKey == "Chromatogram")
         {
+            SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+                PlotSpecificSettingKind.CalibrationShowPointLabels,
+                "Peak labels",
+                "Show peak labels and connector lines",
+                boolValue: _initial.ShowCalibrationPointLabels));
             SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
                 PlotSpecificSettingKind.ChromatogramShowPeaks, "Type", "Show peak fill", boolValue: _initial.ChromatogramShowPeaks));
             SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
