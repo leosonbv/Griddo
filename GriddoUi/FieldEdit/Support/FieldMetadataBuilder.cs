@@ -123,7 +123,6 @@ public static class FieldMetadataBuilder
             PropertyName = propertyName,
             SourceObjectName = col is IGriddoFieldSourceObject sourceObject ? sourceObject.SourceObjectName : string.Empty,
             Title = col.Header,
-            AbbreviatedTitle = col is IGriddoFieldTitleView titleView ? titleView.AbbreviatedHeader : string.Empty,
             FormatString = col is IGriddoFieldFormatView formatView ? formatView.FormatString : string.Empty,
             FontFamilyName = col is IGriddoFieldFontView fontView ? fontView.FontFamilyName : string.Empty,
             FontSize = col is IGriddoFieldFontView fontView2 ? fontView2.FontSize : 0,

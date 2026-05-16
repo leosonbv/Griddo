@@ -136,22 +136,10 @@ public partial class HtmlConfigurationDialog : Window
             var field = allFields[sourceFieldIndex];
             var sourceFieldKey = ResolveSourceFieldKey(field, sourceFieldIndex);
 
-            var sourceTitle = field is IGriddoFieldTitleView tv ? tv.AbbreviatedHeader : string.Empty;
             var saved = savedByKey.TryGetValue(sourceFieldKey, out var hitByKey)
                 ? hitByKey
                 : savedByIndex.TryGetValue(sourceFieldIndex, out var hitByIndex) ? hitByIndex : null;
-            var row = new HtmlSegmentEditRecord
-            {
-                SourceFieldIndex = sourceFieldIndex,
-                SourceFieldKey = sourceFieldKey,
-                Enabled = saved?.Enabled ?? false,
-                AbbreviatedHeader = saved?.AbbreviatedHeaderOverride ?? string.Empty,
-                AddLineBreakAfter = saved?.AddLineBreakAfter ?? true,
-                WordWrap = saved?.WordWrap ?? true,
-                FormatString = saved?.FormatString ?? (field is IGriddoFieldFormatView fmt ? fmt.FormatString : null) ?? string.Empty,
-                Header = field.Header ?? string.Empty,
-                SourceAbbreviatedHeader = sourceTitle ?? string.Empty
-            };
+            var row = CreateSegmentEditRecord(field, sourceFieldIndex, sourceFieldKey, saved);
             _rows.Add(row);
             SegmentsGrid.Records.Add(row);
         }
@@ -191,9 +179,9 @@ public partial class HtmlConfigurationDialog : Window
                         SourceFieldIndex = r.SourceFieldIndex,
                         SourceFieldKey = r.SourceFieldKey ?? string.Empty,
                         Enabled = r.Enabled,
-                        AbbreviatedHeaderOverride = r.AbbreviatedHeader ?? string.Empty,
-                        AddLineBreakAfter = r.AddLineBreakAfter,
-                        WordWrap = r.WordWrap,
+                        Header = r.Header,
+                        AddLineBreakAfter = false,
+                        WordWrap = true,
                         FormatString = r.FormatString ?? string.Empty
                     };
                 })
@@ -244,12 +232,10 @@ public partial class HtmlConfigurationDialog : Window
         public int SourceFieldIndex { get; set; }
         public string SourceFieldKey { get; set; } = string.Empty;
         public bool Enabled { get; set; }
-        public string AbbreviatedHeader { get; set; } = string.Empty;
-        public bool AddLineBreakAfter { get; set; } = true;
-        public bool WordWrap { get; set; } = true;
-        public string FormatString { get; set; } = string.Empty;
+        public string Source { get; set; } = string.Empty;
+        public string Property { get; set; } = string.Empty;
         public string Header { get; set; } = string.Empty;
-        public string SourceAbbreviatedHeader { get; set; } = string.Empty;
+        public string FormatString { get; set; } = string.Empty;
     }
 
     private static int ResolveEffectiveSourceFieldIndex(
@@ -291,33 +277,25 @@ public partial class HtmlConfigurationDialog : Window
                 ((HtmlSegmentEditRecord)r).Enabled = b;
                 return true;
             }));
-        SegmentsGrid.Fields.Add(new GriddoBoolFieldView(
-            "Line break",
-            100,
-            r => ((HtmlSegmentEditRecord)r).AddLineBreakAfter,
-            (r, v) =>
-            {
-                if (v is not bool b)
-                {
-                    return false;
-                }
-
-                ((HtmlSegmentEditRecord)r).AddLineBreakAfter = b;
-                return true;
-            }));
         SegmentsGrid.Fields.Add(new GriddoFieldView(
-            "Header",
-            220,
-            r => ((HtmlSegmentEditRecord)r).Header,
+            "Source",
+            140,
+            r => ((HtmlSegmentEditRecord)r).Source,
             static (_, _) => false,
             GriddoCellEditors.Text));
         SegmentsGrid.Fields.Add(new GriddoFieldView(
-            "Abbr",
+            "Property",
             140,
-            r => ((HtmlSegmentEditRecord)r).AbbreviatedHeader,
+            r => ((HtmlSegmentEditRecord)r).Property,
+            static (_, _) => false,
+            GriddoCellEditors.Text));
+        SegmentsGrid.Fields.Add(new GriddoFieldView(
+            "Header",
+            180,
+            r => ((HtmlSegmentEditRecord)r).Header,
             (r, v) =>
             {
-                ((HtmlSegmentEditRecord)r).AbbreviatedHeader = v?.ToString() ?? string.Empty;
+                ((HtmlSegmentEditRecord)r).Header = v?.ToString() ?? string.Empty;
                 return true;
             },
             GriddoCellEditors.Text));
@@ -330,21 +308,28 @@ public partial class HtmlConfigurationDialog : Window
                 ((HtmlSegmentEditRecord)r).FormatString = v?.ToString() ?? string.Empty;
                 return true;
             },
-            GriddoCellEditors.Text));
-        SegmentsGrid.Fields.Add(new GriddoBoolFieldView(
-            "Wrap",
-            70,
-            r => ((HtmlSegmentEditRecord)r).WordWrap,
-            (r, v) =>
-            {
-                if (v is not bool b)
-                {
-                    return false;
-                }
+            GriddoCellEditors.StandardNumericFormatStringOptions));
+    }
 
-                ((HtmlSegmentEditRecord)r).WordWrap = b;
-                return true;
-            }));
+    private static HtmlSegmentEditRecord CreateSegmentEditRecord(
+        IGriddoFieldView field,
+        int sourceFieldIndex,
+        string sourceFieldKey,
+        HtmlFieldSegmentConfiguration? saved)
+    {
+        var header = !string.IsNullOrWhiteSpace(saved?.Header)
+            ? saved.Header
+            : field.Header ?? string.Empty;
+        return new HtmlSegmentEditRecord
+        {
+            SourceFieldIndex = sourceFieldIndex,
+            SourceFieldKey = sourceFieldKey,
+            Enabled = saved?.Enabled ?? false,
+            Source = field is IGriddoFieldSourceObject sourceObject ? sourceObject.SourceObjectName : string.Empty,
+            Property = field is IGriddoFieldSourceMember sourceMember ? sourceMember.SourceMemberName : string.Empty,
+            Header = header,
+            FormatString = saved?.FormatString ?? (field is IGriddoFieldFormatView fmt ? fmt.FormatString : null) ?? string.Empty
+        };
     }
 
     private void BuildGeneralGridFields()

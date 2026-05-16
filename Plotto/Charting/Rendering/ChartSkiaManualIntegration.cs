@@ -45,10 +45,8 @@ public static class ChartSkiaManualIntegration
         }
 
         builder.LineTo(toPixelX(xMax, plotRect), toPixelY(yRight, plotRect));
-        var yEndBase = Math.Min(region.End.Y, ChartSignalInterpolation.InterpolateYAtX(ordered, region.End.X));
-        var yStartBase = Math.Min(region.Start.Y, ChartSignalInterpolation.InterpolateYAtX(ordered, region.Start.X));
-        var yBaseAtXMin = region.Start.X <= region.End.X ? yStartBase : yEndBase;
-        var yBaseAtXMax = region.Start.X <= region.End.X ? yEndBase : yStartBase;
+        var yBaseAtXMin = region.Start.X <= region.End.X ? region.Start.Y : region.End.Y;
+        var yBaseAtXMax = region.Start.X <= region.End.X ? region.End.Y : region.Start.Y;
         builder.LineTo(toPixelX(xMax, plotRect), toPixelY(yBaseAtXMax, plotRect));
         builder.LineTo(toPixelX(xMin, plotRect), toPixelY(yBaseAtXMin, plotRect));
         builder.Close();
@@ -81,8 +79,8 @@ public static class ChartSkiaManualIntegration
         var xE = region.End.X;
         var ySigS = ChartSignalInterpolation.InterpolateYAtX(ordered, xS);
         var ySigE = ChartSignalInterpolation.InterpolateYAtX(ordered, xE);
-        var yBaseS = Math.Min(region.Start.Y, ySigS);
-        var yBaseE = Math.Min(region.End.Y, ySigE);
+        var yBaseS = region.Start.Y;
+        var yBaseE = region.End.Y;
 
         var pxS = toPixelX(xS, plotRect);
         var pxE = toPixelX(xE, plotRect);
@@ -162,8 +160,8 @@ public static class ChartSkiaManualIntegration
 
         var ySigS = ChartSignalInterpolation.InterpolateYAtX(ordered, xS);
         var ySigE = ChartSignalInterpolation.InterpolateYAtX(ordered, xE);
-        var yBaseS = Math.Min(region.Start.Y, ySigS);
-        var yBaseE = Math.Min(region.End.Y, ySigE);
+        var yBaseS = region.Start.Y;
+        var yBaseE = region.End.Y;
         var t = (xData - xS) / dx;
         var yBaseAtX = yBaseS + t * (yBaseE - yBaseS);
         var ySig = ChartSignalInterpolation.InterpolateYAtX(ordered, xData);

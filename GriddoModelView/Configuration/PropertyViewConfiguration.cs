@@ -5,7 +5,6 @@ public sealed class PropertyViewConfiguration
     public string SourceClassName { get; set; } = string.Empty;
     public string PropertyName { get; set; } = string.Empty;
     public string Header { get; set; } = string.Empty;
-    public string AbbreviatedHeader { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string StringFormat { get; set; } = string.Empty;
     public string Format { get; set; } = string.Empty;

@@ -52,23 +52,7 @@
             </DockPanel>
         </Border>
         <TabControl x:Name="MainTabs" Margin="8" SelectionChanged="MainTabs_SelectionChanged">
-            <TabItem Header="Fields">
-                <grid:Griddo
-                    x:Name="TitleFieldsGrid"
-                    Margin="8,6"
-                    ShowFieldHeaderSelectionColoring="False"
-                    ShowRecordHeaderSelectionColoring="False"
-                    UniformRecordHeight="26" />
-            </TabItem>
-            <TabItem Header="General settings">
-                <grid:Griddo
-                    x:Name="GeneralGrid"
-                    Margin="8,6"
-                    ShowFieldHeaderSelectionColoring="False"
-                    ShowRecordHeaderSelectionColoring="False"
-                    UniformRecordHeight="26" />
-            </TabItem>
-            <TabItem Header="Specific settings">
+            <TabItem Header="Settings">
                 <grid:Griddo
                     x:Name="SpecificGrid"
                     Margin="8,6"
@@ -76,7 +60,15 @@
                     ShowRecordHeaderSelectionColoring="False"
                     UniformRecordHeight="26" />
             </TabItem>
-            <TabItem x:Name="PointLabelsTab" Header="Point labels" Visibility="Collapsed">
+            <TabItem x:Name="TitleTab" Header="Title">
+                <grid:Griddo
+                    x:Name="TitleFieldsGrid"
+                    Margin="8,6"
+                    ShowFieldHeaderSelectionColoring="False"
+                    ShowRecordHeaderSelectionColoring="False"
+                    UniformRecordHeight="26" />
+            </TabItem>
+            <TabItem x:Name="LabelsTab" Header="Labels" Visibility="Collapsed">
                 <grid:Griddo
                     x:Name="PointLabelFieldsGrid"
                     Margin="8,6"

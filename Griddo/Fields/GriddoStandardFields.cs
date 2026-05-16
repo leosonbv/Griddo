@@ -7,7 +7,7 @@ using Griddo.Editing;
 
 namespace Griddo.Fields;
 
-public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoCheckboxToggleFieldView, IGriddoFieldWrapView, IGriddoFieldAlignmentView, IGriddoFieldEditableHeaderView
+public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoCheckboxToggleFieldView, IGriddoFieldWrapView, IGriddoFieldAlignmentView, IGriddoFieldEditableHeaderView
 {
     private readonly Func<object, object?> _valueGetter;
     private readonly Func<object, object?, bool> _valueSetter;
@@ -99,7 +99,6 @@ public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember
     }
 
     public string Header { get; set; }
-    public string AbbreviatedHeader { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string FormatString { get; set; } = string.Empty;
     public string FontFamilyName { get; set; } = string.Empty;
@@ -220,7 +219,7 @@ public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember
     }
 }
 
-public sealed class HtmlGriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoFieldWrapView, IGriddoFieldAlignmentView
+public sealed class HtmlGriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoFieldWrapView, IGriddoFieldAlignmentView
 {
     private readonly Func<object, string> _valueGetter;
     private readonly Func<object, string, bool> _valueSetter;
@@ -248,7 +247,6 @@ public sealed class HtmlGriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMe
     }
 
     public string Header { get; set; }
-    public string AbbreviatedHeader { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string FormatString { get; set; } = string.Empty;
     public string FontFamilyName { get; set; } = string.Empty;
@@ -293,7 +291,7 @@ public sealed class HtmlGriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMe
 /// Boolean field: centered checkbox rendering, <see cref="GriddoCellEditors.Bool"/> for typed/F2 edits,
 /// Space / second click / double-click toggle in the grid.
 /// </summary>
-public sealed class GriddoBoolFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoCheckboxToggleFieldView, IGriddoFieldWrapView, IGriddoFieldAlignmentView, IGriddoFieldEditableHeaderView
+public sealed class GriddoBoolFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoCheckboxToggleFieldView, IGriddoFieldWrapView, IGriddoFieldAlignmentView, IGriddoFieldEditableHeaderView
 {
     private readonly Func<object, object?> _valueGetter;
     private readonly Func<object, object?, bool> _valueSetter;
@@ -338,7 +336,6 @@ public sealed class GriddoBoolFieldView : IGriddoFieldView, IGriddoFieldSourceMe
     public bool AllowCellEdit { get; }
 
     public string Header { get; set; }
-    public string AbbreviatedHeader { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string FormatString { get; set; } = string.Empty;
     public string FontFamilyName { get; set; } = string.Empty;

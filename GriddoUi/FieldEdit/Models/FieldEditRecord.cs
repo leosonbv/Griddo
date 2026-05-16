@@ -30,7 +30,6 @@ public sealed class FieldEditRecord
     public int FieldFill { get; set; }
 
     public double Width { get; set; } = 140;
-    public string AbbreviatedTitle { get; set; } = string.Empty;
     public string FormatString { get; set; } = string.Empty;
     public string FontFamilyName { get; set; } = string.Empty;
     public double FontSize { get; set; }
@@ -63,7 +62,6 @@ public sealed class FieldEditRecord
         SuppressCellEdit = SuppressCellEdit,
         FieldFill = FieldFill,
         Width = Width,
-        AbbreviatedTitle = AbbreviatedTitle,
         FormatString = FormatString,
         FontFamilyName = FontFamilyName,
         FontSize = FontSize,

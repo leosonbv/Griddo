@@ -12,8 +12,9 @@ public sealed class HtmlFieldSegmentConfiguration
     public int SourceFieldIndex { get; set; } = -1;
     public string SourceFieldKey { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
-    public string AbbreviatedHeaderOverride { get; set; } = string.Empty;
-    public bool AddLineBreakAfter { get; set; } = true;
+    /// <summary>User-editable segment header; empty hides the label in composed HTML.</summary>
+    public string Header { get; set; } = string.Empty;
+    public bool AddLineBreakAfter { get; set; }
     public bool WordWrap { get; set; } = true;
     /// <summary>When set, formats segment values independently of the source grid column format.</summary>
     public string FormatString { get; set; } = string.Empty;

@@ -36,13 +36,12 @@ public partial class PlotConfigurationDialog : Window
         _previewApply = previewApply;
         BuildTitleFieldGridFields();
         BuildPointLabelFieldGridFields();
-        BuildGeneralGridFields();
         BuildSpecificGridFields();
         Loaded += (_, _) =>
         {
             if (SupportsPointLabelTab())
             {
-                PointLabelsTab.Visibility = Visibility.Visible;
+                LabelsTab.Visibility = Visibility.Visible;
             }
 
             LoadFromChart();
@@ -60,12 +59,13 @@ public partial class PlotConfigurationDialog : Window
     private bool SupportsPointLabelTab() =>
         _initial.PlotTypeKey is "Calibration curve" or "Chromatogram";
 
-    private const int PointLabelsTabIndex = 3;
+    private const int TitleTabIndex = 1;
+    private const int LabelsTabIndex = 2;
 
     private void UpdateMoveButtonsVisibility()
     {
         var idx = MainTabs.SelectedIndex;
-        var show = idx == 0 || (SupportsPointLabelTab() && idx == PointLabelsTabIndex);
+        var show = idx == TitleTabIndex || (SupportsPointLabelTab() && idx == LabelsTabIndex);
         var visibility = show ? Visibility.Visible : Visibility.Collapsed;
         MoveUpButton.Visibility = visibility;
         MoveDownButton.Visibility = visibility;
@@ -75,8 +75,6 @@ public partial class PlotConfigurationDialog : Window
     {
         SeedTitleRows();
         SeedPointLabelRows();
-        GeneralGrid.Records.Clear();
-        GeneralGrid.Records.Add(new PlotGeneralSettingRecord(PlotGeneralSettingKind.Label, _initial.Label));
         SeedSpecificRows();
     }
 
@@ -120,18 +118,7 @@ public partial class PlotConfigurationDialog : Window
                 (!string.IsNullOrWhiteSpace(sourceFieldKey) && savedByKey.TryGetValue(sourceFieldKey, out var byKey))
                     ? byKey
                     : (savedByIndex.TryGetValue(sourceFieldIndex, out var byIndex) ? byIndex : null);
-            var row = new PlotTitleFieldEditRecord
-            {
-                SourceFieldIndex = sourceFieldIndex,
-                SourceFieldKey = sourceFieldKey,
-                Enabled = saved?.Enabled ?? false,
-                Header = field.Header ?? string.Empty,
-                AbbreviatedHeader = saved?.AbbreviatedHeaderOverride ?? string.Empty,
-                AddLineBreakAfter = saved?.AddLineBreakAfter ?? true,
-                WordWrap = saved?.WordWrap ?? true,
-                OmitLabelColumn = saved?.OmitLabelColumn ?? false,
-                FormatString = saved?.FormatString ?? (field is IGriddoFieldFormatView fmt ? fmt.FormatString : null) ?? string.Empty
-            };
+            var row = CreateSegmentEditRecord(field, sourceFieldIndex, sourceFieldKey, saved);
             _rows.Add(row);
             TitleFieldsGrid.Records.Add(row);
         }
@@ -182,19 +169,7 @@ public partial class PlotConfigurationDialog : Window
                 (!string.IsNullOrWhiteSpace(sourceFieldKey) && savedByKey.TryGetValue(sourceFieldKey, out var byKey))
                     ? byKey
                     : (savedByIndex.TryGetValue(sourceFieldIndex, out var byIndex) ? byIndex : null);
-            var row = new PlotTitleFieldEditRecord
-            {
-                SourceFieldIndex = sourceFieldIndex,
-                SourceFieldKey = sourceFieldKey,
-                Enabled = saved?.Enabled ?? false,
-                Header = field.Header ?? string.Empty,
-                AbbreviatedHeader = saved?.AbbreviatedHeaderOverride ?? string.Empty,
-                AddLineBreakAfter = saved?.AddLineBreakAfter ?? true,
-                WordWrap = saved?.WordWrap ?? true,
-                OmitLabelColumn = saved?.OmitLabelColumn ?? false,
-                FormatString = saved?.FormatString ?? (field is IGriddoFieldFormatView fmt ? fmt.FormatString : null) ?? string.Empty
-            };
-            PointLabelFieldsGrid.Records.Add(row);
+            PointLabelFieldsGrid.Records.Add(CreateSegmentEditRecord(field, sourceFieldIndex, sourceFieldKey, saved));
         }
     }
 
@@ -244,8 +219,8 @@ public partial class PlotConfigurationDialog : Window
     {
         return MainTabs.SelectedIndex switch
         {
-            0 => TitleFieldsGrid,
-            PointLabelsTabIndex when SupportsPointLabelTab() => PointLabelFieldsGrid,
+            TitleTabIndex => TitleFieldsGrid,
+            LabelsTabIndex when SupportsPointLabelTab() => PointLabelFieldsGrid,
             _ => null
         };
     }
@@ -280,7 +255,7 @@ public partial class PlotConfigurationDialog : Window
     private bool TryBuildResult(out PlotFieldDialogResult result)
     {
         result = default!;
-        var label = GetGeneralText(PlotGeneralSettingKind.Label);
+        var label = GetSpecificText(PlotSpecificSettingKind.Label);
         var titleSegments = TitleFieldsGrid.Records
             .OfType<PlotTitleFieldEditRecord>()
             .Select(r =>
@@ -297,10 +272,8 @@ public partial class PlotConfigurationDialog : Window
                     SourceFieldIndex = r.SourceFieldIndex,
                     SourceFieldKey = r.SourceFieldKey ?? string.Empty,
                     Enabled = r.Enabled,
-                    AbbreviatedHeaderOverride = r.AbbreviatedHeader ?? string.Empty,
+                    Header = r.Header,
                     AddLineBreakAfter = r.AddLineBreakAfter,
-                    WordWrap = r.WordWrap,
-                    OmitLabelColumn = r.OmitLabelColumn,
                     FormatString = r.FormatString ?? string.Empty
                 };
             })
@@ -322,10 +295,8 @@ public partial class PlotConfigurationDialog : Window
                     SourceFieldIndex = r.SourceFieldIndex,
                     SourceFieldKey = r.SourceFieldKey ?? string.Empty,
                     Enabled = r.Enabled,
-                    AbbreviatedHeaderOverride = r.AbbreviatedHeader ?? string.Empty,
+                    Header = r.Header,
                     AddLineBreakAfter = r.AddLineBreakAfter,
-                    WordWrap = r.WordWrap,
-                    OmitLabelColumn = r.OmitLabelColumn,
                     FormatString = r.FormatString ?? string.Empty
                 };
             })
@@ -367,14 +338,6 @@ public partial class PlotConfigurationDialog : Window
             CalibrationPointLabelSegments: calibrationPointLabelSegments,
             SpectrumNormalizeIntensity: GetSpecificBool(PlotSpecificSettingKind.SpectrumNormalizeIntensity));
         return true;
-    }
-
-    private string GetGeneralText(PlotGeneralSettingKind kind)
-    {
-        return GeneralGrid.Records
-            .OfType<PlotGeneralSettingRecord>()
-            .FirstOrDefault(r => r.Setting == kind)?
-            .Value ?? string.Empty;
     }
 
     private bool GetSpecificBool(PlotSpecificSettingKind kind)
@@ -457,10 +420,14 @@ public partial class PlotConfigurationDialog : Window
         return !string.IsNullOrWhiteSpace(field.Header) ? field.Header : sourceFieldIndex.ToString(CultureInfo.InvariantCulture);
     }
 
-    private void BuildTitleFieldGridFields()
+    private void BuildTitleFieldGridFields() => BuildSegmentGridFields(TitleFieldsGrid);
+
+    private void BuildPointLabelFieldGridFields() => BuildSegmentGridFields(PointLabelFieldsGrid);
+
+    private static void BuildSegmentGridFields(global::Griddo.Grid.Griddo grid)
     {
-        TitleFieldsGrid.Fields.Clear();
-        TitleFieldsGrid.Fields.Add(new GriddoBoolFieldView(
+        grid.Fields.Clear();
+        grid.Fields.Add(new GriddoBoolFieldView(
             "Use",
             60,
             r => ((PlotTitleFieldEditRecord)r).Enabled,
@@ -474,7 +441,7 @@ public partial class PlotConfigurationDialog : Window
                 ((PlotTitleFieldEditRecord)r).Enabled = b;
                 return true;
             }));
-        TitleFieldsGrid.Fields.Add(new GriddoBoolFieldView(
+        grid.Fields.Add(new GriddoBoolFieldView(
             "Line break",
             100,
             r => ((PlotTitleFieldEditRecord)r).AddLineBreakAfter,
@@ -488,23 +455,29 @@ public partial class PlotConfigurationDialog : Window
                 ((PlotTitleFieldEditRecord)r).AddLineBreakAfter = b;
                 return true;
             }));
-        TitleFieldsGrid.Fields.Add(new GriddoFieldView(
-            "Header",
-            220,
-            r => ((PlotTitleFieldEditRecord)r).Header,
+        grid.Fields.Add(new GriddoFieldView(
+            "Source",
+            140,
+            r => ((PlotTitleFieldEditRecord)r).Source,
             static (_, _) => false,
             GriddoCellEditors.Text));
-        TitleFieldsGrid.Fields.Add(new GriddoFieldView(
-            "Abbr",
+        grid.Fields.Add(new GriddoFieldView(
+            "Property",
             140,
-            r => ((PlotTitleFieldEditRecord)r).AbbreviatedHeader,
+            r => ((PlotTitleFieldEditRecord)r).Property,
+            static (_, _) => false,
+            GriddoCellEditors.Text));
+        grid.Fields.Add(new GriddoFieldView(
+            "Header",
+            180,
+            r => ((PlotTitleFieldEditRecord)r).Header,
             (r, v) =>
             {
-                ((PlotTitleFieldEditRecord)r).AbbreviatedHeader = v?.ToString() ?? string.Empty;
+                ((PlotTitleFieldEditRecord)r).Header = v?.ToString() ?? string.Empty;
                 return true;
             },
             GriddoCellEditors.Text));
-        TitleFieldsGrid.Fields.Add(new GriddoFieldView(
+        grid.Fields.Add(new GriddoFieldView(
             "Format",
             120,
             r => ((PlotTitleFieldEditRecord)r).FormatString,
@@ -513,129 +486,26 @@ public partial class PlotConfigurationDialog : Window
                 ((PlotTitleFieldEditRecord)r).FormatString = v?.ToString() ?? string.Empty;
                 return true;
             },
-            GriddoCellEditors.Text));
-        TitleFieldsGrid.Fields.Add(new GriddoBoolFieldView(
-            "Wrap",
-            70,
-            r => ((PlotTitleFieldEditRecord)r).WordWrap,
-            (r, v) =>
-            {
-                if (v is not bool b)
-                {
-                    return false;
-                }
-
-                ((PlotTitleFieldEditRecord)r).WordWrap = b;
-                return true;
-            }));
+            GriddoCellEditors.StandardNumericFormatStringOptions));
     }
 
-    private void BuildPointLabelFieldGridFields()
+    private static PlotTitleFieldEditRecord CreateSegmentEditRecord(
+        IGriddoFieldView field,
+        int sourceFieldIndex,
+        string sourceFieldKey,
+        PlotTitleSegmentConfiguration? saved)
     {
-        PointLabelFieldsGrid.Fields.Clear();
-        PointLabelFieldsGrid.Fields.Add(new GriddoBoolFieldView(
-            "Use",
-            60,
-            r => ((PlotTitleFieldEditRecord)r).Enabled,
-            (r, v) =>
-            {
-                if (v is not bool b)
-                {
-                    return false;
-                }
-
-                ((PlotTitleFieldEditRecord)r).Enabled = b;
-                return true;
-            }));
-        PointLabelFieldsGrid.Fields.Add(new GriddoBoolFieldView(
-            "Line break",
-            100,
-            r => ((PlotTitleFieldEditRecord)r).AddLineBreakAfter,
-            (r, v) =>
-            {
-                if (v is not bool b)
-                {
-                    return false;
-                }
-
-                ((PlotTitleFieldEditRecord)r).AddLineBreakAfter = b;
-                return true;
-            }));
-        PointLabelFieldsGrid.Fields.Add(new GriddoFieldView(
-            "Header",
-            220,
-            r => ((PlotTitleFieldEditRecord)r).Header,
-            static (_, _) => false,
-            GriddoCellEditors.Text));
-        PointLabelFieldsGrid.Fields.Add(new GriddoFieldView(
-            "Abbr",
-            140,
-            r => ((PlotTitleFieldEditRecord)r).AbbreviatedHeader,
-            (r, v) =>
-            {
-                ((PlotTitleFieldEditRecord)r).AbbreviatedHeader = v?.ToString() ?? string.Empty;
-                return true;
-            },
-            GriddoCellEditors.Text));
-        PointLabelFieldsGrid.Fields.Add(new GriddoFieldView(
-            "Format",
-            120,
-            r => ((PlotTitleFieldEditRecord)r).FormatString,
-            (r, v) =>
-            {
-                ((PlotTitleFieldEditRecord)r).FormatString = v?.ToString() ?? string.Empty;
-                return true;
-            },
-            GriddoCellEditors.Text));
-        PointLabelFieldsGrid.Fields.Add(new GriddoBoolFieldView(
-            "Value only",
-            90,
-            r => ((PlotTitleFieldEditRecord)r).OmitLabelColumn,
-            (r, v) =>
-            {
-                if (v is not bool b)
-                {
-                    return false;
-                }
-
-                ((PlotTitleFieldEditRecord)r).OmitLabelColumn = b;
-                return true;
-            }));
-        PointLabelFieldsGrid.Fields.Add(new GriddoBoolFieldView(
-            "Wrap",
-            70,
-            r => ((PlotTitleFieldEditRecord)r).WordWrap,
-            (r, v) =>
-            {
-                if (v is not bool b)
-                {
-                    return false;
-                }
-
-                ((PlotTitleFieldEditRecord)r).WordWrap = b;
-                return true;
-            }));
-    }
-
-    private void BuildGeneralGridFields()
-    {
-        GeneralGrid.Fields.Clear();
-        GeneralGrid.Fields.Add(new GriddoFieldView(
-            "Setting",
-            220,
-            r => ((PlotGeneralSettingRecord)r).DisplayName,
-            static (_, _) => false,
-            GriddoCellEditors.Text));
-        GeneralGrid.Fields.Add(new GriddoFieldView(
-            "Value",
-            360,
-            r => ((PlotGeneralSettingRecord)r).Value,
-            (r, v) =>
-            {
-                ((PlotGeneralSettingRecord)r).Value = v?.ToString() ?? string.Empty;
-                return true;
-            },
-            GriddoCellEditors.Text));
+        return new PlotTitleFieldEditRecord
+        {
+            SourceFieldIndex = sourceFieldIndex,
+            SourceFieldKey = sourceFieldKey,
+            Enabled = saved?.Enabled ?? false,
+            Source = field is IGriddoFieldSourceObject sourceObject ? sourceObject.SourceObjectName : string.Empty,
+            Property = field is IGriddoFieldSourceMember sourceMember ? sourceMember.SourceMemberName : string.Empty,
+            Header = saved?.Header ?? field.Header ?? string.Empty,
+            AddLineBreakAfter = saved?.AddLineBreakAfter ?? true,
+            FormatString = saved?.FormatString ?? (field is IGriddoFieldFormatView fmt ? fmt.FormatString : null) ?? string.Empty
+        };
     }
 
     private void BuildSpecificGridFields()
@@ -659,6 +529,8 @@ public partial class PlotConfigurationDialog : Window
     private void SeedSpecificRows()
     {
         SpecificGrid.Records.Clear();
+        SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+            PlotSpecificSettingKind.Label, "General", "Plot label", textValue: _initial.Label));
         SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
             PlotSpecificSettingKind.ShowTitle, "Title", "Show title", boolValue: _initial.ShowTitle));
         SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
@@ -689,7 +561,7 @@ public partial class PlotConfigurationDialog : Window
         {
             SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
                 PlotSpecificSettingKind.CalibrationShowPointLabels,
-                "Point labels",
+                "Labels",
                 "Show labels and connector lines",
                 boolValue: _initial.ShowCalibrationPointLabels));
             SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
@@ -722,13 +594,9 @@ public partial class PlotConfigurationDialog : Window
             PlotSpecificSettingKind.AxisFontSize, "Axes", "Font size", textValue: _initial.AxisFontSize.ToString("0.##", CultureInfo.InvariantCulture)));
     }
 
-    private enum PlotGeneralSettingKind
-    {
-        Label
-    }
-
     private enum PlotSpecificSettingKind
     {
+        Label,
         ChromatogramShowPeaks,
         ChromatogramShowExpectedRtLine,
         ChromatogramShowRtLimitLines,
@@ -749,35 +617,15 @@ public partial class PlotConfigurationDialog : Window
         TitleFontSize
     }
 
-    private sealed class PlotGeneralSettingRecord
-    {
-        public PlotGeneralSettingRecord(PlotGeneralSettingKind setting, string value)
-        {
-            Setting = setting;
-            Value = value;
-        }
-
-        public PlotGeneralSettingKind Setting { get; }
-        public string Value { get; set; } = string.Empty;
-
-        public string DisplayName => Setting switch
-        {
-            PlotGeneralSettingKind.Label => "Plot label",
-            _ => Setting.ToString()
-        };
-    }
-
     private sealed class PlotTitleFieldEditRecord
     {
         public int SourceFieldIndex { get; set; }
         public string SourceFieldKey { get; set; } = string.Empty;
         public bool Enabled { get; set; }
+        public string Source { get; set; } = string.Empty;
+        public string Property { get; set; } = string.Empty;
         public string Header { get; set; } = string.Empty;
-        public string AbbreviatedHeader { get; set; } = string.Empty;
         public bool AddLineBreakAfter { get; set; } = true;
-        public bool WordWrap { get; set; } = true;
-        /// <summary>Calibration point labels: render value only (no header column in HTML / plain overlay).</summary>
-        public bool OmitLabelColumn { get; set; }
         public string FormatString { get; set; } = string.Empty;
     }
 
@@ -867,7 +715,8 @@ public partial class PlotConfigurationDialog : Window
 
     private sealed class PlotSpecificContextualValueEditor : IGriddoContextualOptionsCellEditor
     {
-        private static readonly IGriddoOptionsCellEditor FormatEditor = (IGriddoOptionsCellEditor)GriddoCellEditors.FormatStringOptions;
+        private static readonly IGriddoOptionsCellEditor FormatEditor =
+            (IGriddoOptionsCellEditor)GriddoCellEditors.StandardNumericFormatStringOptions;
         private static readonly string[] EmptyOptions = [];
 
         public IReadOnlyList<string> Options => FormatEditor.Options;

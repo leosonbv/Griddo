@@ -751,6 +751,42 @@ public sealed partial class Griddo
     {
         return _selectedCells.Any(c => c.FieldIndex == fieldIndex);
     }
+
+    private bool IsEntireFieldSelected(int fieldIndex)
+    {
+        if (fieldIndex < 0 || fieldIndex >= Fields.Count || Records.Count == 0)
+        {
+            return false;
+        }
+
+        for (var record = 0; record < Records.Count; record++)
+        {
+            if (!_selectedCells.Contains(new GriddoCellAddress(record, fieldIndex)))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private bool IsEntireRecordSelected(int recordIndex)
+    {
+        if (recordIndex < 0 || recordIndex >= Records.Count || Fields.Count == 0)
+        {
+            return false;
+        }
+
+        for (var col = 0; col < Fields.Count; col++)
+        {
+            if (!_selectedCells.Contains(new GriddoCellAddress(recordIndex, col)))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
     private List<int> GetSelectedFieldIndices()
     {
         var set = new HashSet<int>();

@@ -397,7 +397,14 @@ public sealed class GriddoKnownColorCellEditor : IGriddoSwatchOptionsCellEditor
 
 public sealed class GriddoFormatStringCellEditor : IGriddoContextualOptionsCellEditor
 {
-    private static readonly string[] NumberFormatOptions =
+    internal static readonly string[] StandardNumericFormatOptions =
+    [
+        "(none)",
+        "F0", "F1", "F2", "F3", "F4", "F5", "F6",
+        "G1", "G2", "G3", "G4", "G5", "G6"
+    ];
+
+    private static readonly string[] DefaultNumberFormatOptions =
     [
         "(none)",
         "N0", "N2", "N3",
@@ -421,7 +428,14 @@ public sealed class GriddoFormatStringCellEditor : IGriddoContextualOptionsCellE
         "g", "G", "d", "D", "t", "T", "o", "s"
     ];
 
-    public IReadOnlyList<string> Options => NumberFormatOptions;
+    private readonly string[] _numberFormatOptions;
+
+    public GriddoFormatStringCellEditor(IReadOnlyList<string>? numberFormatOptions = null)
+    {
+        _numberFormatOptions = numberFormatOptions?.ToArray() ?? DefaultNumberFormatOptions;
+    }
+
+    public IReadOnlyList<string> Options => _numberFormatOptions;
     public bool AllowMultiple => false;
     public bool CanStartWith(char inputChar) => !char.IsControl(inputChar);
 
@@ -458,12 +472,7 @@ public sealed class GriddoFormatStringCellEditor : IGriddoContextualOptionsCellE
             return DateTimeFormatOptions;
         }
 
-        if (isNumeric && !isDateTime)
-        {
-            return NumberFormatOptions;
-        }
-
-        return NumberFormatOptions;
+        return _numberFormatOptions;
     }
 
     public bool TryGetOptionExample(object? recordSource, string option, out string example)
@@ -474,8 +483,10 @@ public sealed class GriddoFormatStringCellEditor : IGriddoContextualOptionsCellE
             return false;
         }
 
-        var formats = GetOptions(recordSource);
-        var isDateMode = formats == DateTimeFormatOptions;
+        var t = recordSource?.GetType();
+        var isNumeric = t?.GetProperty("IsNumericProperty")?.GetValue(recordSource) as bool? == true;
+        var isDateTime = t?.GetProperty("IsDateTimeProperty")?.GetValue(recordSource) as bool? == true;
+        var isDateMode = isDateTime && !isNumeric;
         try
         {
             example = isDateMode
@@ -524,6 +535,8 @@ public static class GriddoCellEditors
     public static readonly IGriddoCellEditor DialogLauncher = new GriddoDialogLauncherCellEditor();
     public static readonly IGriddoCellEditor KnownColorsDropdown = new GriddoKnownColorCellEditor();
     public static readonly IGriddoCellEditor FormatStringOptions = new GriddoFormatStringCellEditor();
+    public static readonly IGriddoCellEditor StandardNumericFormatStringOptions =
+        new GriddoFormatStringCellEditor(GriddoFormatStringCellEditor.StandardNumericFormatOptions);
     public static readonly IGriddoCellEditor TextAlignmentOptions = new GriddoOptionsCellEditor(
         ["Left", "Center", "Right"],
         allowMultiple: false,

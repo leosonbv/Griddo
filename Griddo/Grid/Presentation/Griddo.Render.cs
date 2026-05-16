@@ -122,9 +122,7 @@ public sealed partial class Griddo
         {
             dc.DrawLine(pen, rect.TopLeft, rect.BottomLeft);
         }
-        var headerLabel = Fields[col] is IGriddoFieldTitleView titleView && !string.IsNullOrWhiteSpace(titleView.AbbreviatedHeader)
-            ? titleView.AbbreviatedHeader
-            : Fields[col].Header;
+        var headerLabel = Fields[col].Header;
         var headerText = new FormattedText(
             headerLabel,
             System.Globalization.CultureInfo.CurrentCulture,
@@ -799,9 +797,7 @@ public sealed partial class Griddo
             var pen = ResolveGridLinePen();
             dc.DrawLine(pen, rr.TopLeft, rr.TopRight);
             dc.DrawLine(pen, rr.BottomLeft, rr.BottomRight);
-            var headerLabel = Fields[col] is IGriddoFieldTitleView titleView && !string.IsNullOrWhiteSpace(titleView.AbbreviatedHeader)
-                ? titleView.AbbreviatedHeader
-                : Fields[col].Header;
+            var headerLabel = Fields[col].Header;
             var headerText = new FormattedText(
                 headerLabel,
                 CultureInfo.CurrentCulture,

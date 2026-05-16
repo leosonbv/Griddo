@@ -148,11 +148,6 @@ public static class FieldChooserGridApplier
             field.Header = string.Empty;
         }
 
-        if (field is IGriddoFieldTitleView titleView)
-        {
-            titleView.AbbreviatedHeader = record.AbbreviatedTitle?.Trim() ?? string.Empty;
-        }
-
         if (field is IGriddoFieldDescriptionView descriptionView)
         {
             descriptionView.Description = record.Description?.Trim() ?? string.Empty;

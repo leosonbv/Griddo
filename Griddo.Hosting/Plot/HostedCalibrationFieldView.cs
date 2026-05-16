@@ -334,14 +334,13 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
             {
                 if (CalibrationPointLabelSegments.Count > 0 && CalibrationPointLabelSegments.Exists(static s => s.Enabled))
                 {
-                    var html = PlotTitleHtmlBuilder.BuildCalibrationPointLabelHtml(
+                    plain = PlotTitleHtmlBuilder.BuildCalibrationPointLabelPlainText(
                         recordSource,
                         i,
                         _allFieldsAccessor,
                         CalibrationPointLabelSegments,
                         _signalProvider,
                         CalibrationPointLabelFieldsAccessor);
-                    plain = PlotTitleHtmlBuilder.HtmlTableToPlainSummary(html);
                 }
                 else
                 {

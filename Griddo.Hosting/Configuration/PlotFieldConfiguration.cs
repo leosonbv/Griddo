@@ -11,11 +11,10 @@ public sealed class PlotTitleSegmentConfiguration
     public int SourceFieldIndex { get; set; } = -1;
     public string SourceFieldKey { get; set; } = string.Empty;
     public bool Enabled { get; set; }
-    public string AbbreviatedHeaderOverride { get; set; } = string.Empty;
+    /// <summary>User-editable segment header; empty hides the label.</summary>
+    public string Header { get; set; } = string.Empty;
+    /// <summary>When true, this segment starts on a new line (after closing the current line).</summary>
     public bool AddLineBreakAfter { get; set; } = true;
-    public bool WordWrap { get; set; } = true;
-    /// <summary>When true (calibration point labels only), HTML omits the header column so only the value is shown.</summary>
-    public bool OmitLabelColumn { get; set; }
     /// <summary>When set, formats segment values independently of the hosting grid column format.</summary>
     public string FormatString { get; set; } = string.Empty;
 }

@@ -10,7 +10,7 @@ using Plotto.Charting.Core;
 
 namespace Griddo.Hosting.Plot;
 
-public sealed class HostedStabilityFieldView : IGriddoHostedFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IStabilityFieldLayoutTarget
+public sealed class HostedStabilityFieldView : IGriddoHostedFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldDescriptionView, IStabilityFieldLayoutTarget
 {
     private const int MaxPointsPerSeries = 100;
     private readonly Func<IReadOnlyList<IGriddoFieldView>> _allFieldsAccessor;
@@ -35,7 +35,6 @@ public sealed class HostedStabilityFieldView : IGriddoHostedFieldView, IGriddoFi
     }
 
     public string Header { get; set; } = string.Empty;
-    public string AbbreviatedHeader { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string SourceMemberName { get; }
     public string SourceObjectName { get; }

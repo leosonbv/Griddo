@@ -6,7 +6,7 @@ using Griddo.Fields.Attributes;
 
 namespace Griddo.Fields;
 
-public sealed class GriddoEnumFieldView<TEnum> : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoDynamicFieldColorView, IGriddoFieldWrapView, IGriddoFieldAlignmentView
+public sealed class GriddoEnumFieldView<TEnum> : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoDynamicFieldColorView, IGriddoFieldWrapView, IGriddoFieldAlignmentView
     where TEnum : struct, Enum
 {
     private readonly Func<object, TEnum> _valueGetter;
@@ -35,7 +35,6 @@ public sealed class GriddoEnumFieldView<TEnum> : IGriddoFieldView, IGriddoFieldS
     }
 
     public string Header { get; set; }
-    public string AbbreviatedHeader { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string FormatString { get; set; } = string.Empty;
     public string FontFamilyName { get; set; } = string.Empty;
@@ -92,7 +91,7 @@ public sealed class GriddoEnumFieldView<TEnum> : IGriddoFieldView, IGriddoFieldS
     }
 }
 
-public sealed class GriddoFlagsFieldView<TEnum> : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoDynamicFieldColorView, IGriddoFieldWrapView, IGriddoFieldAlignmentView
+public sealed class GriddoFlagsFieldView<TEnum> : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoDynamicFieldColorView, IGriddoFieldWrapView, IGriddoFieldAlignmentView
     where TEnum : struct, Enum
 {
     private readonly Func<object, TEnum> _valueGetter;
@@ -126,7 +125,6 @@ public sealed class GriddoFlagsFieldView<TEnum> : IGriddoFieldView, IGriddoField
     }
 
     public string Header { get; set; }
-    public string AbbreviatedHeader { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string FormatString { get; set; } = string.Empty;
     public string FontFamilyName { get; set; } = string.Empty;

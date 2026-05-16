@@ -8,7 +8,7 @@ using Griddo.Hosting.Configuration;
 
 namespace Griddo.Hosting.Html;
 
-public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescriptionView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldFontView, IGriddoFieldWrapView, IGriddoFieldSortValueView, IGriddoRecordMergeBandView, IHtmlFieldLayoutTarget
+public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescriptionView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldFontView, IGriddoFieldWrapView, IGriddoFieldSortValueView, IGriddoRecordMergeBandView, IHtmlFieldLayoutTarget
 {
     private readonly Func<IReadOnlyList<IGriddoFieldView>> _allFieldsAccessor;
 
@@ -27,7 +27,6 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
     }
 
     public string Header { get; set; }
-    public string AbbreviatedHeader { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public int SourceFieldIndex { get; set; } = -1;
     public string SourceMemberName { get; }
@@ -78,9 +77,7 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
                 continue;
             }
 
-            var header = string.IsNullOrWhiteSpace(segment.AbbreviatedHeaderOverride)
-                ? (field is IGriddoFieldTitleView t && !string.IsNullOrWhiteSpace(t.AbbreviatedHeader) ? t.AbbreviatedHeader : field.Header)
-                : segment.AbbreviatedHeaderOverride;
+            var header = ResolveSegmentHeader(segment, field);
             var value = field.GetValue(recordSource);
             var rendered = field.IsHtml
                 ? (value?.ToString() ?? string.Empty)
@@ -134,6 +131,9 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
 
     public bool TrySetValue(object recordSource, object? value) => false;
     public string FormatValue(object? value) => value?.ToString() ?? string.Empty;
+
+    private static string ResolveSegmentHeader(HtmlFieldSegmentConfiguration segment, IGriddoFieldView field) =>
+        !string.IsNullOrWhiteSpace(segment.Header) ? segment.Header : field.Header ?? string.Empty;
 
     private static string FormatSegmentValue(object? value, IGriddoFieldView field, string? segmentFormatString)
     {

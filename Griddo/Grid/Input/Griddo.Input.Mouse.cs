@@ -95,51 +95,22 @@ public sealed partial class Griddo
             _recordHeaderRightClickOutline.Clear();
             _recordHeaderOnlySelection.Clear();
 
-            var headerAlreadySelected =
-                IsFieldHeaderMarkedSelected(rightCol);
-
-            IReadOnlyList<int> contextFieldIndices;
-            if (headerAlreadySelected)
+            if (!IsEntireFieldSelected(rightCol))
             {
-                var preserved = new HashSet<int>();
-                if (_selectedCells.Count > 0)
-                {
-                    foreach (var c in GetSelectedFieldIndices())
-                    {
-                        preserved.Add(c);
-                    }
-                }
-                else
-                {
-                    preserved.UnionWith(_fieldHeaderOnlySelection);
-                }
-
-                _fieldHeaderOnlySelection.Clear();
-                foreach (var c in preserved)
-                {
-                    _fieldHeaderOnlySelection.Add(c);
-                }
-
-                _selectedCells.Clear();
-                _fieldHeaderRightClickOutline.Clear();
-                foreach (var c in preserved)
-                {
-                    _fieldHeaderRightClickOutline.Add(c);
-                }
-
-                contextFieldIndices = preserved.OrderBy(c => c).ToList();
+                SelectField(rightCol, additive: false);
             }
-            else
+
+            ClearHeaderAuxiliarySelectionState();
+            _fieldHeaderRightClickOutline.Clear();
+            foreach (var c in GetSelectedFieldIndices())
             {
-                ClearHeaderAuxiliarySelectionState();
-                _selectedCells.Clear();
-                _fieldHeaderOnlySelection.Add(rightCol);
-                _fieldHeaderRightClickOutline.Add(rightCol);
-                contextFieldIndices = [rightCol];
-                AssignCurrentCell(new GriddoCellAddress(
-                    Records.Count == 0 ? 0 : Math.Clamp(_currentCell.RecordIndex, 0, Math.Max(0, Records.Count - 1)),
-                    rightCol));
+                _fieldHeaderRightClickOutline.Add(c);
             }
+
+            var contextFieldIndices = GetSelectedFieldIndices();
+            AssignCurrentCell(new GriddoCellAddress(
+                Records.Count == 0 ? 0 : Math.Clamp(_currentCell.RecordIndex, 0, Math.Max(0, Records.Count - 1)),
+                rightCol));
 
             _hasKeyboardSelectionAnchor = false;
             _isEditing = false;
@@ -175,50 +146,22 @@ public sealed partial class Griddo
             _fieldHeaderRightClickOutline.Clear();
             _fieldHeaderOnlySelection.Clear();
 
-            var recordHeaderAlreadySelected = IsRecordHeaderMarkedSelected(rightRecordHeaderHit);
-
-            IReadOnlyList<int> contextRecordIndices;
-            if (recordHeaderAlreadySelected)
+            if (!IsEntireRecordSelected(rightRecordHeaderHit))
             {
-                var preserved = new HashSet<int>();
-                if (_selectedCells.Count > 0)
-                {
-                    foreach (var r in GetSelectedRecordIndices())
-                    {
-                        preserved.Add(r);
-                    }
-                }
-                else
-                {
-                    preserved.UnionWith(_recordHeaderOnlySelection);
-                }
-
-                _recordHeaderOnlySelection.Clear();
-                foreach (var r in preserved)
-                {
-                    _recordHeaderOnlySelection.Add(r);
-                }
-
-                _selectedCells.Clear();
-                _recordHeaderRightClickOutline.Clear();
-                foreach (var r in preserved)
-                {
-                    _recordHeaderRightClickOutline.Add(r);
-                }
-
-                contextRecordIndices = preserved.OrderBy(r => r).ToList();
+                SelectRecord(rightRecordHeaderHit, additive: false);
             }
-            else
+
+            ClearHeaderAuxiliarySelectionState();
+            _recordHeaderRightClickOutline.Clear();
+            foreach (var r in GetSelectedRecordIndices())
             {
-                ClearHeaderAuxiliarySelectionState();
-                _selectedCells.Clear();
-                _recordHeaderOnlySelection.Add(rightRecordHeaderHit);
-                _recordHeaderRightClickOutline.Add(rightRecordHeaderHit);
-                contextRecordIndices = [rightRecordHeaderHit];
-                AssignCurrentCell(new GriddoCellAddress(
-                    rightRecordHeaderHit,
-                    Fields.Count == 0 ? 0 : Math.Clamp(_currentCell.FieldIndex, 0, Math.Max(0, Fields.Count - 1))));
+                _recordHeaderRightClickOutline.Add(r);
             }
+
+            var contextRecordIndices = GetSelectedRecordIndices();
+            AssignCurrentCell(new GriddoCellAddress(
+                rightRecordHeaderHit,
+                Fields.Count == 0 ? 0 : Math.Clamp(_currentCell.FieldIndex, 0, Math.Max(0, Fields.Count - 1))));
 
             _hasKeyboardSelectionAnchor = false;
             _isEditing = false;
@@ -255,6 +198,7 @@ public sealed partial class Griddo
 
             if (e.ChangedButton == MouseButton.Left
                 && clickedSelectedFieldHeader
+                && IsEntireFieldSelected(clickedFieldHeader)
                 && !isShiftPressed
                 && Records.Count > 0
                 && Fields.Count > 0)
@@ -319,6 +263,7 @@ public sealed partial class Griddo
 
             if (e.ChangedButton == MouseButton.Left
                 && clickedSelectedRecordHeader
+                && IsEntireRecordSelected(clickedRecordHeader)
                 && !isShiftPressed
                 && Records.Count > 0
                 && Fields.Count > 0)

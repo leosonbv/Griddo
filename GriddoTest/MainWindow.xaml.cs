@@ -131,7 +131,7 @@ public partial class MainWindow : Window
 
         menu.Items.Insert(0, targetGrid.CreateFieldHeaderSortMenuItem(indices, e.OpenModifiers, PersistLiveLayout));
 
-        var gridConfiguratorItem = new MenuItem { Header = "_Grid configurator…" };
+        var gridConfiguratorItem = new MenuItem { Header = "_Grid settings…" };
         gridConfiguratorItem.Click += (_, _) => OpenFieldConfigurator(
             targetGrid,
             fieldRegistry,
@@ -629,7 +629,7 @@ public partial class MainWindow : Window
             PlacementTarget = targetGrid,
             Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint
         };
-        var gridConfiguratorItem = new MenuItem { Header = "_Grid configurator…" };
+        var gridConfiguratorItem = new MenuItem { Header = "_Grid settings…" };
         gridConfiguratorItem.Click += (_, _) => OpenFieldConfigurator(targetGrid, fieldRegistry, layoutKey);
         menu.Items.Add(gridConfiguratorItem);
         var frozenRecordsItem = new MenuItem
@@ -664,7 +664,7 @@ public partial class MainWindow : Window
             PlacementTarget = targetGrid,
             Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint
         };
-        var gridConfiguratorItem = new MenuItem { Header = "_Grid configurator…" };
+        var gridConfiguratorItem = new MenuItem { Header = "_Grid settings…" };
         gridConfiguratorItem.Click += (_, _) => OpenFieldConfigurator(targetGrid, fieldRegistry, layoutKey);
         menu.Items.Add(gridConfiguratorItem);
         var stabilityExamplesItem = new MenuItem { Header = "_Stability plot examples…" };
@@ -1047,7 +1047,7 @@ public partial class MainWindow : Window
                 {
                     SourceFieldIndex = x.index,
                     Enabled = x.index is 2 or 3,
-                    AbbreviatedHeaderOverride = string.Empty,
+                    Header = string.Empty,
                     AddLineBreakAfter = true,
                     WordWrap = true
                 })
@@ -1810,11 +1810,6 @@ public partial class MainWindow : Window
                 field.Header = definition.Header;
             }
 
-            if (field is IGriddoFieldTitleView titleView)
-            {
-                titleView.AbbreviatedHeader = definition.AbbreviatedHeader ?? string.Empty;
-            }
-
             if (field is IGriddoFieldDescriptionView descriptionView)
             {
                 descriptionView.Description = definition.Description ?? string.Empty;
@@ -1854,7 +1849,6 @@ public partial class MainWindow : Window
                 SourceClassName = sourceClassName,
                 PropertyName = propertyName,
                 Header = record.Title ?? string.Empty,
-                AbbreviatedHeader = record.AbbreviatedTitle ?? string.Empty,
                 Description = record.Description ?? string.Empty,
                 StringFormat = record.FormatString ?? string.Empty,
                 FontSize = Math.Max(0, record.FontSize),
@@ -1890,11 +1884,6 @@ public partial class MainWindow : Window
             if (!string.IsNullOrWhiteSpace(definition.Header))
             {
                 record.Title = definition.Header;
-            }
-
-            if (!string.IsNullOrWhiteSpace(definition.AbbreviatedHeader))
-            {
-                record.AbbreviatedTitle = definition.AbbreviatedHeader;
             }
 
             if (!string.IsNullOrWhiteSpace(definition.Description))
@@ -1936,12 +1925,14 @@ public partial class MainWindow : Window
             target.TitleSegments = plot.TitleSegments
                 .Select(s => new PlotTitleSegmentConfiguration
                 {
+                    SourceObjectName = s.SourceObjectName ?? string.Empty,
+                    PropertyName = s.PropertyName ?? string.Empty,
                     SourceFieldIndex = s.SourceFieldIndex,
+                    SourceFieldKey = s.SourceFieldKey ?? string.Empty,
                     Enabled = s.Enabled,
-                    AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
+                    Header = s.Header ?? string.Empty,
                     AddLineBreakAfter = s.AddLineBreakAfter,
-                    WordWrap = s.WordWrap,
-                    OmitLabelColumn = s.OmitLabelColumn
+                    FormatString = s.FormatString ?? string.Empty
                 })
                 .ToList();
             target.ShowXAxis = plot.ShowXAxis;
@@ -1991,9 +1982,10 @@ public partial class MainWindow : Window
                     SourceFieldIndex = s.SourceFieldIndex,
                     SourceFieldKey = s.SourceFieldKey ?? string.Empty,
                     Enabled = s.Enabled,
-                    AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
+                    Header = s.Header ?? string.Empty,
                     AddLineBreakAfter = s.AddLineBreakAfter,
-                    WordWrap = s.WordWrap
+                    WordWrap = s.WordWrap,
+                    FormatString = s.FormatString ?? string.Empty
                 })
                 .ToList();
         }
@@ -2117,13 +2109,14 @@ public partial class MainWindow : Window
                         TitleSegments = p.TitleSegments
                             .Select(s => new PlotTitleSegmentConfiguration
                             {
+                                SourceObjectName = s.SourceObjectName ?? string.Empty,
+                                PropertyName = s.PropertyName ?? string.Empty,
                                 SourceFieldIndex = s.SourceFieldIndex,
                                 SourceFieldKey = ResolvePropertyViewKeyForSourceField(s.SourceFieldIndex, GetSourceMemberNameOrEmpty(s.SourceFieldIndex)),
                                 Enabled = s.Enabled,
-                                AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
+                                Header = s.Header ?? string.Empty,
                                 AddLineBreakAfter = s.AddLineBreakAfter,
-                                WordWrap = s.WordWrap,
-                                OmitLabelColumn = s.OmitLabelColumn
+                                FormatString = s.FormatString ?? string.Empty
                             })
                             .ToList(),
                         ShowXAxis = p.ShowXAxis,
@@ -2150,13 +2143,14 @@ public partial class MainWindow : Window
                         CalibrationPointLabelSegments = p.CalibrationPointLabelSegments
                             .Select(s => new PlotTitleSegmentConfiguration
                             {
+                                SourceObjectName = s.SourceObjectName ?? string.Empty,
+                                PropertyName = s.PropertyName ?? string.Empty,
                                 SourceFieldIndex = s.SourceFieldIndex,
                                 SourceFieldKey = ResolvePropertyViewKeyForSourceField(s.SourceFieldIndex, GetSourceMemberNameOrEmpty(s.SourceFieldIndex)),
                                 Enabled = s.Enabled,
-                                AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
+                                Header = s.Header ?? string.Empty,
                                 AddLineBreakAfter = s.AddLineBreakAfter,
-                                WordWrap = s.WordWrap,
-                                OmitLabelColumn = s.OmitLabelColumn
+                                FormatString = s.FormatString ?? string.Empty
                             })
                             .ToList(),
                         SpectrumNormalizeIntensity = p.SpectrumNormalizeIntensity
@@ -2184,9 +2178,10 @@ public partial class MainWindow : Window
                                 SourceFieldIndex = s.SourceFieldIndex,
                                 SourceFieldKey = ResolvePropertyViewKeyForSourceField(s.SourceFieldIndex, GetSourceMemberNameOrEmpty(s.SourceFieldIndex)),
                                 Enabled = s.Enabled,
-                                AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
+                                Header = s.Header ?? string.Empty,
                                 AddLineBreakAfter = s.AddLineBreakAfter,
-                                WordWrap = s.WordWrap
+                                WordWrap = s.WordWrap,
+                                FormatString = s.FormatString ?? string.Empty
                             })
                             .ToList()
                     };
@@ -2462,7 +2457,7 @@ public partial class MainWindow : Window
         return string.Empty;
     }
 
-    private sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescriptionView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldTitleView, IGriddoFieldFontView, IGriddoFieldWrapView, IGriddoFieldSortValueView, IGriddoRecordMergeBandView, IHtmlFieldLayoutTarget
+    private sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescriptionView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldFontView, IGriddoFieldWrapView, IGriddoFieldSortValueView, IGriddoRecordMergeBandView, IHtmlFieldLayoutTarget
     {
         private readonly Func<IReadOnlyList<IGriddoFieldView>> _allFieldsAccessor;
 
@@ -2482,7 +2477,6 @@ public partial class MainWindow : Window
 
         public int SourceFieldIndex { get; set; } = -1;
         public string Header { get; set; }
-        public string AbbreviatedHeader { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
         public string FontFamilyName { get; set; } = string.Empty;
         public double Width { get; }
@@ -2573,7 +2567,7 @@ public partial class MainWindow : Window
                 return string.Empty;
             }
 
-            var label = ResolveLabel(sourceField, segment.AbbreviatedHeaderOverride);
+            var label = ResolveLabel(sourceField, segment.Header);
             var rawValue = sourceField.GetValue(recordSource);
             var renderedValue = sourceField.FormatValue(rawValue);
             const string labelNoWrapStyle = " style=\"white-space:nowrap;\"";
@@ -2601,7 +2595,7 @@ public partial class MainWindow : Window
                 return string.Empty;
             }
 
-            var label = ResolveLabel(sourceField, segment.AbbreviatedHeaderOverride);
+            var label = ResolveLabel(sourceField, segment.Header);
             var renderedValue = sourceField.FormatValue(sourceField.GetValue(recordSource));
             var encodedLabel = WebUtility.HtmlEncode(label);
             var encodedValue = WebUtility.HtmlEncode(renderedValue);
@@ -2657,15 +2651,8 @@ public partial class MainWindow : Window
             return string.Join("|", parts);
         }
 
-        private static string ResolveLabel(IGriddoFieldView sourceField, string abbreviatedHeaderOverride)
-        {
-            if (!string.IsNullOrWhiteSpace(abbreviatedHeaderOverride))
-            {
-                return abbreviatedHeaderOverride;
-            }
-
-            return sourceField.Header;
-        }
+        private static string ResolveLabel(IGriddoFieldView sourceField, string segmentHeader) =>
+            !string.IsNullOrWhiteSpace(segmentHeader) ? segmentHeader : sourceField.Header;
 
         private static string BuildStyledText(string encodedValue, IGriddoFieldView sourceField, bool forceVisibleTextColor)
         {
@@ -2910,10 +2897,9 @@ public partial class MainWindow : Window
                 SourceFieldIndex = s.SourceFieldIndex,
                 SourceFieldKey = s.SourceFieldKey ?? string.Empty,
                 Enabled = s.Enabled,
-                AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
+                Header = s.Header ?? string.Empty,
                 AddLineBreakAfter = s.AddLineBreakAfter,
-                WordWrap = s.WordWrap,
-                OmitLabelColumn = s.OmitLabelColumn
+                FormatString = s.FormatString ?? string.Empty
             })
             .ToList();
         target.Label = settings.Label ?? string.Empty;
@@ -2943,10 +2929,9 @@ public partial class MainWindow : Window
                 SourceFieldIndex = s.SourceFieldIndex,
                 SourceFieldKey = s.SourceFieldKey ?? string.Empty,
                 Enabled = s.Enabled,
-                AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
+                Header = s.Header ?? string.Empty,
                 AddLineBreakAfter = s.AddLineBreakAfter,
-                WordWrap = s.WordWrap,
-                OmitLabelColumn = s.OmitLabelColumn
+                FormatString = s.FormatString ?? string.Empty
             })
             .ToList();
         target.SpectrumNormalizeIntensity = settings.SpectrumNormalizeIntensity;
@@ -2967,9 +2952,10 @@ public partial class MainWindow : Window
                 SourceFieldIndex = s.SourceFieldIndex,
                 SourceFieldKey = s.SourceFieldKey ?? string.Empty,
                 Enabled = s.Enabled,
-                AbbreviatedHeaderOverride = s.AbbreviatedHeaderOverride ?? string.Empty,
+                Header = s.Header ?? string.Empty,
                 AddLineBreakAfter = s.AddLineBreakAfter,
-                WordWrap = s.WordWrap
+                WordWrap = s.WordWrap,
+                FormatString = s.FormatString ?? string.Empty
             })
             .ToList();
     }

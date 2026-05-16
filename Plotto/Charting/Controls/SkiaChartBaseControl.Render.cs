@@ -16,6 +16,9 @@ public abstract partial class SkiaChartBaseControl
     private static readonly Regex HtmlTagRegex = new("<[^>]+>", RegexOptions.Compiled);
     private static readonly Regex HtmlRowRegex = new("<tr[^>]*>(.*?)</tr>", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
     private static readonly Regex HtmlCellRegex = new("<td[^>]*>(.*?)</td>", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+    private static readonly Regex HtmlBrSplitRegex = new("<br\\s*/?>", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex HtmlTitleSpanRegex = new("<span[^>]*>(.*?)</span>", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+    private static readonly Regex HtmlTitleHeaderValueRegex = new("<b[^>]*>(.*?)</b>\\s*:\\s*(.*)", RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
     private static readonly Regex HtmlStyleRegex = new("style\\s*=\\s*['\\\"](?<style>[^'\\\"]+)['\\\"]", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex HtmlFontSizeRegex = new("(?<value>[0-9]+(?:\\.[0-9]+)?)\\s*px", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
@@ -231,26 +234,32 @@ public abstract partial class SkiaChartBaseControl
                 {
                     var rowMarkup = row.Value;
                     var rowHtml = row.Groups[1].Value;
-                    var breakBefore = rowMarkup.Contains("data-break-before='1'", StringComparison.OrdinalIgnoreCase) ||
-                                      rowMarkup.Contains("data-break-before=\"1\"", StringComparison.OrdinalIgnoreCase);
+                    var breakBeforeRow = rowMarkup.Contains("data-break-before='1'", StringComparison.OrdinalIgnoreCase) ||
+                                         rowMarkup.Contains("data-break-before=\"1\"", StringComparison.OrdinalIgnoreCase);
                     var cellMatches = HtmlCellRegex.Matches(rowHtml);
                     if (cellMatches.Count >= 2)
                     {
-                        var headerText = CleanHtmlText(cellMatches[0].Groups[1].Value);
-                        var valueCellHtml = cellMatches[1].Groups[1].Value;
-                        var valueText = CleanHtmlText(valueCellHtml);
-                        if (string.IsNullOrWhiteSpace(headerText) && string.IsNullOrWhiteSpace(valueText))
+                        var firstPairInRow = true;
+                        for (var c = 0; c + 1 < cellMatches.Count; c += 2)
                         {
-                            continue;
+                            var headerText = CleanHtmlText(cellMatches[c].Groups[1].Value);
+                            var valueCellHtml = cellMatches[c + 1].Groups[1].Value;
+                            var valueText = CleanHtmlText(valueCellHtml);
+                            if (string.IsNullOrWhiteSpace(headerText) && string.IsNullOrWhiteSpace(valueText))
+                            {
+                                continue;
+                            }
+
+                            var valueStyle = ParseStyle(valueCellHtml);
+                            parsed.Add(new TitleLine(
+                                HeaderText: headerText,
+                                ValueText: valueText,
+                                IsPair: true,
+                                BreakBefore: breakBeforeRow && firstPairInRow,
+                                Style: valueStyle));
+                            firstPairInRow = false;
                         }
 
-                        var valueStyle = ParseStyle(valueCellHtml);
-                        parsed.Add(new TitleLine(
-                            HeaderText: headerText,
-                            ValueText: valueText,
-                            IsPair: true,
-                            BreakBefore: breakBefore,
-                            Style: valueStyle));
                         continue;
                     }
 
@@ -267,7 +276,7 @@ public abstract partial class SkiaChartBaseControl
                         HeaderText: string.Empty,
                         ValueText: text,
                         IsPair: false,
-                        BreakBefore: breakBefore,
+                        BreakBefore: breakBeforeRow,
                         Style: style with { Bold = style.Bold || rowHtml.Contains("<b", StringComparison.OrdinalIgnoreCase) }));
                 }
 
@@ -278,11 +287,83 @@ public abstract partial class SkiaChartBaseControl
             }
         }
 
-        return CleanHtmlText(title)
+        if (title.Contains("<div", StringComparison.OrdinalIgnoreCase) ||
+            title.Contains("<br", StringComparison.OrdinalIgnoreCase))
+        {
+            var divParsed = ParseDivTitleLines(title);
+            if (divParsed.Count > 0)
+            {
+                return divParsed;
+            }
+        }
+
+        var plainLines = CleanHtmlText(title)
             .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(static line => !string.IsNullOrWhiteSpace(line))
-            .Select(static line => new TitleLine(string.Empty, line, false, false, default))
             .ToList();
+        if (plainLines.Count == 0)
+        {
+            return [];
+        }
+
+        var result = new List<TitleLine>(plainLines.Count);
+        for (var i = 0; i < plainLines.Count; i++)
+        {
+            result.Add(new TitleLine(string.Empty, plainLines[i], false, i > 0, default));
+        }
+
+        return result;
+    }
+
+    private static List<TitleLine> ParseDivTitleLines(string title)
+    {
+        var parsed = new List<TitleLine>();
+        var rowParts = HtmlBrSplitRegex.Split(title);
+        for (var rowIndex = 0; rowIndex < rowParts.Length; rowIndex++)
+        {
+            var rowHtml = rowParts[rowIndex];
+            if (string.IsNullOrWhiteSpace(rowHtml))
+            {
+                continue;
+            }
+
+            var spans = HtmlTitleSpanRegex.Matches(rowHtml);
+            var firstInRow = true;
+            foreach (Match span in spans)
+            {
+                if (!TryParseTitleSpan(span.Groups[1].Value, out var headerText, out var valueText, out var style))
+                {
+                    continue;
+                }
+
+                parsed.Add(new TitleLine(
+                    HeaderText: headerText,
+                    ValueText: valueText,
+                    IsPair: !string.IsNullOrWhiteSpace(headerText),
+                    BreakBefore: rowIndex > 0 && firstInRow,
+                    Style: style));
+                firstInRow = false;
+            }
+        }
+
+        return parsed;
+    }
+
+    private static bool TryParseTitleSpan(string spanHtml, out string headerText, out string valueText, out TitleLineStyle style)
+    {
+        headerText = string.Empty;
+        valueText = string.Empty;
+        style = ParseStyle(spanHtml);
+        var headerValue = HtmlTitleHeaderValueRegex.Match(spanHtml);
+        if (headerValue.Success)
+        {
+            headerText = CleanHtmlText(headerValue.Groups[1].Value);
+            valueText = CleanHtmlText(headerValue.Groups[2].Value);
+            return !string.IsNullOrWhiteSpace(valueText);
+        }
+
+        valueText = CleanHtmlText(spanHtml);
+        return !string.IsNullOrWhiteSpace(valueText);
     }
 
     private static string CleanHtmlText(string text)

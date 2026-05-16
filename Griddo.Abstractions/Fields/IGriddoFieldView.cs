@@ -18,11 +18,6 @@ public interface IGriddoFieldView
     string FormatValue(object? value);
 }
 
-public interface IGriddoFieldTitleView
-{
-    string AbbreviatedHeader { get; set; }
-}
-
 public interface IGriddoFieldDescriptionView
 {
     string Description { get; set; }

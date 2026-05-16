@@ -251,15 +251,6 @@ public partial class FieldConfigurator : Window
                 return true;
             }));
         AddField(new GriddoFieldView(
-            "Abbr",
-            100,
-            r => ((FieldEditRecord)r).AbbreviatedTitle,
-            (r, v) =>
-            {
-                ((FieldEditRecord)r).AbbreviatedTitle = v?.ToString() ?? string.Empty;
-                return true;
-            }));
-        AddField(new GriddoFieldView(
             "Format",
             140,
             r => ((FieldEditRecord)r).FormatString,
