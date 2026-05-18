@@ -1,3 +1,5 @@
+using Griddo.Abstractions.Fields;
+
 namespace GriddoUi.FieldEdit.Models;
 
 using System.Windows;

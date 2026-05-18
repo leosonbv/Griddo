@@ -1,7 +1,6 @@
-using System;
 using System.Windows;
 
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 /// <summary>Transposed layout: logical records extend horizontally, logical fields vertically (property-grid style).</summary>
 public sealed partial class Griddo
@@ -34,7 +33,7 @@ public sealed partial class Griddo
 
     private double GetTransposedFieldBodyTopRel(int colIndex)
     {
-        var f = Math.Clamp(_fixedFieldCount, 0, Fields.Count);
+        var f = Math.Clamp((int)_fixedFieldCount, (int)0, (int)Fields.Count);
         var top = 0.0;
         for (var c = 0; c < colIndex && c < Fields.Count; c++)
         {
@@ -68,7 +67,7 @@ public sealed partial class Griddo
             return;
         }
 
-        var f = Math.Clamp(_fixedFieldCount, 0, Fields.Count);
+        var f = Math.Clamp((int)_fixedFieldCount, (int)0, (int)Fields.Count);
         var acc = 0.0;
         for (var c = 0; c < f && c < Fields.Count; c++)
         {
@@ -126,7 +125,7 @@ public sealed partial class Griddo
             last++;
         }
 
-        last = Math.Clamp(last, col, Fields.Count - 1);
+        last = Math.Clamp(last, col, (int)(Fields.Count - 1));
         for (var c = col; c <= last; c++)
         {
             onCol(c);
@@ -195,7 +194,7 @@ public sealed partial class Griddo
             return -1;
         }
 
-        var f = Math.Clamp(_fixedFieldCount, 0, Fields.Count);
+        var f = Math.Clamp((int)_fixedFieldCount, (int)0, (int)Fields.Count);
         var y = 0.0;
         for (var c = 0; c < f; c++)
         {

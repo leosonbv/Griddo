@@ -2,9 +2,12 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Griddo.Abstractions.Editing;
+using Griddo.Abstractions.Fields;
 using Griddo.Editing;
 using Griddo.Fields;
 using Griddo.Hosting.Configuration;
+using Plotto.Abstractions.Charting.Core;
 using Plotto.Charting.Controls;
 using Plotto.Charting.Core;
 

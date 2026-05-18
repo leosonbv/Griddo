@@ -1,4 +1,5 @@
 using System.Windows;
+using Plotto.Abstractions.Charting.Core;
 using Plotto.Charting.Core;
 using SkiaSharp;
 

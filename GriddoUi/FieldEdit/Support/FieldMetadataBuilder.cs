@@ -4,9 +4,12 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Windows;
+using Griddo.Abstractions.Fields;
 using Griddo.Editing;
 using Griddo.Fields;
-using Griddo.Grid;
+using Griddo.Grid.Presentation;
+using Griddo.Grid.Presentation;
+using Griddo.Grid.Presentation;
 using GriddoUi.FieldEdit.Models;
 
 namespace GriddoUi.FieldEdit.Support;
@@ -23,9 +26,9 @@ namespace GriddoUi.FieldEdit.Support;
 public static class FieldMetadataBuilder
 {
     /// <summary>
-    /// One record per field currently in <paramref name="grid"/>; sample value from <see cref="Griddo.Records"/>[0] when present.
+    /// One record per field currently in <paramref name="grid"/>; sample value from <see cref="Griddo.Grid.Presentation.Griddo.Records"/>[0] when present.
     /// </summary>
-    public static List<FieldEditRecord> BuildRecordsFromGrid(global::Griddo.Grid.Griddo grid) =>
+    public static List<FieldEditRecord> BuildRecordsFromGrid(global::Griddo.Grid.Presentation.Griddo grid) =>
         BuildRecordsFromGrid(grid, fullFieldOrder: null, previewSampleRecord: null);
 
     /// <summary>
@@ -33,9 +36,9 @@ public static class FieldMetadataBuilder
     /// (not in <paramref name="grid"/>.Fields) appear with <see cref="FieldEditRecord.Visible"/> false.
     /// <see cref="FieldEditRecord.SourceFieldIndex"/> is the index into <paramref name="fullFieldOrder"/>.
     /// </summary>
-    /// <param name="previewSampleRecord">When set, used for value previews instead of <see cref="Griddo.Grid.Griddo.Records"/>[0].</param>
+    /// <param name="previewSampleRecord">When set, used for value previews instead of <see cref="Griddo.Grid.Presentation.Griddo.Grid.Griddo.Records"/>[0].</param>
     public static List<FieldEditRecord> BuildRecordsFromGrid(
-        global::Griddo.Grid.Griddo grid,
+        global::Griddo.Grid.Presentation.Griddo grid,
         IReadOnlyList<IGriddoFieldView>? fullFieldOrder,
         object? previewSampleRecord = null)
     {
@@ -93,7 +96,7 @@ public static class FieldMetadataBuilder
         Dictionary<string, int> nameUseCount,
         bool visible,
         Dictionary<int, GriddoSortDescriptor> sortMap,
-        global::Griddo.Grid.Griddo grid,
+        global::Griddo.Grid.Presentation.Griddo grid,
         int? gridFieldIndexForLiveWidth)
     {
         var baseKey = ResolveSourceMemberKey(col, sample, recordType);
@@ -154,7 +157,7 @@ public static class FieldMetadataBuilder
     }
 
     private static Dictionary<int, GriddoSortDescriptor> BuildSortMap(
-        global::Griddo.Grid.Griddo grid,
+        global::Griddo.Grid.Presentation.Griddo grid,
         IReadOnlyList<IGriddoFieldView>? fullFieldOrder)
     {
         if (fullFieldOrder is null || fullFieldOrder.Count == 0)

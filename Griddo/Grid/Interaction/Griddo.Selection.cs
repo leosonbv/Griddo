@@ -1,7 +1,8 @@
 using System.Windows.Input;
+using Griddo.Grid.Interaction;
 using Griddo.Primitives;
 
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 public sealed partial class Griddo
 {
@@ -29,7 +30,7 @@ public sealed partial class Griddo
         ClearHeaderFocus();
         ClearHeaderAuxiliarySelectionState();
         var record = Math.Clamp(_currentCell.RecordIndex + recordDelta, 0, Records.Count - 1);
-        var col = Math.Clamp(_currentCell.FieldIndex + colDelta, 0, Fields.Count - 1);
+        var col = Math.Clamp(_currentCell.FieldIndex + colDelta, (int)0, (int)(Fields.Count - 1));
         AssignCurrentCell(new GriddoCellAddress(record, col));
         _selectedCells.Clear();
         _selectedCells.Add(_currentCell);
@@ -83,10 +84,10 @@ public sealed partial class Griddo
             _selectedCells.UnionWith(_selectionDragSnapshot);
         }
 
-        var minRecord = Math.Min(_dragAnchorCell.RecordIndex, _dragCurrentCell.RecordIndex);
-        var maxRecord = Math.Max(_dragAnchorCell.RecordIndex, _dragCurrentCell.RecordIndex);
-        var minCol = Math.Min(_dragAnchorCell.FieldIndex, _dragCurrentCell.FieldIndex);
-        var maxCol = Math.Max(_dragAnchorCell.FieldIndex, _dragCurrentCell.FieldIndex);
+        var minRecord = Math.Min((int)_dragAnchorCell.RecordIndex, (int)_dragCurrentCell.RecordIndex);
+        var maxRecord = Math.Max((int)_dragAnchorCell.RecordIndex, (int)_dragCurrentCell.RecordIndex);
+        var minCol = Math.Min((int)_dragAnchorCell.FieldIndex, (int)_dragCurrentCell.FieldIndex);
+        var maxCol = Math.Max((int)_dragAnchorCell.FieldIndex, (int)_dragCurrentCell.FieldIndex);
 
         for (var record = minRecord; record <= maxRecord; record++)
         {
@@ -347,8 +348,8 @@ public sealed partial class Griddo
         if (Records.Count > 0 && Fields.Count > 0)
         {
             AssignCurrentCell(new GriddoCellAddress(
-                Math.Clamp(_currentCell.RecordIndex, 0, Records.Count - 1),
-                Math.Clamp(_currentCell.FieldIndex, 0, Fields.Count - 1)));
+                Math.Clamp((int)_currentCell.RecordIndex, 0, Records.Count - 1),
+                Math.Clamp((int)_currentCell.FieldIndex, (int)0, (int)(Fields.Count - 1))));
         }
 
         InvalidateVisual();
@@ -370,7 +371,7 @@ public sealed partial class Griddo
         _hasKeyboardSelectionAnchor = false;
         _isEditing = false;
         recordIndex = Math.Clamp(recordIndex, 0, Records.Count - 1);
-        fieldIndex = Math.Clamp(fieldIndex, 0, Fields.Count - 1);
+        fieldIndex = Math.Clamp(fieldIndex, (int)0, (int)(Fields.Count - 1));
         AssignCurrentCell(new GriddoCellAddress(recordIndex, fieldIndex));
         _selectedCells.Clear();
         _selectedCells.Add(_currentCell);
@@ -396,7 +397,7 @@ public sealed partial class Griddo
         _isEditing = false;
 
         currentRecordIndex = Math.Clamp(currentRecordIndex, 0, Records.Count - 1);
-        currentFieldIndex = Math.Clamp(currentFieldIndex, 0, Fields.Count - 1);
+        currentFieldIndex = Math.Clamp(currentFieldIndex, (int)0, (int)(Fields.Count - 1));
         AssignCurrentCell(new GriddoCellAddress(currentRecordIndex, currentFieldIndex));
 
         _selectedCells.Clear();
@@ -409,7 +410,7 @@ public sealed partial class Griddo
                     continue;
                 }
 
-                var fieldIndex = Math.Clamp(address.FieldIndex, 0, Fields.Count - 1);
+                var fieldIndex = Math.Clamp(address.FieldIndex, (int)0, (int)(Fields.Count - 1));
                 _selectedCells.Add(new GriddoCellAddress(address.RecordIndex, fieldIndex));
             }
         }
@@ -717,7 +718,7 @@ public sealed partial class Griddo
         {
             AssignCurrentCell(new GriddoCellAddress(
                 recordIndex,
-                Math.Clamp(_currentCell.FieldIndex, 0, Fields.Count - 1)));
+                Math.Clamp((int)_currentCell.FieldIndex, (int)0, (int)(Fields.Count - 1))));
         }
 
         _hasKeyboardSelectionAnchor = false;
@@ -733,7 +734,7 @@ public sealed partial class Griddo
         if (fieldIndex >= 0 && fieldIndex < Fields.Count && Records.Count > 0)
         {
             AssignCurrentCell(new GriddoCellAddress(
-                Math.Clamp(_currentCell.RecordIndex, 0, Records.Count - 1),
+                Math.Clamp((int)_currentCell.RecordIndex, 0, Records.Count - 1),
                 fieldIndex));
         }
 
@@ -744,12 +745,12 @@ public sealed partial class Griddo
 
     private bool IsRecordSelected(int recordIndex)
     {
-        return _selectedCells.Any(c => c.RecordIndex == recordIndex);
+        return Enumerable.Any<GriddoCellAddress>(_selectedCells, c => c.RecordIndex == recordIndex);
     }
 
     private bool IsFieldSelected(int fieldIndex)
     {
-        return _selectedCells.Any(c => c.FieldIndex == fieldIndex);
+        return Enumerable.Any<GriddoCellAddress>(_selectedCells, c => c.FieldIndex == fieldIndex);
     }
 
     private bool IsEntireFieldSelected(int fieldIndex)
@@ -850,8 +851,8 @@ public sealed partial class Griddo
             _selectedCells.UnionWith(_selectionDragSnapshot);
         }
 
-        var minRecord = Math.Min(_recordHeaderDragAnchorRecord, _recordHeaderDragCurrentRecord);
-        var maxRecord = Math.Max(_recordHeaderDragAnchorRecord, _recordHeaderDragCurrentRecord);
+        var minRecord = Math.Min((int)_recordHeaderDragAnchorRecord, (int)_recordHeaderDragCurrentRecord);
+        var maxRecord = Math.Max((int)_recordHeaderDragAnchorRecord, (int)_recordHeaderDragCurrentRecord);
         for (var record = minRecord; record <= maxRecord; record++)
         {
             for (var col = 0; col < Fields.Count; col++)
@@ -878,8 +879,8 @@ public sealed partial class Griddo
             _selectedCells.UnionWith(_selectionDragSnapshot);
         }
 
-        var minCol = Math.Min(_fieldHeaderDragAnchorField, _fieldHeaderDragCurrentField);
-        var maxCol = Math.Max(_fieldHeaderDragAnchorField, _fieldHeaderDragCurrentField);
+        var minCol = Math.Min((int)_fieldHeaderDragAnchorField, (int)_fieldHeaderDragCurrentField);
+        var maxCol = Math.Max((int)_fieldHeaderDragAnchorField, (int)_fieldHeaderDragCurrentField);
         for (var col = minCol; col <= maxCol; col++)
         {
             for (var record = 0; record < Records.Count; record++)
@@ -897,8 +898,8 @@ public sealed partial class Griddo
         }
 
         var record = Math.Clamp(current.RecordIndex, 0, Records.Count - 1);
-        var currentCol = Math.Clamp(current.FieldIndex, 0, Fields.Count - 1);
-        var targetCol = Math.Clamp(clickedField, 0, Fields.Count - 1);
+        var currentCol = Math.Clamp(current.FieldIndex, (int)0, (int)(Fields.Count - 1));
+        var targetCol = Math.Clamp(clickedField, (int)0, (int)(Fields.Count - 1));
 
         if (!additive)
         {
@@ -906,8 +907,8 @@ public sealed partial class Griddo
             _selectedCells.Clear();
         }
 
-        var selectedFieldsOnRecord = _selectedCells
-            .Where(c => c.RecordIndex == record)
+        var selectedFieldsOnRecord = Enumerable
+            .Where<GriddoCellAddress>(_selectedCells, c => c.RecordIndex == record)
             .Select(c => c.FieldIndex)
             .Distinct()
             .ToList();
@@ -954,8 +955,8 @@ public sealed partial class Griddo
         var minRecord = Math.Min(fromRecord, toRecord);
         var maxRecord = Math.Max(fromRecord, toRecord);
 
-        var selectedFieldsOnRecord = _selectedCells
-            .Where(c => c.RecordIndex == fromRecord)
+        var selectedFieldsOnRecord = Enumerable
+            .Where<GriddoCellAddress>(_selectedCells, c => c.RecordIndex == fromRecord)
             .Select(c => c.FieldIndex)
             .Distinct()
             .ToList();
@@ -981,13 +982,13 @@ public sealed partial class Griddo
             return;
         }
 
-        var fromCol = Math.Clamp(sourceField, 0, Fields.Count - 1);
-        var toCol = Math.Clamp(targetField, 0, Fields.Count - 1);
+        var fromCol = Math.Clamp(sourceField, (int)0, (int)(Fields.Count - 1));
+        var toCol = Math.Clamp(targetField, (int)0, (int)(Fields.Count - 1));
         var minCol = Math.Min(fromCol, toCol);
         var maxCol = Math.Max(fromCol, toCol);
 
-        var selectedRecordsOnField = _selectedCells
-            .Where(c => c.FieldIndex == fromCol)
+        var selectedRecordsOnField = Enumerable
+            .Where<GriddoCellAddress>(_selectedCells, c => c.FieldIndex == fromCol)
             .Select(c => c.RecordIndex)
             .Distinct()
             .ToList();

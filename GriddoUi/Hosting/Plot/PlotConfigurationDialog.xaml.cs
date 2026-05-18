@@ -4,6 +4,8 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using Griddo.Abstractions.Editing;
+using Griddo.Abstractions.Fields;
 using Griddo.Fields;
 using Griddo.Primitives;
 using Griddo.Editing;
@@ -199,7 +201,7 @@ public partial class PlotConfigurationDialog : Window
         _ = grid?.TryMoveSelectedRecordsStep(1);
     }
 
-    private global::Griddo.Grid.Griddo? ActiveTitleLikeGrid()
+    private global::Griddo.Grid.Presentation.Griddo? ActiveTitleLikeGrid()
     {
         return MainTabs.SelectedIndex switch
         {
@@ -372,7 +374,7 @@ public partial class PlotConfigurationDialog : Window
 
     private void BuildPointLabelFieldGridFields() => BuildSegmentGridFields(PointLabelFieldsGrid);
 
-    private static void BuildSegmentGridFields(global::Griddo.Grid.Griddo grid)
+    private static void BuildSegmentGridFields(global::Griddo.Grid.Presentation.Griddo grid)
     {
         grid.Fields.Clear();
         grid.Fields.Add(new GriddoBoolFieldView(

@@ -2,6 +2,7 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
+using Plotto.Abstractions.Charting.Core;
 using SkiaSharp;
 using Plotto.Charting.Core;
 using Plotto.Charting.Rendering;

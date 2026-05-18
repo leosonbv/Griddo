@@ -2,13 +2,13 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
 
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 public sealed partial class Griddo
 {
     private void UpdateRecordHeaderWidth()
     {
-        var recordCountText = Math.Max(1, Records.Count).ToString();
+        var recordCountText = Math.Max((int)1, (int)Records.Count).ToString();
         var required = MeasureRecordHeaderWidthForText(recordCountText);
         _recordHeaderWidth = Math.Max(MeasureRecordHeaderWidthForText("1"), required);
     }

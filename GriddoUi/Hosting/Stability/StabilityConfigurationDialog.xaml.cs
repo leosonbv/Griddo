@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using Griddo.Abstractions.Fields;
 using Griddo.Editing;
 using Griddo.Fields;
 using Griddo.Hosting.Configuration;

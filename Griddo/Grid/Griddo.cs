@@ -7,11 +7,12 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Griddo.Abstractions.Fields;
 using Griddo.Fields;
 using Griddo.Editing;
 using Griddo.Primitives;
 
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 public sealed partial class Griddo : FrameworkElement
 {

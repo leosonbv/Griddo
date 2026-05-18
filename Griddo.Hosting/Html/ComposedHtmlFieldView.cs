@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Windows;
+using Griddo.Abstractions.Editing;
+using Griddo.Abstractions.Fields;
 using Griddo.Editing;
 using Griddo.Fields;
 using Griddo.Hosting.Configuration;

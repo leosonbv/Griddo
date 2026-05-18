@@ -1,7 +1,7 @@
 using Griddo.Fields;
 using Griddo.Primitives;
 
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 public sealed partial class Griddo
 {

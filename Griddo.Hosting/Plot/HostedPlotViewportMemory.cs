@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Threading;
+using Plotto.Abstractions.Charting.Core;
 using Plotto.Charting.Controls;
 using Plotto.Charting.Core;
 

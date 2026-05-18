@@ -1,8 +1,8 @@
 using System.Windows;
 using System.Windows.Media;
-using Griddo.Editing;
+using Griddo.Abstractions.Editing;
 
-namespace Griddo.Fields;
+namespace Griddo.Abstractions.Fields;
 
 public interface IGriddoFieldView
 {

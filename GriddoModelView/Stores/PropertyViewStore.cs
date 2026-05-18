@@ -1,7 +1,7 @@
-using System.Collections.Generic;
-using System.IO;
 using System.Text.Json;
-namespace GriddoModelView;
+using GriddoModelView.Configuration;
+
+namespace GriddoModelView.Stores;
 
 public sealed class PropertyViewStore
 {

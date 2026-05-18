@@ -2,11 +2,13 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
+using Griddo.Abstractions.Editing;
+using Griddo.Abstractions.Fields;
 using Griddo.Fields;
 using Griddo.Editing;
 using Griddo.Primitives;
 
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 public sealed partial class Griddo
 {

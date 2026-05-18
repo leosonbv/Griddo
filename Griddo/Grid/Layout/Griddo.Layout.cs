@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 public sealed partial class Griddo
 {
@@ -9,7 +9,7 @@ public sealed partial class Griddo
 
     private double GetFixedFieldsWidth()
     {
-        var n = Math.Clamp(_fixedFieldCount, 0, Fields.Count);
+        var n = Math.Clamp((int)_fixedFieldCount, (int)0, (int)Fields.Count);
         var w = 0.0;
         for (var i = 0; i < n; i++)
         {
@@ -112,7 +112,7 @@ public sealed partial class Griddo
             endCol++;
         }
 
-        endCol = Math.Clamp(endCol, startCol, Fields.Count - 1);
+        endCol = Math.Clamp(endCol, startCol, (int)(Fields.Count - 1));
     }
 
     protected override Size MeasureOverride(Size availableSize)

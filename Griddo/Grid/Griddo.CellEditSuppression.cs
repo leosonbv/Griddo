@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 public sealed partial class Griddo
 {

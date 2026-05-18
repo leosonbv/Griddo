@@ -1,14 +1,15 @@
-using System.Globalization;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Media.Imaging;
+using Griddo.Abstractions.Fields;
 using Griddo.Clipboard;
 using Griddo.Fields;
 using Griddo.Primitives;
 
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 public sealed partial class Griddo
 {
@@ -104,7 +105,7 @@ public sealed partial class Griddo
         }
 
         var targetCells = _selectedCells.Count > 0
-            ? _selectedCells.ToList()
+            ? Enumerable.ToList<GriddoCellAddress>(_selectedCells)
             : [_currentCell];
         var didChange = false;
         foreach (var address in targetCells)
@@ -170,7 +171,7 @@ public sealed partial class Griddo
             return false;
         }
 
-        var address = _selectedCells.First();
+        var address = Enumerable.First<GriddoCellAddress>(_selectedCells);
         if (address.RecordIndex < 0 || address.RecordIndex >= Records.Count || address.FieldIndex < 0 || address.FieldIndex >= Fields.Count)
         {
             return false;
@@ -182,8 +183,8 @@ public sealed partial class Griddo
         }
 
         var cellRect = GetCellRect(address.RecordIndex, address.FieldIndex);
-        var cw = Math.Max(1, (int)Math.Round(cellRect.Width));
-        var ch = Math.Max(1, (int)Math.Round(cellRect.Height));
+        var cw = Math.Max(1, (int)Math.Round((double)cellRect.Width));
+        var ch = Math.Max(1, (int)Math.Round((double)cellRect.Height));
         if (!hosted.TryGetClipboardHtmlFragment(
                 TryGetHostedElement(address),
                 Records[address.RecordIndex],
@@ -243,10 +244,10 @@ public sealed partial class Griddo
             return false;
         }
 
-        var minRecord = _selectedCells.Min(c => c.RecordIndex);
-        var maxRecord = _selectedCells.Max(c => c.RecordIndex);
-        var minCol = _selectedCells.Min(c => c.FieldIndex);
-        var maxCol = _selectedCells.Max(c => c.FieldIndex);
+        var minRecord = Enumerable.Min<GriddoCellAddress>(_selectedCells, c => c.RecordIndex);
+        var maxRecord = Enumerable.Max<GriddoCellAddress>(_selectedCells, c => c.RecordIndex);
+        var minCol = Enumerable.Min<GriddoCellAddress>(_selectedCells, c => c.FieldIndex);
+        var maxCol = Enumerable.Max<GriddoCellAddress>(_selectedCells, c => c.FieldIndex);
 
         var selectedInBounds = new HashSet<GriddoCellAddress>();
         foreach (var c in _selectedCells)
@@ -260,8 +261,7 @@ public sealed partial class Griddo
         var lines = new List<string>();
         var tableHtml = new StringBuilder();
         tableHtml.Append(
-            "<table border=\"1\" cellspacing=\"0\" cellpadding=\"4\" style=\"border-collapse:collapse;font-family:Segoe UI,sans-serif;font-size:")
-            .Append(EffectiveFontSize.ToString(CultureInfo.InvariantCulture))
+                "<table border=\"1\" cellspacing=\"0\" cellpadding=\"4\" style=\"border-collapse:collapse;font-family:Segoe UI,sans-serif;font-size:").Append((string?)EffectiveFontSize.ToString(CultureInfo.InvariantCulture))
             .Append("px\">");
 
         if (includeHeaders)
@@ -302,8 +302,8 @@ public sealed partial class Griddo
                 values.Add(flat);
 
                 var cellRect = GetCellRect(record, col);
-                var cw = Math.Max(1, (int)Math.Round(cellRect.Width));
-                var ch = Math.Max(1, (int)Math.Round(cellRect.Height));
+                var cw = Math.Max(1, (int)Math.Round((double)cellRect.Width));
+                var ch = Math.Max(1, (int)Math.Round((double)cellRect.Height));
 
                 if (field is IGriddoHostedFieldView hosted
                     && hosted.TryGetClipboardHtmlFragment(
@@ -376,8 +376,8 @@ public sealed partial class Griddo
 
         var startCell = _selectedCells.Count > 0
             ? new GriddoCellAddress(
-                _selectedCells.Min(c => c.RecordIndex),
-                _selectedCells.Min(c => c.FieldIndex))
+                Enumerable.Min<GriddoCellAddress>(_selectedCells, c => c.RecordIndex),
+                Enumerable.Min<GriddoCellAddress>(_selectedCells, c => c.FieldIndex))
             : _currentCell;
         if (startCell.RecordIndex < 0 || startCell.FieldIndex < 0)
         {

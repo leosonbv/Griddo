@@ -1,3 +1,5 @@
+using Plotto.Abstractions.Charting.Core;
+
 namespace Plotto.Charting.Core;
 
 public sealed class ChartPointEventArgs : EventArgs

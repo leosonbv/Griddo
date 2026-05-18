@@ -1,11 +1,10 @@
-using System;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
-using Griddo.Fields;
+using Griddo.Abstractions.Fields;
 using Griddo.Primitives;
 
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 public sealed partial class Griddo
 {
@@ -629,12 +628,12 @@ public sealed partial class Griddo
 
     private GriddoCellAddress GetVerticalPageNavigationTarget(int direction)
     {
-        var recordHeight = Math.Max(1, GetRecordHeight(0));
-        var viewportRecords = (int)Math.Floor(Math.Max(1, GetScrollRecordsViewportHeight()) / recordHeight);
+        var recordHeight = Math.Max((double)1, GetRecordHeight(0));
+        var viewportRecords = (int)Math.Floor(Math.Max((double)1, GetScrollRecordsViewportHeight()) / recordHeight);
         var recordStep = Math.Max(1, viewportRecords);
         var targetRecord = Math.Clamp(_currentCell.RecordIndex + direction * recordStep, 0, Records.Count - 1);
 
-        var pageDelta = Math.Max(1, _verticalScrollBar.LargeChange);
+        var pageDelta = Math.Max((double)1, _verticalScrollBar.LargeChange);
         SetVerticalOffset(_verticalOffset + direction * pageDelta);
 
         return new GriddoCellAddress(targetRecord, _currentCell.FieldIndex);
@@ -643,7 +642,7 @@ public sealed partial class Griddo
     private GriddoCellAddress GetHorizontalPageNavigationTarget(int direction)
     {
         var targetField = GetHorizontalPageTargetField(direction);
-        var pageDelta = Math.Max(1, _horizontalScrollBar.LargeChange);
+        var pageDelta = Math.Max((double)1, _horizontalScrollBar.LargeChange);
         SetHorizontalOffset(_horizontalOffset + direction * pageDelta);
         return new GriddoCellAddress(_currentCell.RecordIndex, targetField);
     }
@@ -652,7 +651,7 @@ public sealed partial class Griddo
     {
         if (direction < 0)
         {
-            var widthBudget = Math.Max(1, GetScrollViewportWidth());
+            var widthBudget = Math.Max((double)1, GetScrollViewportWidth());
             var consumed = 0.0;
             var field = _currentCell.FieldIndex;
             while (field > 0 && consumed < widthBudget)
@@ -661,10 +660,10 @@ public sealed partial class Griddo
                 consumed += GetFieldWidth(field);
             }
 
-            return Math.Clamp(field, 0, Fields.Count - 1);
+            return Math.Clamp((int)field, (int)0, (int)(Fields.Count - 1));
         }
 
-        var forwardBudget = Math.Max(1, GetScrollViewportWidth());
+        var forwardBudget = Math.Max((double)1, GetScrollViewportWidth());
         var forwardConsumed = 0.0;
         var targetField = _currentCell.FieldIndex;
         while (targetField < Fields.Count - 1 && forwardConsumed < forwardBudget)
@@ -673,7 +672,7 @@ public sealed partial class Griddo
             forwardConsumed += GetFieldWidth(targetField);
         }
 
-        return Math.Clamp(targetField, 0, Fields.Count - 1);
+        return Math.Clamp((int)targetField, (int)0, (int)(Fields.Count - 1));
     }
 
     private bool TryHandleF2OrDeleteOutsideEdit(KeyEventArgs e)

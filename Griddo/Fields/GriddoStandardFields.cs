@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
 using System.Windows;
+using Griddo.Abstractions.Editing;
+using Griddo.Abstractions.Fields;
 using Griddo.Editing;
 
 namespace Griddo.Fields;

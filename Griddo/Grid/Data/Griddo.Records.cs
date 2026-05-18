@@ -1,9 +1,7 @@
-using System;
 using System.Windows;
 using System.Windows.Media;
-using Griddo.Fields;
 
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 public sealed partial class Griddo
 {
@@ -22,7 +20,7 @@ public sealed partial class Griddo
         }
 
         var maxFit = (int)(_viewportBodyHeight / h);
-        return Math.Min(Math.Min(_fixedRecordCount, Records.Count), maxFit);
+        return Math.Min(Math.Min((int)_fixedRecordCount, (int)Records.Count), maxFit);
     }
 
     private double GetFixedRecordsHeight() => GetEffectiveFixedRecordCount() * GetRecordHeight(0);
@@ -90,7 +88,7 @@ public sealed partial class Griddo
         if (_visibleRecordCount > 0 && _viewportBodyHeight > 0)
         {
             var slots = Records.Count > 0
-                ? Math.Min(_visibleRecordCount, Records.Count)
+                ? Math.Min((int)_visibleRecordCount, (int)Records.Count)
                 : _visibleRecordCount;
             return _viewportBodyHeight / Math.Max(1, slots);
         }
@@ -186,7 +184,7 @@ public sealed partial class Griddo
 
             var updatedHeightT = GetRecordHeight(clampedRecordIndex);
             var deltaHT = updatedHeightT - oldHeight;
-            var frRecords = Math.Min(_fixedRecordCount, Records.Count);
+            var frRecords = Math.Min((int)_fixedRecordCount, (int)Records.Count);
             var offsetDeltaT = frRecords * deltaHT + Math.Max(0, clampedRecordIndex - frRecords) * deltaHT;
             SetHorizontalOffset(oldScrollOffset + offsetDeltaT);
             return;
@@ -210,7 +208,7 @@ public sealed partial class Griddo
 
         var updatedHeight = GetRecordHeight(clampedRecordIndex);
         var deltaH = updatedHeight - oldHeight;
-        var fr = Math.Min(_fixedRecordCount, Records.Count);
+        var fr = Math.Min((int)_fixedRecordCount, (int)Records.Count);
         var offsetDelta = fr * deltaH + Math.Max(0, clampedRecordIndex - fr) * deltaH;
         SetVerticalOffset(oldScrollOffset + offsetDelta);
     }
@@ -286,7 +284,7 @@ public sealed partial class Griddo
                 return;
             }
 
-            var frRecords = Math.Min(_fixedRecordCount, Records.Count);
+            var frRecords = Math.Min((int)_fixedRecordCount, (int)Records.Count);
             var offsetDeltaT = frRecords * deltaHt + Math.Max(0, clampedT - frRecords) * deltaHt;
             SetHorizontalOffset(scrollOffsetAtDragStart + offsetDeltaT);
             return;
@@ -306,7 +304,7 @@ public sealed partial class Griddo
             return;
         }
 
-        var fr = Math.Min(_fixedRecordCount, Records.Count);
+        var fr = Math.Min((int)_fixedRecordCount, (int)Records.Count);
         var offsetDelta = fr * deltaH + Math.Max(0, clamped - fr) * deltaH;
         SetVerticalOffset(scrollOffsetAtDragStart + offsetDelta);
     }

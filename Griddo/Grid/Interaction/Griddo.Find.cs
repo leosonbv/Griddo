@@ -2,7 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Griddo.Primitives;
 
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 public sealed partial class Griddo
 {
@@ -42,8 +42,8 @@ public sealed partial class Griddo
             return false;
         }
 
-        var matchedFlat = _findMatchedCells
-            .Select(a => (a.RecordIndex * Fields.Count) + a.FieldIndex)
+        var matchedFlat = Enumerable
+            .Select<GriddoCellAddress, int>(_findMatchedCells, a => (a.RecordIndex * Fields.Count) + a.FieldIndex)
             .OrderBy(i => i)
             .ToList();
 
@@ -105,7 +105,7 @@ public sealed partial class Griddo
             {
                 var value = field.GetValue(Records[record]);
                 var text = field.FormatValue(value) ?? string.Empty;
-                if (text.IndexOf(normalizedNeedle, StringComparison.CurrentCultureIgnoreCase) >= 0)
+                if (text.IndexOf((string)normalizedNeedle, StringComparison.CurrentCultureIgnoreCase) >= 0)
                 {
                     _findMatchedCells.Add(new GriddoCellAddress(record, col));
                 }

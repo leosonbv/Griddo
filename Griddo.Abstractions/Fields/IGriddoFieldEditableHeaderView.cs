@@ -1,4 +1,4 @@
-namespace Griddo.Fields;
+namespace Griddo.Abstractions.Fields;
 
 /// <summary>
 /// Implemented by field views whose column header and in-cell editing reflect bindable, user-writable

@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Input;
+using Plotto.Abstractions.Charting.Core;
 using Plotto.Charting.Core;
 
 namespace Plotto.Charting.Controls;

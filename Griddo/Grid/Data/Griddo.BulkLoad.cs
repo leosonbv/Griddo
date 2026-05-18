@@ -1,4 +1,4 @@
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 public sealed partial class Griddo
 {
@@ -42,8 +42,8 @@ public sealed partial class Griddo
 
     private void ApplyImmediateGridCollectionStateUpdates()
     {
-        _fixedFieldCount = Math.Clamp(_fixedFieldCount, 0, Math.Max(0, Fields.Count));
-        _fixedRecordCount = Math.Clamp(_fixedRecordCount, 0, Math.Max(0, Records.Count));
+        _fixedFieldCount = Math.Clamp((int)_fixedFieldCount, 0, Math.Max((int)0, (int)Fields.Count));
+        _fixedRecordCount = Math.Clamp((int)_fixedRecordCount, 0, Math.Max((int)0, (int)Records.Count));
         if (Records.Count == 0)
         {
             _hasAutoSizedFields = false;

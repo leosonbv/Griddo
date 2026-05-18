@@ -1,3 +1,4 @@
+using Plotto.Abstractions.Charting.Core;
 using Plotto.Charting.Core;
 
 namespace Plotto.Charting.Viewport;

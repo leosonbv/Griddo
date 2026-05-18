@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Plotto.Abstractions.Charting.Core;
 
 namespace Griddo.Hosting.Plot;
 

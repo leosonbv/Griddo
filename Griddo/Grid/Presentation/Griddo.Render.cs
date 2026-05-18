@@ -1,11 +1,11 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
-using System.Linq;
+using Griddo.Abstractions.Fields;
 using Griddo.Fields;
 using Griddo.Primitives;
 
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 public sealed partial class Griddo
 {
@@ -28,7 +28,7 @@ public sealed partial class Griddo
         var brush = GridLineBrush;
         if (_cachedGridLinePen is null
             || !ReferenceEquals(_cachedGridLinePenBrush, brush)
-            || Math.Abs(_cachedGridLinePenThickness - thickness) > 1e-9)
+            || Math.Abs((double)(_cachedGridLinePenThickness - thickness)) > 1e-9)
         {
             _cachedGridLinePen = new Pen(brush, thickness);
             _cachedGridLinePenBrush = brush;
@@ -44,7 +44,7 @@ public sealed partial class Griddo
         var brush = FixedFieldRightBorderBrush;
         if (_cachedFixedFieldRightPen is null
             || !ReferenceEquals(_cachedFixedFieldRightPenBrush, brush)
-            || Math.Abs(_cachedFixedFieldRightPenThickness - thickness) > 1e-9)
+            || Math.Abs((double)(_cachedFixedFieldRightPenThickness - thickness)) > 1e-9)
         {
             _cachedFixedFieldRightPen = new Pen(brush, thickness);
             _cachedFixedFieldRightPenBrush = brush;
@@ -60,7 +60,7 @@ public sealed partial class Griddo
         var brush = FixedRecordBottomBorderBrush;
         if (_cachedFixedRecordBottomPen is null
             || !ReferenceEquals(_cachedFixedRecordBottomPenBrush, brush)
-            || Math.Abs(_cachedFixedRecordBottomPenThickness - thickness) > 1e-9)
+            || Math.Abs((double)(_cachedFixedRecordBottomPenThickness - thickness)) > 1e-9)
         {
             _cachedFixedRecordBottomPen = new Pen(brush, thickness);
             _cachedFixedRecordBottomPenBrush = brush;
@@ -638,7 +638,7 @@ public sealed partial class Griddo
 
         if (_fixedFieldCount < Fields.Count && scrollLeft < _recordHeaderWidth + _viewportBodyWidth)
         {
-            var scrollClipW = Math.Max(0, _viewportBodyWidth - fixedW);
+            var scrollClipW = Math.Max((double)0, _viewportBodyWidth - fixedW);
             var scrollClip = new Rect(scrollLeft, 0, scrollClipW, ScaledFieldHeaderHeight);
             dc.PushClip(new RectangleGeometry(scrollClip));
             GetVisibleScrollFieldRange(out var sCol, out var eCol, out var x);
@@ -656,7 +656,7 @@ public sealed partial class Griddo
 
         if (_fixedFieldCount > 0)
         {
-            var fixedClipW = Math.Min(fixedW, _viewportBodyWidth);
+            var fixedClipW = Math.Min((double)fixedW, _viewportBodyWidth);
             var fixedClip = new Rect(_recordHeaderWidth, 0, fixedClipW, ScaledFieldHeaderHeight);
             dc.PushClip(new RectangleGeometry(fixedClip));
             var fx = _recordHeaderWidth;
@@ -719,8 +719,8 @@ public sealed partial class Griddo
         var headerStripH = ScaledFieldHeaderHeight;
         var fixedRecordsW = GetTransposeFixedRecordsWidth();
         var fRecords = GetEffectiveFixedRecordCount();
-        var fixedRecordsHeaderW = Math.Min(fixedRecordsW, _viewportBodyWidth);
-        var scrollRecordsHeaderW = Math.Max(0, _viewportBodyWidth - fixedRecordsW);
+        var fixedRecordsHeaderW = Math.Min((double)fixedRecordsW, _viewportBodyWidth);
+        var scrollRecordsHeaderW = Math.Max((double)0, _viewportBodyWidth - fixedRecordsW);
 
         void DrawRecordHeaderStripCell(int record, Rect clipIntersect)
         {
@@ -783,10 +783,10 @@ public sealed partial class Griddo
 
         var bodyTop = ScaledFieldHeaderHeight;
         var fixedColsH = GetFixedFieldsWidth();
-        var fCols = Math.Clamp(_fixedFieldCount, 0, Fields.Count);
+        var fCols = Math.Clamp((int)_fixedFieldCount, (int)0, (int)Fields.Count);
         var bodyH = _viewportBodyHeight;
-        var fixedColsClipH = Math.Min(fixedColsH, bodyH);
-        var scrollColHeadersH = Math.Max(0, bodyH - fixedColsH);
+        var fixedColsClipH = Math.Min((double)fixedColsH, bodyH);
+        var scrollColHeadersH = Math.Max((double)0, bodyH - fixedColsH);
 
         void DrawFieldHeaderCell(int col, Rect clipRect)
         {
@@ -898,7 +898,7 @@ public sealed partial class Griddo
 
         if (_headerFocusKind == HeaderFocusKind.Field && _fieldHeaderRightClickOutline.Count > 0)
         {
-            foreach (var col in _fieldHeaderRightClickOutline.OrderBy(c => c))
+            foreach (var col in Enumerable.OrderBy<int, int>(_fieldHeaderRightClickOutline, c => c))
             {
                 DrawOutlinedRect(GetFieldHeaderRect(col), fieldHeaderClip);
             }
@@ -908,7 +908,7 @@ public sealed partial class Griddo
 
         if (_headerFocusKind == HeaderFocusKind.Record && _recordHeaderRightClickOutline.Count > 0)
         {
-            foreach (var record in _recordHeaderRightClickOutline.OrderBy(r => r))
+            foreach (var record in Enumerable.OrderBy<int, int>(_recordHeaderRightClickOutline, r => r))
             {
                 DrawOutlinedRect(GetRecordHeaderRect(record), recordHeaderClip);
             }
@@ -955,12 +955,12 @@ public sealed partial class Griddo
         }
 
         var pen = ResolveGridLinePen();
-        var topRight = Math.Max(0, ActualWidth - EffectiveVerticalScrollBarThickness);
-        var stripBottom = ScaledFieldHeaderHeight + Math.Max(0, _viewportBodyHeight);
-        var layoutBottom = Math.Max(0, ActualHeight - EffectiveHorizontalScrollBarThickness);
+        var topRight = Math.Max((double)0, ActualWidth - EffectiveVerticalScrollBarThickness);
+        var stripBottom = ScaledFieldHeaderHeight + Math.Max((double)0, _viewportBodyHeight);
+        var layoutBottom = Math.Max((double)0, ActualHeight - EffectiveHorizontalScrollBarThickness);
         var leftBottom = Math.Min(stripBottom, layoutBottom);
-        var rightX = Math.Max(0, ActualWidth - 1);
-        var bottomY = Math.Max(0, ActualHeight - 1);
+        var rightX = Math.Max((double)0, ActualWidth - 1);
+        var bottomY = Math.Max((double)0, ActualHeight - 1);
         dc.DrawLine(pen, new Point(0, 0), new Point(topRight, 0));
         dc.DrawLine(pen, new Point(0, 0), new Point(0, leftBottom));
         dc.DrawLine(pen, new Point(rightX, 0), new Point(rightX, bottomY));
@@ -988,7 +988,7 @@ public sealed partial class Griddo
 
         if (_fixedFieldCount < Fields.Count && scrollLeft < _recordHeaderWidth + _viewportBodyWidth)
         {
-            var scrollClipW = Math.Max(0, _viewportBodyWidth - fixedW);
+            var scrollClipW = Math.Max((double)0, _viewportBodyWidth - fixedW);
             var scrollClip = new Rect(scrollLeft, ScaledFieldHeaderHeight, scrollClipW, _viewportBodyHeight);
             dc.PushClip(new RectangleGeometry(scrollClip));
             GetVisibleScrollFieldRange(out var sCol, out var eCol, out var startX);
@@ -1012,7 +1012,7 @@ public sealed partial class Griddo
 
         if (_fixedFieldCount > 0)
         {
-            var fixedClipW = Math.Min(fixedW, _viewportBodyWidth);
+            var fixedClipW = Math.Min((double)fixedW, _viewportBodyWidth);
             var fixedClip = new Rect(_recordHeaderWidth, ScaledFieldHeaderHeight, fixedClipW, _viewportBodyHeight);
             dc.PushClip(new RectangleGeometry(fixedClip));
             ForEachVisibleRecord(record =>
@@ -1044,13 +1044,13 @@ public sealed partial class Griddo
         var fixedRecordsW = GetTransposeFixedRecordsWidth();
         var fixedColsH = GetFixedFieldsWidth();
         var fRecords = GetEffectiveFixedRecordCount();
-        var fCols = Math.Clamp(_fixedFieldCount, 0, Fields.Count);
+        var fCols = Math.Clamp((int)_fixedFieldCount, (int)0, (int)Fields.Count);
         var scrollLeft = bodyLeft + fixedRecordsW;
         var scrollTop = bodyTop + fixedColsH;
-        var scrollW = Math.Max(0, bodyW - fixedRecordsW);
-        var scrollH = Math.Max(0, bodyH - fixedColsH);
-        var fixedRecordsClipW = Math.Min(fixedRecordsW, bodyW);
-        var fixedColsClipH = Math.Min(fixedColsH, bodyH);
+        var scrollW = Math.Max((double)0, bodyW - fixedRecordsW);
+        var scrollH = Math.Max((double)0, bodyH - fixedColsH);
+        var fixedRecordsClipW = Math.Min((double)fixedRecordsW, bodyW);
+        var fixedColsClipH = Math.Min((double)fixedColsH, bodyH);
 
         void DrawCell(int record, int col)
         {
@@ -1310,8 +1310,8 @@ public sealed partial class Griddo
             BodyForeground,
             1.0);
         editText.TextAlignment = field.ContentAlignment;
-        editText.MaxTextWidth = Math.Max(1, editContentRect.Width - 8);
-        editText.MaxTextHeight = Math.Max(1, editContentRect.Height - 4);
+        editText.MaxTextWidth = Math.Max((double)1, editContentRect.Width - 8);
+        editText.MaxTextHeight = Math.Max((double)1, editContentRect.Height - 4);
         editText.Trimming = TextTrimming.CharacterEllipsis;
         var caretOriginY = verticalAlignment == VerticalAlignment.Center
             ? editContentRect.Y + Math.Max(0, (editContentRect.Height - editText.Height) / 2)
@@ -1325,7 +1325,7 @@ public sealed partial class Griddo
             fontSize,
             BodyForeground,
             1.0);
-        var contentWidth = Math.Max(1, editContentRect.Width - 8);
+        var contentWidth = Math.Max((double)1, editContentRect.Width - 8);
         var totalTextWidth = Math.Min(editText.WidthIncludingTrailingWhitespace, contentWidth);
         var textStartX = editContentRect.X + 4;
         if (field.ContentAlignment == TextAlignment.Right)
@@ -1392,7 +1392,7 @@ public sealed partial class Griddo
             caretBottom = caretBounds.Bottom;
         }
 
-        caretX = Math.Clamp(caretX, editContentRect.X + 2, editContentRect.Right - 2);
+        caretX = Math.Clamp((double)caretX, editContentRect.X + 2, editContentRect.Right - 2);
         caretTop = Math.Clamp(caretTop, editContentRect.Y + 1, editContentRect.Bottom - 1);
         caretBottom = Math.Clamp(caretBottom, caretTop + 1, editContentRect.Bottom - 1);
         if (caretBottom > caretTop)
@@ -1443,7 +1443,7 @@ public sealed partial class Griddo
             fallbackRect.X,
             topRect.Y,
             fallbackRect.Width,
-            Math.Max(0, bottomRect.Bottom - topRect.Y));
+            Math.Max((double)0, bottomRect.Bottom - topRect.Y));
     }
 
     private static bool TryGetCaretBounds(FormattedText formattedText, Point origin, int caretIndex, out Rect bounds)
@@ -1558,7 +1558,7 @@ public sealed partial class Griddo
         dc.DrawLine(
             insertionPen,
             new Point(x, 1),
-            new Point(x, Math.Max(1, ScaledFieldHeaderHeight - 1)));
+            new Point(x, Math.Max((double)1, ScaledFieldHeaderHeight - 1)));
 
         DrawDropArrows(dc, x, ScaledFieldHeaderHeight);
     }
@@ -1611,7 +1611,7 @@ public sealed partial class Griddo
         dc.DrawLine(
             insertionPen,
             new Point(1, y),
-            new Point(Math.Max(1, _recordHeaderWidth - 1), y));
+            new Point(Math.Max((double)1, _recordHeaderWidth - 1), y));
 
         DrawRecordDropArrows(dc, y, _recordHeaderWidth, clipRect.Top + 1, clipRect.Bottom - 1);
     }
@@ -1798,11 +1798,11 @@ public sealed partial class Griddo
             Math.Max(0, ActualWidth - verticalThickness - outerBorderInset),
             0,
             cornerThicknessX,
-            Math.Max(0, ScaledFieldHeaderHeight));
+            Math.Max((double)0, ScaledFieldHeaderHeight));
         var bottomLeftRect = new Rect(
             0,
             Math.Max(0, ActualHeight - horizontalThickness - outerBorderInset),
-            Math.Max(0, _recordHeaderWidth),
+            Math.Max((double)0, _recordHeaderWidth),
             cornerThicknessY);
         var bottomRightRect = new Rect(
             Math.Max(0, ActualWidth - verticalThickness - outerBorderInset),

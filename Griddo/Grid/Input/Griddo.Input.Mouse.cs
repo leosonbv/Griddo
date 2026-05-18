@@ -4,11 +4,12 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Threading;
-using Griddo.Fields;
+using Griddo.Abstractions.Fields;
 using Griddo.Editing;
+using Griddo.Fields;
 using Griddo.Primitives;
 
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 public sealed partial class Griddo
 {
@@ -109,7 +110,7 @@ public sealed partial class Griddo
 
             var contextFieldIndices = GetSelectedFieldIndices();
             AssignCurrentCell(new GriddoCellAddress(
-                Records.Count == 0 ? 0 : Math.Clamp(_currentCell.RecordIndex, 0, Math.Max(0, Records.Count - 1)),
+                Records.Count == 0 ? 0 : Math.Clamp((int)_currentCell.RecordIndex, 0, Math.Max(0, Records.Count - 1)),
                 rightCol));
 
             _hasKeyboardSelectionAnchor = false;
@@ -161,7 +162,7 @@ public sealed partial class Griddo
             var contextRecordIndices = GetSelectedRecordIndices();
             AssignCurrentCell(new GriddoCellAddress(
                 rightRecordHeaderHit,
-                Fields.Count == 0 ? 0 : Math.Clamp(_currentCell.FieldIndex, 0, Math.Max(0, Fields.Count - 1))));
+                Fields.Count == 0 ? 0 : Math.Clamp((int)_currentCell.FieldIndex, 0, Math.Max((int)0, (int)(Fields.Count - 1)))));
 
             _hasKeyboardSelectionAnchor = false;
             _isEditing = false;
@@ -192,7 +193,7 @@ public sealed partial class Griddo
 
             ClearHeaderFocus();
             var target = new GriddoCellAddress(
-                Records.Count == 0 ? 0 : Math.Clamp(oldCurrentCell.RecordIndex, 0, Records.Count - 1),
+                Records.Count == 0 ? 0 : Math.Clamp((int)oldCurrentCell.RecordIndex, 0, Records.Count - 1),
                 clickedFieldHeader);
             var clickedSelectedFieldHeader = IsFieldHeaderMarkedSelected(clickedFieldHeader);
 
@@ -258,7 +259,7 @@ public sealed partial class Griddo
             ClearHeaderFocus();
             var target = new GriddoCellAddress(
                 clickedRecordHeader,
-                Fields.Count == 0 ? 0 : Math.Clamp(oldCurrentCell.FieldIndex, 0, Fields.Count - 1));
+                Fields.Count == 0 ? 0 : Math.Clamp((int)oldCurrentCell.FieldIndex, (int)0, (int)(Fields.Count - 1)));
             var clickedSelectedRecordHeader = IsRecordHeaderMarkedSelected(clickedRecordHeader);
 
             if (e.ChangedButton == MouseButton.Left
@@ -669,7 +670,7 @@ public sealed partial class Griddo
 
     /// <summary>
     /// Hosted Plotto: after right-down + move beyond slop, hand off to the chart so rectangle zoom still works;
-    /// grid <see cref="CellContextMenu"/> is skipped for that gesture.
+    /// grid <see cref="Griddo.CellContextMenu"/> is skipped for that gesture.
     /// </summary>
     private bool TryPromotePendingBodyRightClickToHostedChart(MouseEventArgs e, Point pointer)
     {
@@ -1390,7 +1391,7 @@ public sealed partial class Griddo
 
         var oldOffset = _horizontalOffset;
         SetHorizontalOffset(_horizontalOffset + delta);
-        if (Math.Abs(oldOffset - _horizontalOffset) > double.Epsilon)
+        if (Math.Abs((double)(oldOffset - _horizontalOffset)) > double.Epsilon)
         {
             InvalidateVisual();
         }
@@ -1431,7 +1432,7 @@ public sealed partial class Griddo
 
         var oldOffset = _verticalOffset;
         SetVerticalOffset(_verticalOffset + delta);
-        if (Math.Abs(oldOffset - _verticalOffset) > double.Epsilon)
+        if (Math.Abs((double)(oldOffset - _verticalOffset)) > double.Epsilon)
         {
             InvalidateVisual();
         }
@@ -1491,7 +1492,7 @@ public sealed partial class Griddo
             SetVerticalOffset(_verticalOffset + verticalDelta);
         }
 
-        if (Math.Abs(oldH - _horizontalOffset) > double.Epsilon || Math.Abs(oldV - _verticalOffset) > double.Epsilon)
+        if (Math.Abs((double)(oldH - _horizontalOffset)) > double.Epsilon || Math.Abs((double)(oldV - _verticalOffset)) > double.Epsilon)
         {
             InvalidateVisual();
         }
@@ -1551,7 +1552,7 @@ public sealed partial class Griddo
                 }
 
                 AssignCurrentCell(new GriddoCellAddress(
-                    Records.Count == 0 ? 0 : Math.Clamp(_currentCell.RecordIndex, 0, Records.Count - 1),
+                    Records.Count == 0 ? 0 : Math.Clamp((int)_currentCell.RecordIndex, 0, Records.Count - 1),
                     _pendingFieldHeaderIndex));
                 _isEditing = false;
                 InvalidateVisual();
@@ -1582,7 +1583,7 @@ public sealed partial class Griddo
 
                 AssignCurrentCell(new GriddoCellAddress(
                     _pendingRecordHeaderIndex,
-                    Fields.Count == 0 ? 0 : Math.Clamp(_currentCell.FieldIndex, 0, Fields.Count - 1)));
+                    Fields.Count == 0 ? 0 : Math.Clamp((int)_currentCell.FieldIndex, (int)0, (int)(Fields.Count - 1))));
                 _isEditing = false;
                 InvalidateVisual();
             }

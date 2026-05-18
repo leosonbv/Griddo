@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using Plotto.Abstractions.Charting.Core;
 using SkiaSharp;
 using SkiaSharp.Views.WPF;
 using Plotto.Charting.Core;

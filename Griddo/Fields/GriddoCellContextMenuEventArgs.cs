@@ -1,5 +1,6 @@
 using System.Windows;
-using Griddo.Grid;
+using Griddo.Grid.Presentation;
+using Griddo.Grid.Presentation;
 using Griddo.Primitives;
 
 namespace Griddo.Fields;
@@ -19,6 +20,6 @@ public sealed class GriddoCellContextMenuEventArgs : EventArgs
 
     public bool CellWasAlreadySelected { get; }
 
-    /// <summary>Set to true to suppress opening <see cref="Griddo.CellContextMenu"/>.</summary>
+    /// <summary>Set to true to suppress opening <see cref="Grid.Presentation.Griddo.CellContextMenu"/>.</summary>
     public bool Handled { get; set; }
 }

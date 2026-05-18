@@ -1,10 +1,8 @@
-using System.Collections;
 using System.Collections.Specialized;
 using System.Globalization;
-using System.Linq;
+using Griddo.Abstractions.Fields;
 
-
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 public readonly record struct GriddoSortDescriptor(int FieldIndex, bool Ascending, int Priority);
 
@@ -41,7 +39,7 @@ public sealed partial class Griddo
         }
 
 
-        var existing = SortDescriptors.OrderBy(d => d.Priority).ToList();
+        var existing = Enumerable.OrderBy<GriddoSortDescriptor, int>(SortDescriptors, d => d.Priority).ToList();
 
         var existingFields = existing.Select(d => d.FieldIndex).ToHashSet();
 
@@ -74,7 +72,7 @@ public sealed partial class Griddo
                      .ThenBy(static x => x.FieldIndex))
 
         {
-            if (_sortDescriptors.Any(x => x.FieldIndex == d.FieldIndex)) continue;
+            if (Enumerable.Any<GriddoSortDescriptor>(_sortDescriptors, x => x.FieldIndex == d.FieldIndex)) continue;
 
 
             _sortDescriptors.Add(new GriddoSortDescriptor(d.FieldIndex, d.Ascending, _sortDescriptors.Count + 1));
@@ -166,8 +164,8 @@ public sealed partial class Griddo
         if (Records.Count <= 1 || _sortDescriptors.Count == 0) return;
 
 
-        var active = _sortDescriptors
-            .Where(d => d.FieldIndex >= 0 && d.FieldIndex < Fields.Count)
+        var active = Enumerable
+            .Where<GriddoSortDescriptor>(_sortDescriptors, d => d.FieldIndex >= 0 && d.FieldIndex < Fields.Count)
             .OrderBy(d => d.Priority)
             .ToList();
 
@@ -176,7 +174,7 @@ public sealed partial class Griddo
 
         var recordCount = Records.Count;
 
-        var keyFields = active.Select(d => Fields[d.FieldIndex]).ToArray();
+        var keyFields = active.Select<GriddoSortDescriptor, IGriddoFieldView>(d => Fields[d.FieldIndex]).ToArray();
 
         var keyValues = new object?[active.Count][];
 
@@ -194,7 +192,7 @@ public sealed partial class Griddo
                 {
                     var recordSource = Records[i];
 
-                    keys[i] = col is Fields.IGriddoFieldSortValueView sortableField
+                    keys[i] = col is IGriddoFieldSortValueView sortableField
                         ? sortableField.GetSortValue(recordSource)
                         : col.GetValue(recordSource);
                 }

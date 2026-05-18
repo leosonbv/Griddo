@@ -1,9 +1,10 @@
 using System.Windows.Media;
 using System.Windows.Threading;
+using Griddo.Abstractions.Fields;
 using Griddo.Core.Layout;
 using Griddo.Fields;
 
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 public sealed partial class Griddo
 {

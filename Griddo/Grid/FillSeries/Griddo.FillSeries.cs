@@ -1,10 +1,9 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Windows.Input;
-using Griddo.Fields;
-using Griddo.Primitives;
+using Griddo.Abstractions.Fields;
 
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 public sealed partial class Griddo
 {

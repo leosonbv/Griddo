@@ -1,7 +1,6 @@
-using System;
 using System.Windows;
 
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 public sealed partial class Griddo
 {
@@ -19,7 +18,7 @@ public sealed partial class Griddo
     private double FloorToCumulativeFieldScrollOffset(double offsetPx, int firstFieldIndex)
     {
         var cumulative = 0.0;
-        var first = Math.Clamp(firstFieldIndex, 0, Fields.Count);
+        var first = Math.Clamp(firstFieldIndex, (int)0, (int)Fields.Count);
         for (var c = first; c < Fields.Count; c++)
         {
             var w = GetFieldWidth(c);
@@ -94,10 +93,10 @@ public sealed partial class Griddo
     private double GetTransposedRawMaxHorizontalScroll()
     {
         var fixedRecordsW = GetTransposeFixedRecordsWidth();
-        var scrollRecordsViewport = Math.Max(0, _viewportBodyWidth - fixedRecordsW);
+        var scrollRecordsViewport = Math.Max((double)0, _viewportBodyWidth - fixedRecordsW);
         var h = Records.Count > 0 ? GetRecordHeight(0) : 0;
         var fr = GetEffectiveFixedRecordCount();
-        var scrollRecordsContent = Math.Max(0, Records.Count - fr) * h;
+        var scrollRecordsContent = Math.Max((int)0, (int)(Records.Count - fr)) * h;
         return Math.Max(0, scrollRecordsContent - scrollRecordsViewport);
     }
 
@@ -298,7 +297,7 @@ public sealed partial class Griddo
         }
 
         var fixedRecordsWidth = GetTransposeFixedRecordsWidth();
-        var scrollViewportWidth = Math.Max(0, _viewportBodyWidth - fixedRecordsWidth);
+        var scrollViewportWidth = Math.Max((double)0, _viewportBodyWidth - fixedRecordsWidth);
         if (scrollViewportWidth <= 0)
         {
             return true;
@@ -424,7 +423,7 @@ public sealed partial class Griddo
             return Math.Clamp(offsetPx, 0, _verticalScrollBar.Maximum);
         }
 
-        var rawMaxVertical = Math.Max(0, GetScrollableRecordsContentHeight() - GetScrollRecordsViewportHeight());
+        var rawMaxVertical = Math.Max((double)0, GetScrollableRecordsContentHeight() - GetScrollRecordsViewportHeight());
         var clampedVertical = Math.Clamp(offsetPx, 0, rawMaxVertical);
         if (!ShouldSnapVerticalScrollToRecordBorder(offsetPx))
         {
@@ -501,10 +500,10 @@ public sealed partial class Griddo
         if (IsBodyTransposed)
         {
             var fixedRecordsW = GetTransposeFixedRecordsWidth();
-            var scrollRecordsViewport = Math.Max(0, _viewportBodyWidth - fixedRecordsW);
+            var scrollRecordsViewport = Math.Max((double)0, _viewportBodyWidth - fixedRecordsW);
             var h = Records.Count > 0 ? GetRecordHeight(0) : GetMinimumRecordThickness() * ContentScale;
             var fr = GetEffectiveFixedRecordCount();
-            var scrollRecordsContent = Math.Max(0, Records.Count - fr) * h;
+            var scrollRecordsContent = Math.Max((int)0, (int)(Records.Count - fr)) * h;
             var rawMaxHorizontal = Math.Max(0, scrollRecordsContent - scrollRecordsViewport);
             maxHorizontal = GetAlignedMaxHorizontalScrollForSlider(rawMaxHorizontal);
 
@@ -524,11 +523,11 @@ public sealed partial class Griddo
             var scrollRecordsContent = GetScrollableRecordsContentHeight();
             var rawMaxHorizontal = Math.Max(0, scrollContent - scrollViewport);
             maxHorizontal = GetAlignedMaxHorizontalScrollForSlider(rawMaxHorizontal);
-            var rawMaxVertical = Math.Max(0, scrollRecordsContent - scrollRecordsViewport);
+            var rawMaxVertical = Math.Max((double)0, scrollRecordsContent - scrollRecordsViewport);
             maxVertical = GetAlignedMaxVerticalScrollForSlider(rawMaxVertical);
-            horizontalLargeChange = Math.Max(1, _viewportBodyWidth);
-            verticalLargeChange = Math.Max(1, scrollRecordsViewport);
-            verticalSmallChange = Math.Max(1, GetRecordHeight(0));
+            horizontalLargeChange = Math.Max((double)1, _viewportBodyWidth);
+            verticalLargeChange = Math.Max((double)1, scrollRecordsViewport);
+            verticalSmallChange = Math.Max((double)1, GetRecordHeight(0));
         }
 
         _horizontalScrollBar.LargeChange = horizontalLargeChange;

@@ -1,7 +1,6 @@
-using System.Collections.Generic;
 using Griddo.Hosting.Configuration;
 
-namespace GriddoModelView;
+namespace GriddoModelView.Configuration;
 
 public sealed class GridConfiguration
 {

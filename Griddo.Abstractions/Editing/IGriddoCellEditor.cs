@@ -1,4 +1,4 @@
-namespace Griddo.Editing;
+namespace Griddo.Abstractions.Editing;
 
 public interface IGriddoCellEditor
 {

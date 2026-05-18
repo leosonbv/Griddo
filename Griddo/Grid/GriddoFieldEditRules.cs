@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Griddo.Abstractions.Fields;
 using Griddo.Fields;
 
 namespace Griddo.Grid;
@@ -18,7 +19,7 @@ public static class GriddoFieldEditRules
     /// (plot interaction is separate from <see cref="IGriddoCellEditor"/> text edit).
     /// </summary>
     /// <param name="field">Field at <paramref name="fieldIndex"/>.</param>
-    /// <param name="fieldIndex">Current column index in <see cref="Griddo.Fields"/>.</param>
+    /// <param name="fieldIndex">Current column index in <see cref="Fields"/>.</param>
     /// <param name="cellEditSuppressedByGridColumn">Parallel to visible columns; true suppresses scalar edit for that column.</param>
     public static bool AllowsInPlaceCellEdit(
         IGriddoFieldView field,

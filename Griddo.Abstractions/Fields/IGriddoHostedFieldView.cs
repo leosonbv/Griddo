@@ -1,7 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
 
-namespace Griddo.Fields;
+namespace Griddo.Abstractions.Fields;
 
 public interface IGriddoHostedFieldView : IGriddoFieldView
 {

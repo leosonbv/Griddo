@@ -2,6 +2,7 @@ using System.Windows;
 using System.Globalization;
 using System.Net;
 using System.Text.RegularExpressions;
+using Plotto.Abstractions.Charting.Core;
 using SkiaSharp;
 using SkiaSharp.Views.Desktop;
 using Plotto.Charting.Axes;

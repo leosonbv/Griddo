@@ -4,9 +4,12 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using Griddo.Abstractions.Editing;
+using Griddo.Abstractions.Fields;
 using Griddo.Fields;
 using Griddo.Editing;
-using Griddo.Grid;
+using Griddo.Grid.Presentation;
+using Griddo.Grid.Presentation;
 using Griddo.Primitives;
 using GriddoUi.FieldEdit.Models;
 using GriddoUi.FieldEdit.Support;
@@ -28,13 +31,13 @@ public partial class FieldConfigurator : Window
     public event EventHandler<IReadOnlyList<FieldEditRecord>>? PreviewApply;
 
     /// <summary>Grid whose fields this dialog edits (for nested "Grid configurator..." from the preview grid).</summary>
-    public global::Griddo.Grid.Griddo? TargetSourceGrid { get; set; }
+    public global::Griddo.Grid.Presentation.Griddo? TargetSourceGrid { get; set; }
 
     /// <summary>Applies current records, frozen counts, and general options to the grid that opened the dialog.</summary>
     public Action<IReadOnlyList<FieldEditRecord>, int, int, FieldChooserGeneralOptions>? ApplyToSourceGrid { get; set; }
 
     /// <summary>Host hook for field header context menu (e.g. <see cref="MainWindow"/> demo menu).</summary>
-    public Action<global::Griddo.Grid.Griddo, IReadOnlyList<IGriddoFieldView>, GriddoFieldHeaderMouseEventArgs>? FieldHeaderMenuHandler { get; set; }
+    public Action<global::Griddo.Grid.Presentation.Griddo, IReadOnlyList<IGriddoFieldView>, GriddoFieldHeaderMouseEventArgs>? FieldHeaderMenuHandler { get; set; }
 
     public IReadOnlyList<IGriddoFieldView> FieldHeaderRegistry => _fieldHeaderRegistry;
     public IReadOnlyList<IGriddoFieldView> GeneralFieldHeaderRegistry => _generalFieldHeaderRegistry;
@@ -55,8 +58,8 @@ public partial class FieldConfigurator : Window
     {
         SourceRegistries = groups;
     }
-    public global::Griddo.Grid.Griddo ConfigFieldsGrid => FieldGrid;
-    public global::Griddo.Grid.Griddo ConfigGeneralSettingsGrid => GeneralPropertyGrid;
+    public global::Griddo.Grid.Presentation.Griddo ConfigFieldsGrid => FieldGrid;
+    public global::Griddo.Grid.Presentation.Griddo ConfigGeneralSettingsGrid => GeneralPropertyGrid;
 
     public FieldConfigurator(
         IReadOnlyList<FieldEditRecord> templateRecords,

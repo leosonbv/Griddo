@@ -2,7 +2,7 @@ using System.Windows;
 using System.Windows.Input;
 using Griddo.Primitives;
 
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 public sealed partial class Griddo
 {
@@ -169,7 +169,7 @@ public sealed partial class Griddo
                 continue;
             }
 
-            var visibleRight = Math.Min(headerRect.Right, clientRight);
+            var visibleRight = Math.Min((double)headerRect.Right, clientRight);
             if (visibleRight <= headerRect.Left + 1e-9)
             {
                 continue;
@@ -289,7 +289,7 @@ public sealed partial class Griddo
                 continue;
             }
 
-            var visibleBottom = Math.Min(headerRect.Bottom, clientBottom);
+            var visibleBottom = Math.Min((double)headerRect.Bottom, clientBottom);
             if (visibleBottom <= headerRect.Top + 1e-9)
             {
                 continue;

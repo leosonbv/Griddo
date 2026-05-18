@@ -1,10 +1,9 @@
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 
-namespace Griddo.Grid;
+namespace Griddo.Grid.Presentation;
 
 public sealed partial class Griddo
 {
@@ -200,8 +199,8 @@ public sealed partial class Griddo
                 return;
             }
 
-            var kept = SortDescriptors
-                .OrderBy(d => d.Priority)
+            var kept = Enumerable
+                .OrderBy<GriddoSortDescriptor, int>(SortDescriptors, d => d.Priority)
                 .Where(d => !selectedSet.Contains(d.FieldIndex))
                 .ToList();
             SetSortDescriptors(kept);

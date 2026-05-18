@@ -1,4 +1,4 @@
-namespace GriddoModelView;
+namespace GriddoModelView.Configuration;
 
 public sealed class PropertyViewConfiguration
 {

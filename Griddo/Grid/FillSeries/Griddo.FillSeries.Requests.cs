@@ -1,4 +1,4 @@
-namespace Griddo.Grid;
+namespace Griddo.Grid.FillSeries;
 
 /// <summary>
 /// Product notes for fill-series behavior (implemented in this partial: <see cref="Griddo.FillSelectionDown"/>,

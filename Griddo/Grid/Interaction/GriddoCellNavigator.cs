@@ -1,7 +1,7 @@
 using System.Windows.Input;
 using Griddo.Primitives;
 
-namespace Griddo.Grid;
+namespace Griddo.Grid.Interaction;
 
 internal static class GriddoCellNavigator
 {

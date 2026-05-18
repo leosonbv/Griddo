@@ -1,4 +1,4 @@
-namespace Plotto.Charting.Core;
+namespace Plotto.Abstractions.Charting.Core;
 
 public sealed class ChartViewport
 {
