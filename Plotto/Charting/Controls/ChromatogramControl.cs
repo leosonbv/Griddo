@@ -209,6 +209,32 @@ public partial class ChromatogramControl : SkiaChartBaseControl
         _verticalMarkerLightPaint.StrokeWidth = Math.Max(0.6f, (float)(1.0 * PlotUiScale));
     }
 
+    /// <summary>When set with <see cref="DefaultFitXMax"/>, initial fit and zoom-out use this X range (method RT window).</summary>
+    public double? DefaultFitXMin { get; set; }
+
+    /// <summary>When set with <see cref="DefaultFitXMin"/>, initial fit and zoom-out use this X range (method RT window).</summary>
+    public double? DefaultFitXMax { get; set; }
+
+    public override void ZoomOutCompletely()
+    {
+        if (!CanInteract())
+        {
+            return;
+        }
+
+        if (DefaultFitXMin is { } xMin
+            && DefaultFitXMax is { } xMax
+            && xMax > xMin
+            && Points.Count > 0)
+        {
+            FitViewportToXInterval(xMin, xMax);
+            InvalidateVisual();
+            return;
+        }
+
+        base.ZoomOutCompletely();
+    }
+
     /// <summary>
     /// Caps vertical zoom-out: visible Y span cannot exceed <c>ymaxPlot / 0.5</c> (twice the max Y in the trace).
     /// Does not run on Y zoom-in or on pan.

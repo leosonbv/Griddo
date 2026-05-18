@@ -8,6 +8,21 @@ public abstract partial class SkiaChartBaseControl
     /// <summary>Fits the viewport to the current <see cref="Points"/> (margins + interaction clamp).</summary>
     public void FitViewportToCurrentPoints() => UpdateViewportFromData();
 
+    /// <summary>Fits X to the given interval and Y to trace points within it (method RT extraction window).</summary>
+    public void FitViewportToXInterval(double xMin, double xMax)
+    {
+        var points = Points;
+        if (points.Count == 0)
+        {
+            _viewportWheelClamp.SetEmptyDataDefaults(Viewport);
+            return;
+        }
+
+        _viewportWheelClamp.FitViewportToXInterval(Viewport, points, xMin, xMax);
+        ApplyViewportInteractionClamp();
+        NotifyViewportChanged();
+    }
+
     protected void NotifyViewportChanged() => ViewportChanged?.Invoke(this, EventArgs.Empty);
 
     private void UpdateViewportFromData()

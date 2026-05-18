@@ -41,9 +41,9 @@ public sealed class PlotFieldConfiguration
     public double AxisFontSize { get; set; } = 21d;
     public double TitleFontSize { get; set; } = 21d;
     public bool ChromatogramShowPeaks { get; set; }
-    public bool ChromatogramShowExpectedRtLine { get; set; } = true;
-    public bool ChromatogramShowRtLimitLines { get; set; } = true;
-    public bool ChromatogramShowSelectionCorrectedRtOnTic { get; set; } = true;
+    public bool ChromatogramShowExpectedRtLine { get; set; }
+    public bool ChromatogramShowRtLimitLines { get; set; }
+    public bool ChromatogramShowSelectionCorrectedRtOnTic { get; set; }
     public bool CalibrationShowRegression { get; set; }
     public bool ShowCalibrationPointLabels { get; set; } = true;
     public List<PlotTitleSegmentConfiguration> CalibrationPointLabelSegments { get; set; } = [];

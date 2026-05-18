@@ -46,6 +46,15 @@ public interface IChromatogramVerticalMarkersProvider
         ChromatogramVerticalMarkerOptions options);
 }
 
+/// <summary>
+/// Optional default X viewport for chromatogram plots: method RT + begin/end extraction offsets
+/// (same range used when loading trace data).
+/// </summary>
+public interface IChromatogramMethodRtViewportProvider
+{
+    bool TryGetMethodRtExtractionViewport(object recordSource, out double xMin, out double xMax);
+}
+
 public interface IChromatogramSignalProvider
 {
     IReadOnlyList<SignalPoint> GetPoints(object recordSource);

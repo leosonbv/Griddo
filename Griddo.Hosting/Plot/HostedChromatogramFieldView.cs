@@ -59,9 +59,9 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
     public double AxisFontSize { get; set; } = 15d;
     public double TitleFontSize { get; set; } = 16.5d;
     public bool ChromatogramShowPeaks { get; set; }
-    public bool ChromatogramShowExpectedRtLine { get; set; } = true;
-    public bool ChromatogramShowRtLimitLines { get; set; } = true;
-    public bool ChromatogramShowSelectionCorrectedRtOnTic { get; set; } = true;
+    public bool ChromatogramShowExpectedRtLine { get; set; }
+    public bool ChromatogramShowRtLimitLines { get; set; }
+    public bool ChromatogramShowSelectionCorrectedRtOnTic { get; set; }
     public bool OverlayIstdPeaks { get; set; }
     public bool OverlaySurrogatePeaks { get; set; }
     public bool OverlayTargetPeaks { get; set; }
@@ -135,10 +135,11 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
             // Skip auto-fit on this bind so Remember'd zoom is not overwritten before TryRestore (main grid reloads rows often).
             chart.SuppressAutomaticViewportFitOnNextPointsChange = points.Count > 0;
             chart.SetValue(SkiaChartBaseControl.PointsProperty, pointsValue);
+            SyncDefaultMethodRtViewport(chart, recordSource);
             var restored = HostedPlotViewportMemory.TryRestore(recordSource, plotKey, chart, ViewportZoomRecordKey);
             if (!restored && chart.Points.Count > 0)
             {
-                chart.FitViewportToCurrentPoints();
+                FitChromatogramViewport(chart, recordSource);
             }
         }
 
@@ -530,6 +531,33 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         chart.AlternativeIntegrationRegions = alternativeOverlays.Select(static x => x.Region).ToList();
         chart.AlternativeIntegrationRegionsManualIntegrated = alternativeOverlays.Select(static x => x.UseDarkerOverlayFill).ToList();
         chart.PeakLabels = BuildPeakLabels(chart, recordSource);
+    }
+
+    private void SyncDefaultMethodRtViewport(ChromatogramControl chart, object recordSource)
+    {
+        if (_signalProvider is IChromatogramMethodRtViewportProvider viewportProvider
+            && viewportProvider.TryGetMethodRtExtractionViewport(recordSource, out var xMin, out var xMax))
+        {
+            chart.DefaultFitXMin = xMin;
+            chart.DefaultFitXMax = xMax;
+            return;
+        }
+
+        chart.DefaultFitXMin = null;
+        chart.DefaultFitXMax = null;
+    }
+
+    private void FitChromatogramViewport(ChromatogramControl chart, object recordSource)
+    {
+        if (chart.DefaultFitXMin is { } xMin
+            && chart.DefaultFitXMax is { } xMax
+            && xMax > xMin)
+        {
+            chart.FitViewportToXInterval(xMin, xMax);
+            return;
+        }
+
+        chart.FitViewportToCurrentPoints();
     }
 
     private static object BuildRuntimePointsValue(IReadOnlyList<SignalPoint> points)
