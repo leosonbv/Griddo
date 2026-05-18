@@ -9,7 +9,6 @@ public sealed class PlotTitleSegmentConfiguration
     public string PropertyName { get; set; } = string.Empty;
 
     public int SourceFieldIndex { get; set; } = -1;
-    public string SourceFieldKey { get; set; } = string.Empty;
     public bool Enabled { get; set; }
     /// <summary>User-editable segment header; empty hides the label.</summary>
     public string Header { get; set; } = string.Empty;
@@ -22,7 +21,6 @@ public sealed class PlotTitleSegmentConfiguration
 public sealed class PlotFieldConfiguration
 {
     public int SourceFieldIndex { get; set; } = -1;
-    public string SourceFieldKey { get; set; } = string.Empty;
     public string TitleSelection { get; set; } = string.Empty;
     public bool ShowTitle { get; set; } = true;
     public bool ShowXAxis { get; set; } = true;

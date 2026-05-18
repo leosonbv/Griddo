@@ -82,10 +82,6 @@ public partial class PlotConfigurationDialog : Window
     {
         _rows.Clear();
         TitleFieldsGrid.Records.Clear();
-        var savedByKey = _initial.TitleSegments
-            .Where(s => !string.IsNullOrWhiteSpace(s.SourceFieldKey))
-            .GroupBy(s => s.SourceFieldKey, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         var savedByIndex = _initial.TitleSegments
             .GroupBy(s => s.SourceFieldIndex)
             .ToDictionary(g => g.Key, g => g.First());
@@ -113,12 +109,8 @@ public partial class PlotConfigurationDialog : Window
         {
             var field = _allFields[sourceFieldIndex];
 
-            var sourceFieldKey = ResolveSourceFieldKey(sourceFieldIndex);
-            var saved =
-                (!string.IsNullOrWhiteSpace(sourceFieldKey) && savedByKey.TryGetValue(sourceFieldKey, out var byKey))
-                    ? byKey
-                    : (savedByIndex.TryGetValue(sourceFieldIndex, out var byIndex) ? byIndex : null);
-            var row = CreateSegmentEditRecord(field, sourceFieldIndex, sourceFieldKey, saved);
+            var saved = savedByIndex.TryGetValue(sourceFieldIndex, out var byIndex) ? byIndex : null;
+            var row = CreateSegmentEditRecord(field, sourceFieldIndex, saved);
             _rows.Add(row);
             TitleFieldsGrid.Records.Add(row);
         }
@@ -142,10 +134,6 @@ public partial class PlotConfigurationDialog : Window
             }
         }
 
-        var savedByKey = _initial.CalibrationPointLabelSegments
-            .Where(s => !string.IsNullOrWhiteSpace(s.SourceFieldKey))
-            .GroupBy(s => s.SourceFieldKey, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         var savedByIndex = _initial.CalibrationPointLabelSegments
             .GroupBy(s => s.SourceFieldIndex)
             .ToDictionary(g => g.Key, g => g.First());
@@ -164,12 +152,8 @@ public partial class PlotConfigurationDialog : Window
         {
             var field = _pointLabelFields[sourceFieldIndex];
 
-            var sourceFieldKey = ResolvePointLabelFieldKey(sourceFieldIndex);
-            var saved =
-                (!string.IsNullOrWhiteSpace(sourceFieldKey) && savedByKey.TryGetValue(sourceFieldKey, out var byKey))
-                    ? byKey
-                    : (savedByIndex.TryGetValue(sourceFieldIndex, out var byIndex) ? byIndex : null);
-            PointLabelFieldsGrid.Records.Add(CreateSegmentEditRecord(field, sourceFieldIndex, sourceFieldKey, saved));
+            var saved = savedByIndex.TryGetValue(sourceFieldIndex, out var byIndex) ? byIndex : null;
+            PointLabelFieldsGrid.Records.Add(CreateSegmentEditRecord(field, sourceFieldIndex, saved));
         }
     }
 
@@ -270,7 +254,6 @@ public partial class PlotConfigurationDialog : Window
                     SourceObjectName = sourceObjectName,
                     PropertyName = propertyName,
                     SourceFieldIndex = r.SourceFieldIndex,
-                    SourceFieldKey = r.SourceFieldKey ?? string.Empty,
                     Enabled = r.Enabled,
                     Header = r.Header,
                     AddLineBreakAfter = r.AddLineBreakAfter,
@@ -293,7 +276,6 @@ public partial class PlotConfigurationDialog : Window
                     SourceObjectName = sourceObjectName,
                     PropertyName = propertyName,
                     SourceFieldIndex = r.SourceFieldIndex,
-                    SourceFieldKey = r.SourceFieldKey ?? string.Empty,
                     Enabled = r.Enabled,
                     Header = r.Header,
                     AddLineBreakAfter = r.AddLineBreakAfter,
@@ -374,7 +356,6 @@ public partial class PlotConfigurationDialog : Window
             _allFields,
             segment.SourceObjectName,
             segment.PropertyName,
-            segment.SourceFieldKey,
             segment.SourceFieldIndex);
     }
 
@@ -384,40 +365,7 @@ public partial class PlotConfigurationDialog : Window
             _pointLabelFields,
             segment.SourceObjectName,
             segment.PropertyName,
-            segment.SourceFieldKey,
             segment.SourceFieldIndex);
-    }
-
-    private string ResolveSourceFieldKey(int sourceFieldIndex)
-    {
-        if (sourceFieldIndex < 0 || sourceFieldIndex >= _allFields.Count)
-        {
-            return string.Empty;
-        }
-
-        var field = _allFields[sourceFieldIndex];
-        if (field is IGriddoFieldSourceMember sourceMember && !string.IsNullOrWhiteSpace(sourceMember.SourceMemberName))
-        {
-            return sourceMember.SourceMemberName;
-        }
-
-        return !string.IsNullOrWhiteSpace(field.Header) ? field.Header : sourceFieldIndex.ToString(CultureInfo.InvariantCulture);
-    }
-
-    private string ResolvePointLabelFieldKey(int sourceFieldIndex)
-    {
-        if (sourceFieldIndex < 0 || sourceFieldIndex >= _pointLabelFields.Count)
-        {
-            return string.Empty;
-        }
-
-        var field = _pointLabelFields[sourceFieldIndex];
-        if (field is IGriddoFieldSourceMember sourceMember && !string.IsNullOrWhiteSpace(sourceMember.SourceMemberName))
-        {
-            return sourceMember.SourceMemberName;
-        }
-
-        return !string.IsNullOrWhiteSpace(field.Header) ? field.Header : sourceFieldIndex.ToString(CultureInfo.InvariantCulture);
     }
 
     private void BuildTitleFieldGridFields() => BuildSegmentGridFields(TitleFieldsGrid);
@@ -492,13 +440,11 @@ public partial class PlotConfigurationDialog : Window
     private static PlotTitleFieldEditRecord CreateSegmentEditRecord(
         IGriddoFieldView field,
         int sourceFieldIndex,
-        string sourceFieldKey,
         PlotTitleSegmentConfiguration? saved)
     {
         return new PlotTitleFieldEditRecord
         {
             SourceFieldIndex = sourceFieldIndex,
-            SourceFieldKey = sourceFieldKey,
             Enabled = saved?.Enabled ?? false,
             Source = field is IGriddoFieldSourceObject sourceObject ? sourceObject.SourceObjectName : string.Empty,
             Property = field is IGriddoFieldSourceMember sourceMember ? sourceMember.SourceMemberName : string.Empty,
@@ -620,7 +566,7 @@ public partial class PlotConfigurationDialog : Window
     private sealed class PlotTitleFieldEditRecord
     {
         public int SourceFieldIndex { get; set; }
-        public string SourceFieldKey { get; set; } = string.Empty;
+
         public bool Enabled { get; set; }
         public string Source { get; set; } = string.Empty;
         public string Property { get; set; } = string.Empty;

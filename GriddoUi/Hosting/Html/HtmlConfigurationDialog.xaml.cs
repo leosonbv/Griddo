@@ -107,10 +107,6 @@ public partial class HtmlConfigurationDialog : Window
             .Where(s => s.SourceFieldIndex >= 0)
             .GroupBy(s => s.SourceFieldIndex)
             .ToDictionary(g => g.Key, g => g.First());
-        var savedByKey = seed.Segments
-            .Where(s => !string.IsNullOrWhiteSpace(s.SourceFieldKey))
-            .GroupBy(s => s.SourceFieldKey, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
         var excluded = new HashSet<int>();
         for (var sourceFieldIndex = 0; sourceFieldIndex < allFields.Count; sourceFieldIndex++)
         {
@@ -134,12 +130,8 @@ public partial class HtmlConfigurationDialog : Window
         foreach (var sourceFieldIndex in orderedSourceIndices)
         {
             var field = allFields[sourceFieldIndex];
-            var sourceFieldKey = ResolveSourceFieldKey(field, sourceFieldIndex);
-
-            var saved = savedByKey.TryGetValue(sourceFieldKey, out var hitByKey)
-                ? hitByKey
-                : savedByIndex.TryGetValue(sourceFieldIndex, out var hitByIndex) ? hitByIndex : null;
-            var row = CreateSegmentEditRecord(field, sourceFieldIndex, sourceFieldKey, saved);
+            var saved = savedByIndex.TryGetValue(sourceFieldIndex, out var hitByIndex) ? hitByIndex : null;
+            var row = CreateSegmentEditRecord(field, sourceFieldIndex, saved);
             _rows.Add(row);
             SegmentsGrid.Records.Add(row);
         }
@@ -177,7 +169,6 @@ public partial class HtmlConfigurationDialog : Window
                         SourceObjectName = sourceObjectName,
                         PropertyName = propertyName,
                         SourceFieldIndex = r.SourceFieldIndex,
-                        SourceFieldKey = r.SourceFieldKey ?? string.Empty,
                         Enabled = r.Enabled,
                         Header = r.Header,
                         AddLineBreakAfter = false,
@@ -230,7 +221,6 @@ public partial class HtmlConfigurationDialog : Window
     private sealed class HtmlSegmentEditRecord
     {
         public int SourceFieldIndex { get; set; }
-        public string SourceFieldKey { get; set; } = string.Empty;
         public bool Enabled { get; set; }
         public string Source { get; set; } = string.Empty;
         public string Property { get; set; } = string.Empty;
@@ -246,18 +236,7 @@ public partial class HtmlConfigurationDialog : Window
             allFields,
             segment.SourceObjectName,
             segment.PropertyName,
-            segment.SourceFieldKey,
             segment.SourceFieldIndex);
-    }
-
-    private static string ResolveSourceFieldKey(IGriddoFieldView field, int sourceFieldIndex)
-    {
-        if (field is IGriddoFieldSourceMember sourceMember && !string.IsNullOrWhiteSpace(sourceMember.SourceMemberName))
-        {
-            return sourceMember.SourceMemberName;
-        }
-
-        return !string.IsNullOrWhiteSpace(field.Header) ? field.Header : sourceFieldIndex.ToString();
     }
 
     private void BuildSegmentGridFields()
@@ -314,7 +293,6 @@ public partial class HtmlConfigurationDialog : Window
     private static HtmlSegmentEditRecord CreateSegmentEditRecord(
         IGriddoFieldView field,
         int sourceFieldIndex,
-        string sourceFieldKey,
         HtmlFieldSegmentConfiguration? saved)
     {
         var header = !string.IsNullOrWhiteSpace(saved?.Header)
@@ -323,7 +301,6 @@ public partial class HtmlConfigurationDialog : Window
         return new HtmlSegmentEditRecord
         {
             SourceFieldIndex = sourceFieldIndex,
-            SourceFieldKey = sourceFieldKey,
             Enabled = saved?.Enabled ?? false,
             Source = field is IGriddoFieldSourceObject sourceObject ? sourceObject.SourceObjectName : string.Empty,
             Property = field is IGriddoFieldSourceMember sourceMember ? sourceMember.SourceMemberName : string.Empty,

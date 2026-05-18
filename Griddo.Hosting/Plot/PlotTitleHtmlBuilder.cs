@@ -177,7 +177,6 @@ internal static class PlotTitleHtmlBuilder
             resolveFields,
             segment.SourceObjectName,
             segment.PropertyName,
-            segment.SourceFieldKey,
             segment.SourceFieldIndex);
         if (sourceFieldIndex < 0 || sourceFieldIndex >= resolveFields.Count)
         {
@@ -189,7 +188,6 @@ internal static class PlotTitleHtmlBuilder
             hostingFields,
             segment.SourceObjectName,
             segment.PropertyName,
-            segment.SourceFieldKey,
             segment.SourceFieldIndex);
         var displayField = hostingFieldIndex >= 0 && hostingFieldIndex < hostingFields.Count
             ? hostingFields[hostingFieldIndex]

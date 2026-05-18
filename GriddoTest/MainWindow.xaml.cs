@@ -1909,7 +1909,7 @@ public partial class MainWindow : Window
 
         foreach (var plot in layout.PlotFields)
         {
-            var targetIndex = ResolveSourceFieldIndex(plot.SourceFieldKey, plot.SourceFieldIndex);
+            var targetIndex = plot.SourceFieldIndex;
             if (targetIndex < 0 || targetIndex >= _allFields.Count)
             {
                 continue;
@@ -1928,7 +1928,6 @@ public partial class MainWindow : Window
                     SourceObjectName = s.SourceObjectName ?? string.Empty,
                     PropertyName = s.PropertyName ?? string.Empty,
                     SourceFieldIndex = s.SourceFieldIndex,
-                    SourceFieldKey = s.SourceFieldKey ?? string.Empty,
                     Enabled = s.Enabled,
                     Header = s.Header ?? string.Empty,
                     AddLineBreakAfter = s.AddLineBreakAfter,
@@ -1960,7 +1959,7 @@ public partial class MainWindow : Window
         }
         foreach (var html in layout.HtmlFields)
         {
-            var targetIndex = ResolveSourceFieldIndex(html.SourceFieldKey, html.SourceFieldIndex);
+            var targetIndex = html.SourceFieldIndex;
             if (targetIndex < 0 || targetIndex >= _allFields.Count)
             {
                 continue;
@@ -1980,7 +1979,6 @@ public partial class MainWindow : Window
                 .Select(s => new HtmlFieldSegmentConfiguration
                 {
                     SourceFieldIndex = s.SourceFieldIndex,
-                    SourceFieldKey = s.SourceFieldKey ?? string.Empty,
                     Enabled = s.Enabled,
                     Header = s.Header ?? string.Empty,
                     AddLineBreakAfter = s.AddLineBreakAfter,
@@ -1991,7 +1989,7 @@ public partial class MainWindow : Window
         }
         foreach (var stability in layout.StabilityFields)
         {
-            var targetIndex = ResolveSourceFieldIndex(stability.SourceFieldKey, stability.SourceFieldIndex);
+            var targetIndex = stability.SourceFieldIndex;
             if (targetIndex < 0 || targetIndex >= _allFields.Count)
             {
                 continue;
@@ -2087,7 +2085,6 @@ public partial class MainWindow : Window
             Fields = records.Select(r => new FieldConfiguration
             {
                 SourceFieldIndex = r.SourceFieldIndex,
-                SourceFieldKey = ResolvePropertyViewKeyForRecord(r),
                 FieldFill = r.FieldFill,
                 Visible = r.Visible,
                 Width = r.Width,
@@ -2103,7 +2100,6 @@ public partial class MainWindow : Window
                     return new PlotFieldConfiguration
                     {
                         SourceFieldIndex = x.index,
-                        SourceFieldKey = ResolvePropertyViewKeyForSourceField(x.index, (x.field as IGriddoFieldSourceMember)?.SourceMemberName ?? string.Empty),
                         TitleSelection = p.TitleSelection ?? string.Empty,
                         ShowTitle = p.ShowTitle,
                         TitleSegments = p.TitleSegments
@@ -2112,7 +2108,6 @@ public partial class MainWindow : Window
                                 SourceObjectName = s.SourceObjectName ?? string.Empty,
                                 PropertyName = s.PropertyName ?? string.Empty,
                                 SourceFieldIndex = s.SourceFieldIndex,
-                                SourceFieldKey = ResolvePropertyViewKeyForSourceField(s.SourceFieldIndex, GetSourceMemberNameOrEmpty(s.SourceFieldIndex)),
                                 Enabled = s.Enabled,
                                 Header = s.Header ?? string.Empty,
                                 AddLineBreakAfter = s.AddLineBreakAfter,
@@ -2146,7 +2141,6 @@ public partial class MainWindow : Window
                                 SourceObjectName = s.SourceObjectName ?? string.Empty,
                                 PropertyName = s.PropertyName ?? string.Empty,
                                 SourceFieldIndex = s.SourceFieldIndex,
-                                SourceFieldKey = ResolvePropertyViewKeyForSourceField(s.SourceFieldIndex, GetSourceMemberNameOrEmpty(s.SourceFieldIndex)),
                                 Enabled = s.Enabled,
                                 Header = s.Header ?? string.Empty,
                                 AddLineBreakAfter = s.AddLineBreakAfter,
@@ -2166,7 +2160,6 @@ public partial class MainWindow : Window
                     return new HtmlFieldConfiguration
                     {
                         SourceFieldIndex = x.index,
-                        SourceFieldKey = ResolvePropertyViewKeyForSourceField(x.index, (x.field as IGriddoFieldSourceMember)?.SourceMemberName ?? string.Empty),
                         IsTable = h.IsTable,
                         IsCategoryField = h.IsCategoryField,
                         FontFamilyName = h.FontFamilyName ?? string.Empty,
@@ -2176,7 +2169,6 @@ public partial class MainWindow : Window
                             .Select(s => new HtmlFieldSegmentConfiguration
                             {
                                 SourceFieldIndex = s.SourceFieldIndex,
-                                SourceFieldKey = ResolvePropertyViewKeyForSourceField(s.SourceFieldIndex, GetSourceMemberNameOrEmpty(s.SourceFieldIndex)),
                                 Enabled = s.Enabled,
                                 Header = s.Header ?? string.Empty,
                                 AddLineBreakAfter = s.AddLineBreakAfter,
@@ -2196,13 +2188,11 @@ public partial class MainWindow : Window
                     return new StabilityFieldConfiguration
                     {
                         SourceFieldIndex = x.index,
-                        SourceFieldKey = ResolvePropertyViewKeyForSourceField(x.index, (x.field as IGriddoFieldSourceMember)?.SourceMemberName ?? string.Empty),
                         Label = s.Label ?? string.Empty,
                         Series = s.Series
                             .Select(item => new StabilitySeriesConfiguration
                             {
                                 SourceFieldIndex = item.SourceFieldIndex,
-                                SourceFieldKey = ResolvePropertyViewKeyForSourceField(item.SourceFieldIndex, GetSourceMemberNameOrEmpty(item.SourceFieldIndex)),
                                 Enabled = item.Enabled,
                                 ShowSdLines = item.ShowSdLines,
                                 ShowLine = item.ShowLine,
@@ -2387,23 +2377,6 @@ public partial class MainWindow : Window
         }
 
         return (_allFields[sourceFieldIndex] as IGriddoFieldSourceMember)?.SourceMemberName ?? string.Empty;
-    }
-
-    private int ResolveSourceFieldIndex(string? sourceFieldKey, int fallbackIndex)
-    {
-        if (!string.IsNullOrWhiteSpace(sourceFieldKey))
-        {
-            for (var i = 0; i < _allFields.Count; i++)
-            {
-                var key = ResolvePropertyViewKeyForSourceField(i, GetSourceMemberNameOrEmpty(i));
-                if (string.Equals(key, sourceFieldKey, StringComparison.Ordinal))
-                {
-                    return i;
-                }
-            }
-        }
-
-        return fallbackIndex;
     }
 
     private string ResolvePropertyViewKeyForSourceField(int sourceFieldIndex, string sourceMemberName)
@@ -2895,7 +2868,6 @@ public partial class MainWindow : Window
                 SourceObjectName = s.SourceObjectName ?? string.Empty,
                 PropertyName = s.PropertyName ?? string.Empty,
                 SourceFieldIndex = s.SourceFieldIndex,
-                SourceFieldKey = s.SourceFieldKey ?? string.Empty,
                 Enabled = s.Enabled,
                 Header = s.Header ?? string.Empty,
                 AddLineBreakAfter = s.AddLineBreakAfter,
@@ -2927,7 +2899,6 @@ public partial class MainWindow : Window
                 SourceObjectName = s.SourceObjectName ?? string.Empty,
                 PropertyName = s.PropertyName ?? string.Empty,
                 SourceFieldIndex = s.SourceFieldIndex,
-                SourceFieldKey = s.SourceFieldKey ?? string.Empty,
                 Enabled = s.Enabled,
                 Header = s.Header ?? string.Empty,
                 AddLineBreakAfter = s.AddLineBreakAfter,
@@ -2950,7 +2921,6 @@ public partial class MainWindow : Window
                 SourceObjectName = s.SourceObjectName ?? string.Empty,
                 PropertyName = s.PropertyName ?? string.Empty,
                 SourceFieldIndex = s.SourceFieldIndex,
-                SourceFieldKey = s.SourceFieldKey ?? string.Empty,
                 Enabled = s.Enabled,
                 Header = s.Header ?? string.Empty,
                 AddLineBreakAfter = s.AddLineBreakAfter,

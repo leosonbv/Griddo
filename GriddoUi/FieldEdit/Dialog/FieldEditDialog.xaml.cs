@@ -38,6 +38,23 @@ public partial class FieldConfigurator : Window
 
     public IReadOnlyList<IGriddoFieldView> FieldHeaderRegistry => _fieldHeaderRegistry;
     public IReadOnlyList<IGriddoFieldView> GeneralFieldHeaderRegistry => _generalFieldHeaderRegistry;
+
+    /// <summary>
+    /// Optional per-source grouping of <see cref="FieldHeaderRegistry"/>.
+    /// When set (via <see cref="SetSourceRegistries"/>), the configurator exposes source-aware metadata
+    /// to the field metadata builder and to hosts that need to build separate preview dictionaries.
+    /// When null the configurator behaves exactly as before (single flat registry).
+    /// </summary>
+    public IReadOnlyList<FieldRegistryGroup>? SourceRegistries { get; private set; }
+
+    /// <summary>
+    /// Registers independent per-source field groups.  The flat <see cref="FieldHeaderRegistry"/> is
+    /// kept in sync automatically (group order → field order within each group).
+    /// </summary>
+    public void SetSourceRegistries(IReadOnlyList<FieldRegistryGroup> groups)
+    {
+        SourceRegistries = groups;
+    }
     public global::Griddo.Grid.Griddo ConfigFieldsGrid => FieldGrid;
     public global::Griddo.Grid.Griddo ConfigGeneralSettingsGrid => GeneralPropertyGrid;
 

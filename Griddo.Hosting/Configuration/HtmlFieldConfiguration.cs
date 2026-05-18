@@ -8,9 +8,8 @@ public sealed class HtmlFieldSegmentConfiguration
     /// <summary>Optional bound member name (same as <c>IGriddoFieldSourceMember.SourceMemberName</c>).</summary>
     public string PropertyName { get; set; } = string.Empty;
 
-    /// <summary>-1 means "resolved via <see cref="SourceFieldKey"/>" only; avoids colliding keyed segments at implicit index 0.</summary>
+    /// <summary>-1 means field not yet resolved; falls back to ordinal index only.</summary>
     public int SourceFieldIndex { get; set; } = -1;
-    public string SourceFieldKey { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
     /// <summary>User-editable segment header; empty hides the label in composed HTML.</summary>
     public string Header { get; set; } = string.Empty;
@@ -23,7 +22,6 @@ public sealed class HtmlFieldSegmentConfiguration
 public sealed class HtmlFieldConfiguration
 {
     public int SourceFieldIndex { get; set; } = -1;
-    public string SourceFieldKey { get; set; } = string.Empty;
     public bool IsTable { get; set; } = true;
     public bool IsCategoryField { get; set; }
     public string FontFamilyName { get; set; } = string.Empty;

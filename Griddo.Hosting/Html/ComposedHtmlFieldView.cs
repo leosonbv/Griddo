@@ -64,7 +64,6 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
                 fields,
                 segment.SourceObjectName,
                 segment.PropertyName,
-                segment.SourceFieldKey,
                 segment.SourceFieldIndex);
             if (sourceFieldIndex < 0 || sourceFieldIndex >= fields.Count)
             {
