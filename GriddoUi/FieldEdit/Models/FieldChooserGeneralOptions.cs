@@ -15,6 +15,10 @@ public sealed class FieldChooserGeneralOptions
     public bool ShowVerticalScrollBar { get; set; } = true;
     public bool IsTransposed { get; set; }
     public bool ImmediatePlottoEdit { get; set; }
+
+    /// <summary>Qualifier column sets on quantification grids (template catalog expands to Q1..Qn).</summary>
+    public int QualifierColumnCount { get; set; } = 3;
+
     public FieldChooserGeneralOptions Clone() => new()
     {
         RecordThickness = RecordThickness,
@@ -29,6 +33,7 @@ public sealed class FieldChooserGeneralOptions
         ShowHorizontalScrollBar = ShowHorizontalScrollBar,
         ShowVerticalScrollBar = ShowVerticalScrollBar,
         IsTransposed = IsTransposed,
-        ImmediatePlottoEdit = ImmediatePlottoEdit
+        ImmediatePlottoEdit = ImmediatePlottoEdit,
+        QualifierColumnCount = QualifierColumnCount
     };
 }

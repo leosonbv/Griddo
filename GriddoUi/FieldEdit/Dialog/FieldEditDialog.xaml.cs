@@ -173,6 +173,7 @@ public partial class FieldConfigurator : Window
 
         AddGeneralSetting(GeneralSettingKind.RecordThickness, GeneralSettingValueKind.UnsignedInt, 1, "Layout", "Layout", "Record thickness", intValue: options.RecordThickness);
         AddGeneralSetting(GeneralSettingKind.FillRecordsVisibleCount, GeneralSettingValueKind.UnsignedInt, 1, "Layout", "Layout", "Visible records (0-10)", intValue: options.VisibleRecordCount);
+        AddGeneralSetting(GeneralSettingKind.QualifierColumnCount, GeneralSettingValueKind.UnsignedInt, 1, "Layout", "Layout", "Qualifier columns", intValue: options.QualifierColumnCount);
         AddGeneralSetting(GeneralSettingKind.TransposeLayout, GeneralSettingValueKind.Boolean, 1, "Layout", "Layout", "Transpose", boolValue: options.IsTransposed);
         AddGeneralSetting(GeneralSettingKind.FrozenFields, GeneralSettingValueKind.UnsignedInt, 2, "Frozen", "Frozen", "Frozen fields", intValue: fc);
         AddGeneralSetting(GeneralSettingKind.FrozenRecords, GeneralSettingValueKind.UnsignedInt, 2, "Frozen", "Frozen", "Frozen records", intValue: Math.Max(0, frozenRecords));
@@ -659,7 +660,8 @@ public partial class FieldConfigurator : Window
             ShowHorizontalScrollBar = GeneralRecord(GeneralSettingKind.ShowHorizontalScrollBar)?.BoolValue ?? true,
             ShowVerticalScrollBar = GeneralRecord(GeneralSettingKind.ShowVerticalScrollBar)?.BoolValue ?? true,
             IsTransposed = GeneralRecord(GeneralSettingKind.TransposeLayout)?.BoolValue ?? false,
-            ImmediatePlottoEdit = GeneralRecord(GeneralSettingKind.ImmediatePlottoEdit)?.BoolValue ?? false
+            ImmediatePlottoEdit = GeneralRecord(GeneralSettingKind.ImmediatePlottoEdit)?.BoolValue ?? false,
+            QualifierColumnCount = GeneralRecord(GeneralSettingKind.QualifierColumnCount)?.IntValue ?? 3
         };
     }
 

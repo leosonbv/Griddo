@@ -18,6 +18,7 @@ public enum GeneralSettingKind
     ShowColSelectionColor,
     ShowCurrentCellRect,
     ShowEditCellRect,
+    QualifierColumnCount,
 }
 
 public enum GeneralSettingValueKind
