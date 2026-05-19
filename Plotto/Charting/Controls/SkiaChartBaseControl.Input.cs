@@ -112,7 +112,7 @@ public abstract partial class SkiaChartBaseControl
         var sx = (float)surf.X;
         var sy = (float)surf.Y;
 
-        var zs = PlotUiScale;
+        var zs = PlotDeviceScale;
         var pad = ChartPlotLayout.CellPadding * zs;
         var ax = ShowYAxis
             ? ChartPlotLayout.ComputeYAxisReserveX(zs, AxisFontSize, !string.IsNullOrWhiteSpace(AxisLabelY))

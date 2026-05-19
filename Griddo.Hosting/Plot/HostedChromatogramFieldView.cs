@@ -59,8 +59,8 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
     public int YAxisLabelPrecision { get; set; } = 2;
     public string XAxisLabelFormat { get; set; } = string.Empty;
     public string YAxisLabelFormat { get; set; } = string.Empty;
-    public double AxisFontSize { get; set; } = 15d;
-    public double TitleFontSize { get; set; } = 16.5d;
+    public double AxisFontSize { get; set; } = 12d;
+    public double TitleFontSize { get; set; } = 13d;
     public bool ChromatogramShowPeaks { get; set; }
     public bool ChromatogramShowExpectedRtLine { get; set; }
     public bool ChromatogramShowRtLimitLines { get; set; }

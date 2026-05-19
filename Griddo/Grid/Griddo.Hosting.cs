@@ -32,6 +32,17 @@ public sealed partial class Griddo
             DispatcherPriority.Render);
     }
 
+    /// <summary>
+    /// Invalidates the cached payload fingerprints so the next render re-pushes data (record, selection, scale)
+    /// to all existing host elements without destroying and recreating them.
+    /// Use this after model data changes where the host elements themselves are still valid.
+    /// </summary>
+    public void InvalidateHostedCellData()
+    {
+        _hostedCellPayloadFingerprints.Clear();
+        InvalidateVisual();
+    }
+
     private void SyncHostedCells()
     {
         if (_viewportBodyWidth <= 0 || _viewportBodyHeight <= 0 || Records.Count == 0 || Fields.Count == 0)

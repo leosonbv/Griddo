@@ -1,4 +1,4 @@
-﻿namespace Griddo.Editing;
+namespace Griddo.Editing;
 
 internal sealed class GriddoTextEditSession
 {

@@ -63,8 +63,7 @@ public static class YAxisPowerOfTenFormatting
     private static SKFont CreateBadgeFont(SKFont axisFont)
     {
         var baseTf = axisFont.Typeface ?? SKTypeface.Default;
-        var badgeEm = axisFont.Size * 2f * 0.75f;
-        return new SKFont(baseTf, badgeEm);
+        return new SKFont(baseTf, axisFont.Size);
     }
 
     private readonly record struct ExponentBadgeLayout(

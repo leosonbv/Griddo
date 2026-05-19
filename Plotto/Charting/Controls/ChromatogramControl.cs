@@ -201,13 +201,17 @@ public partial class ChromatogramControl : SkiaChartBaseControl
     protected override void ApplyUiScaleToResources()
     {
         base.ApplyUiScaleToResources();
-        var stroke = Math.Max(0.5f, (float)(_overlayLineWidthDip * PlotUiScale));
+        var stroke = Math.Max(0.5f, (float)(_overlayLineWidthDip * PlotDeviceScale));
         _integrationLinePaint.StrokeWidth = stroke;
         _selectedPeakLinePaint.StrokeWidth = stroke;
         _alternativePeakLinePaint.StrokeWidth = stroke;
         _rendererIntegrationLinePaint.StrokeWidth = stroke;
-        _verticalMarkerPaint.StrokeWidth = Math.Max(0.75f, (float)(1.25 * PlotUiScale));
-        _verticalMarkerLightPaint.StrokeWidth = Math.Max(0.6f, (float)(1.0 * PlotUiScale));
+        var s = PlotDeviceScale;
+        _verticalMarkerPaint.StrokeWidth = Math.Max(0.75f, 1.25f * s);
+        _verticalMarkerPaint.PathEffect = SKPathEffect.CreateDash([6f * s, 4f * s], 0f);
+        _verticalMarkerLightPaint.StrokeWidth = Math.Max(0.6f, 1.0f * s);
+        _verticalMarkerLightPaint.PathEffect = SKPathEffect.CreateDash([4f * s, 5f * s], 0f);
+        _peakLabelConnectorPaint.StrokeWidth = Math.Max(0.5f, 1f * s);
     }
 
     /// <summary>When set with <see cref="DefaultFitXMax"/>, initial fit and zoom-out use this X range (method RT window).</summary>
@@ -559,7 +563,7 @@ public partial class ChromatogramControl : SkiaChartBaseControl
                 canvas,
                 plotRect,
                 PeakLabels,
-                PlotUiScale,
+                PlotDeviceScale,
                 PeakLabelFontSize,
                 ToPixelX,
                 ToPixelY,

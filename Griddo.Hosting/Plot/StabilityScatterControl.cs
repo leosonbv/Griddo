@@ -46,6 +46,17 @@ public sealed class StabilityScatterControl : SkiaChartBaseControl
         RecalculateRightAxisRange();
     }
 
+    protected override void ApplyUiScaleToResources()
+    {
+        base.ApplyUiScaleToResources();
+        var s = PlotDeviceScale;
+        _seriesLinePaint.StrokeWidth = Math.Max(0.75f, 1.6f * s);
+        _meanPaint.StrokeWidth = Math.Max(0.65f, 1.4f * s);
+        _sdPaint.StrokeWidth = Math.Max(0.55f, 1.1f * s);
+        _sdPaint.PathEffect = SKPathEffect.CreateDash([6f * s, 4f * s], 0f);
+        _rightAxisPaint.StrokeWidth = Math.Max(0.5f, 1f * s);
+    }
+
     protected override void DrawSeries(SKCanvas canvas, IReadOnlyList<ChartPoint> points, SKRect plotRect)
     {
         _ = points;
@@ -317,7 +328,7 @@ public sealed class StabilityScatterControl : SkiaChartBaseControl
             return;
         }
 
-        var radius = Math.Max(1.4f, 2.2f * PlotUiScale);
+        var radius = Math.Max(1.4f, 2.2f * PlotDeviceScale);
         for (var i = 0; i < visible.Count; i++)
         {
             var px = ToPixelX(visible[i].X, dataRect);
@@ -430,14 +441,14 @@ public sealed class StabilityScatterControl : SkiaChartBaseControl
         _rightAxisTextPaint.Color = _rightAxisColor.WithAlpha(230);
         var x = dataRect.Right;
         canvas.DrawLine(x, dataRect.Top, x, dataRect.Bottom, _rightAxisPaint);
-        _rightAxisTextPaint.TextSize = Math.Max(9f, (float)(11f * PlotUiScale));
-        var tickLength = Math.Max(3f * PlotUiScale, _rightAxisTextPaint.TextSize * 0.35f);
+        _rightAxisTextPaint.TextSize = Math.Max(9f, (float)(11f * PlotDeviceScale));
+        var tickLength = Math.Max(3f * PlotDeviceScale, _rightAxisTextPaint.TextSize * 0.35f);
         canvas.DrawLine(x, dataRect.Top, x + tickLength, dataRect.Top, _rightAxisPaint);
         canvas.DrawLine(x, dataRect.Bottom, x + tickLength, dataRect.Bottom, _rightAxisPaint);
-        var labelX = Math.Min(fullPlotRect.Right - 2f, x + tickLength + Math.Max(2f * PlotUiScale, RightAxisGapDip * PlotUiScale));
+        var labelX = Math.Min(fullPlotRect.Right - 2f, x + tickLength + Math.Max(2f * PlotDeviceScale, RightAxisGapDip * PlotDeviceScale));
         var ticks = BuildRightAxisTicks(dataRect, out var step);
         var metrics = AxisFont.Metrics;
-        var yMinGap = 3f * PlotUiScale;
+        var yMinGap = 3f * PlotDeviceScale;
         var lastLabelTop = float.PositiveInfinity;
         foreach (var tick in ticks)
         {
@@ -500,9 +511,9 @@ public sealed class StabilityScatterControl : SkiaChartBaseControl
             AxisFont.MeasureText(_rightViewYMin.ToString("G4")));
         var metrics = AxisFont.Metrics;
         var axisFontHeight = Math.Max(1f, -metrics.Ascent + metrics.Descent);
-        var tickLength = Math.Max(3f * PlotUiScale, axisFontHeight * 0.35f);
-        var gap = Math.Max(RightAxisGapDip * PlotUiScale, axisFontHeight * 0.25f);
-        var reserve = tickLength + gap + maxLabel + Math.Max(2f * PlotUiScale, 2f);
+        var tickLength = Math.Max(3f * PlotDeviceScale, axisFontHeight * 0.35f);
+        var gap = Math.Max(RightAxisGapDip * PlotDeviceScale, axisFontHeight * 0.25f);
+        var reserve = tickLength + gap + maxLabel + Math.Max(2f * PlotDeviceScale, 2f);
         return Math.Min(fullPlotRect.Width * 0.45f, reserve);
     }
 
@@ -522,7 +533,7 @@ public sealed class StabilityScatterControl : SkiaChartBaseControl
             Color = _leftAxisColor.WithAlpha(230)
         };
 
-        var zs = PlotUiScale;
+        var zs = PlotDeviceScale;
         var axOff = Plotto.Charting.Geometry.ChartPlotLayout.AxisLabelInsetFromPlotLeft(zs);
         var axisMetrics = AxisFont.Metrics;
         var axisFontHeight = Math.Max(1f, -axisMetrics.Ascent + axisMetrics.Descent);
@@ -763,7 +774,7 @@ public sealed class StabilityScatterControl : SkiaChartBaseControl
         }
 
         var dataRectDip = GetDataPlotRectDip();
-        var bandHeight = Math.Max(10d, 22d * PlotUiScale);
+        var bandHeight = Math.Max(10d, 22d * PlotDeviceScale);
         return pointInControl.X >= dataRectDip.Left
                && pointInControl.X <= dataRectDip.Right
                && pointInControl.Y >= dataRectDip.Bottom
@@ -796,7 +807,7 @@ public sealed class StabilityScatterControl : SkiaChartBaseControl
             return [];
         }
 
-        var zs = PlotUiScale;
+        var zs = PlotDeviceScale;
         var axisMetrics = AxisFont.Metrics;
         var axisFontHeight = Math.Max(1f, -axisMetrics.Ascent + axisMetrics.Descent);
         var yMinGap = 3f * zs;

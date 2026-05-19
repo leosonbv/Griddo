@@ -12,7 +12,7 @@ public class SpectrumControl : SkiaChartBaseControl
     protected override void ApplyUiScaleToResources()
     {
         base.ApplyUiScaleToResources();
-        _stickPaint.StrokeWidth = Math.Max(0.5f, 1f * PlotUiScale);
+        _stickPaint.StrokeWidth = Math.Max(0.5f, 1f * PlotDeviceScale);
     }
 
     protected override void DrawSeries(SKCanvas canvas, IReadOnlyList<ChartPoint> points, SKRect plotRect) =>

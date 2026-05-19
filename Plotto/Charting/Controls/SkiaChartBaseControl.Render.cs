@@ -56,11 +56,13 @@ public abstract partial class SkiaChartBaseControl
             return;
         }
 
+        EnsureDeviceDpiScale();
+
         _coordinates.ApplySurfaceDimensions(
             width,
             height,
             UseSparklineLayout,
-            PlotUiScale,
+            PlotDeviceScale,
             ShowXAxis,
             ShowYAxis,
             AxisFontSize,
@@ -131,9 +133,9 @@ public abstract partial class SkiaChartBaseControl
             return 0f;
         }
 
-        var defaultFontSize = (float)Math.Max(6d, TitleFontSize) * PlotUiScale;
-        var topPadding = 3f * PlotUiScale;
-        var bottomPadding = 4f * PlotUiScale;
+        var defaultFontSize = (float)Math.Max(6d, TitleFontSize) * PlotDeviceScale;
+        var topPadding = 3f * PlotDeviceScale;
+        var bottomPadding = 4f * PlotDeviceScale;
         var visualRows = BuildVisualRows(lines);
         var rowMetrics = visualRows
             .Select(row => BuildRowMetrics(row, defaultFontSize))
@@ -156,8 +158,8 @@ public abstract partial class SkiaChartBaseControl
         }
 
         var lines = BuildTitleLines(ChartTitle);
-        var defaultFontSize = (float)Math.Max(6d, TitleFontSize) * PlotUiScale;
-        var topPadding = 3f * PlotUiScale;
+        var defaultFontSize = (float)Math.Max(6d, TitleFontSize) * PlotDeviceScale;
+        var topPadding = 3f * PlotDeviceScale;
         var visualRows = BuildVisualRows(lines);
         var rowMetrics = visualRows
             .Select(row => BuildRowMetrics(row, defaultFontSize))
@@ -185,17 +187,17 @@ public abstract partial class SkiaChartBaseControl
             var segmentLayouts = row
                 .Select(line => BuildSegmentLayout(line, metrics.FontSize))
                 .ToList();
-            var rowWidth = segmentLayouts.Sum(s => s.Width) + ((segmentLayouts.Count - 1) * (12f * PlotUiScale));
+            var rowWidth = segmentLayouts.Sum(s => s.Width) + ((segmentLayouts.Count - 1) * (12f * PlotDeviceScale));
             var x = centerX - (rowWidth / 2f);
             foreach (var segment in segmentLayouts)
             {
                 if (segment.ValueBackgroundColor.HasValue && !string.IsNullOrWhiteSpace(segment.ValueText))
                 {
                     backgroundPaint.Color = segment.ValueBackgroundColor.Value;
-                    var rectTop = baselineY - metrics.FontSize - (1f * PlotUiScale);
-                    var rectBottom = baselineY + (2f * PlotUiScale);
+                    var rectTop = baselineY - metrics.FontSize - (1f * PlotDeviceScale);
+                    var rectBottom = baselineY + (2f * PlotDeviceScale);
                     var valueStartX = x + segment.ValueOffsetX;
-                    canvas.DrawRect(new SKRect(valueStartX - (2f * PlotUiScale), rectTop, valueStartX + segment.ValueWidth + (2f * PlotUiScale), rectBottom), backgroundPaint);
+                    canvas.DrawRect(new SKRect(valueStartX - (2f * PlotDeviceScale), rectTop, valueStartX + segment.ValueWidth + (2f * PlotDeviceScale), rectBottom), backgroundPaint);
                 }
 
                 if (segment.HasHeader)
@@ -209,7 +211,7 @@ public abstract partial class SkiaChartBaseControl
                 textPaint.Color = segment.ValueForegroundColor ?? TitleForegroundColor;
                 var valueX = x + segment.ValueOffsetX;
                 canvas.DrawText(segment.ValueText, valueX, baselineY, SKTextAlign.Left, valueFont, textPaint);
-                x += segment.Width + (12f * PlotUiScale);
+                x += segment.Width + (12f * PlotDeviceScale);
             }
 
             baselineY += metrics.LineHeight - metrics.FontSize;
@@ -377,14 +379,14 @@ public abstract partial class SkiaChartBaseControl
         return WebUtility.HtmlDecode(normalized);
     }
 
-    private static float ResolveFontSize(TitleLineStyle style, float defaultSize)
+    private float ResolveFontSize(TitleLineStyle style, float defaultSize)
     {
         if (!style.FontSizePx.HasValue || style.FontSizePx.Value <= 0)
         {
             return defaultSize;
         }
 
-        return Math.Max(8f, style.FontSizePx.Value);
+        return Math.Max(8f, style.FontSizePx.Value * PlotDeviceScale);
     }
 
     private static SKTypeface ResolveTypeface(TitleLineStyle style)
@@ -394,7 +396,7 @@ public abstract partial class SkiaChartBaseControl
         return SKTypeface.FromFamilyName(null, new SKFontStyle(weight, SKFontStyleWidth.Normal, slant));
     }
 
-    private static RowMetrics BuildRowMetrics(IReadOnlyList<TitleLine> row, float defaultFontSize)
+    private RowMetrics BuildRowMetrics(IReadOnlyList<TitleLine> row, float defaultFontSize)
     {
         var fontSize = row.Count == 0
             ? defaultFontSize
@@ -440,7 +442,7 @@ public abstract partial class SkiaChartBaseControl
         {
             var headerWidth = headerFont.MeasureText(headerText);
             var valueWidth = valueFont.MeasureText(valueText);
-            var innerGap = 8f * PlotUiScale;
+            var innerGap = 8f * PlotDeviceScale;
             return new SegmentLayout(
                 HasHeader: true,
                 HeaderText: headerText,
@@ -583,7 +585,7 @@ public abstract partial class SkiaChartBaseControl
             return;
         }
 
-        var zs = PlotUiScale;
+        var zs = PlotDeviceScale;
         var axOff = ChartPlotLayout.AxisLabelInsetFromPlotLeft(zs);
         var axisMetrics = AxisFont.Metrics;
         var axisFontHeight = Math.Max(1f, -axisMetrics.Ascent + axisMetrics.Descent);
@@ -618,7 +620,8 @@ public abstract partial class SkiaChartBaseControl
                     var label = AxisTickLabelFormatter.FormatSnappedToGrid(candidateTick, candStep, AxisLabelPrecisionX, null, AxisLabelFormatX);
                     var width = AxisFont.MeasureText(label);
                     var left = x - (width * 0.5f);
-                    left = Math.Clamp(left, plotRect.Left, plotRect.Right - width);
+                    var clampMax = Math.Max(plotRect.Left, plotRect.Right - width);
+                    left = Math.Clamp(left, plotRect.Left, clampMax);
                     if (left < lastRight + minGap)
                     {
                         overlaps = true;
@@ -651,7 +654,8 @@ public abstract partial class SkiaChartBaseControl
                 var label = AxisTickLabelFormatter.FormatSnappedToGrid(tick, xStep, AxisLabelPrecisionX, null, AxisLabelFormatX);
                 var width = AxisFont.MeasureText(label);
                 var left = x - (width * 0.5f);
-                left = Math.Clamp(left, plotRect.Left, plotRect.Right - width);
+                var clampMax = Math.Max(plotRect.Left, plotRect.Right - width);
+                left = Math.Clamp(left, plotRect.Left, clampMax);
                 var right = left + width;
                 if (left < lastLabelRight + minGap)
                 {

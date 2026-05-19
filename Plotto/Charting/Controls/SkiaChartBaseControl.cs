@@ -73,6 +73,7 @@ public abstract partial class SkiaChartBaseControl : SKElement
 
     private readonly SeriesViewportInteractionClamp _viewportWheelClamp = new();
     private PlottoThemeKind _theme = DefaultTheme;
+    private float _deviceDpiScale = 1f;
     protected SKColor ChartBackgroundColor { get; private set; } = SKColors.White;
     protected SKColor PlotBackgroundColor { get; private set; } = SKColors.White;
     protected SKColor TitleForegroundColor { get; private set; } = SKColors.Black;
@@ -84,9 +85,113 @@ public abstract partial class SkiaChartBaseControl : SKElement
         IsHitTestVisible = true;
         SnapsToDevicePixels = true;
         Loaded += OnLoadedThemeRegistration;
+        Loaded += (_, _) => EnsureDeviceDpiScale();
+        SizeChanged += OnChartSizeChanged;
         Unloaded += OnUnloadedThemeRegistration;
         ApplyUiScaleToResources();
         ApplyTheme(_theme);
+    }
+
+    private void OnChartSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        _ = sender;
+        if (e.WidthChanged || e.HeightChanged)
+        {
+            ApplyUiScaleToResources();
+            ResetHitTestGeometrySync();
+        }
+    }
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        EnsureDeviceDpiScale();
+        InvalidateVisual();
+    }
+
+    /// <summary>WPF pixels-per-DIP from Windows display scaling (1.0 at 100%).</summary>
+    protected float DeviceDpiScale => _deviceDpiScale;
+
+    /// <summary>
+    /// Device-pixel scale for chart geometry (fonts, strokes, markers, padding).
+    /// Combines grid zoom, OS DPI (full scale from 200% upward), and compact-cell reduction for narrow grid columns.
+    /// </summary>
+    protected float PlotDeviceScale => PlotUiScale * ResolveTypographyDeviceScale() * ResolveCompactCellScale();
+
+    /// <summary>Griddo cell text baseline (DIP). Plot axis defaults were ~15 DIP before DPI-aware Skia sizing.</summary>
+    private const float GridTextBaselineDip = 12f;
+
+    private const float PlotAxisFontBaselineDip = 15f;
+
+    /// <summary>Effective device scale at 100% Windows display scaling.</summary>
+    private const float TypographyScaleAt100PercentDpi = GridTextBaselineDip / PlotAxisFontBaselineDip;
+
+    /// <summary>At or above this OS DPI factor, use full <see cref="DeviceDpiScale"/> (matches tuned 200% appearance).</summary>
+    private const float TypographyFullDpiThreshold = 2f;
+
+    /// <summary>When the larger control edge (DIP) reaches this, use full typography (tall narrow curve columns).</summary>
+    private const float FullTypographyMaxControlDip = 200f;
+
+    /// <summary>Below this smaller edge (DIP), typography scales down (qualifier sparkline cells).</summary>
+    private const float CompactTypographyMinControlDip = 200f;
+
+    private const float MinimumCompactTypographyScale = 0.58f;
+
+    private float ResolveTypographyDeviceScale()
+    {
+        var dpi = DeviceDpiScale;
+        if (dpi >= TypographyFullDpiThreshold - 0.001f)
+        {
+            return dpi;
+        }
+
+        if (dpi <= 1.001f)
+        {
+            return TypographyScaleAt100PercentDpi;
+        }
+
+        var t = (dpi - 1f) / (TypographyFullDpiThreshold - 1f);
+        return TypographyScaleAt100PercentDpi + (t * (TypographyFullDpiThreshold - TypographyScaleAt100PercentDpi));
+    }
+
+    private float ResolveCompactCellScale()
+    {
+        if (ActualWidth <= 0 || ActualHeight <= 0)
+        {
+            return 1f;
+        }
+
+        var maxDip = (float)Math.Max(ActualWidth, ActualHeight);
+        if (maxDip >= FullTypographyMaxControlDip)
+        {
+            return 1f;
+        }
+
+        var minDip = (float)Math.Min(ActualWidth, ActualHeight);
+        return Math.Max(MinimumCompactTypographyScale, minDip / CompactTypographyMinControlDip);
+    }
+
+    /// <summary>Refreshes <see cref="DeviceDpiScale"/> from the visual tree when DPI or load state changes.</summary>
+    protected void EnsureDeviceDpiScale()
+    {
+        var next = 1f;
+        if (IsLoaded)
+        {
+            var pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+            if (pixelsPerDip > 0 && double.IsFinite(pixelsPerDip))
+            {
+                next = (float)pixelsPerDip;
+            }
+        }
+
+        if (Math.Abs(_deviceDpiScale - next) <= 0.001f)
+        {
+            return;
+        }
+
+        _deviceDpiScale = next;
+        ApplyUiScaleToResources();
+        ResetHitTestGeometrySync();
     }
 
     private void OnLoadedThemeRegistration(object sender, RoutedEventArgs e)
@@ -120,7 +225,7 @@ public abstract partial class SkiaChartBaseControl : SKElement
 
     protected virtual void ApplyUiScaleToResources()
     {
-        var s = PlotUiScale;
+        var s = PlotDeviceScale;
         _linePaint.StrokeWidth = 2f * s;
         AxisStrokePaint.StrokeWidth = Math.Max(0.5f, 1f * s);
         AxisFont.Size = (float)Math.Max(6d, AxisFontSize) * s;
@@ -472,7 +577,7 @@ public abstract partial class SkiaChartBaseControl : SKElement
             nameof(AxisFontSize),
             typeof(double),
             typeof(SkiaChartBaseControl),
-            new FrameworkPropertyMetadata(15d, FrameworkPropertyMetadataOptions.AffectsRender, OnUiScaleChanged));
+            new FrameworkPropertyMetadata(12d, FrameworkPropertyMetadataOptions.AffectsRender, OnUiScaleChanged));
 
     public double TitleFontSize
     {
@@ -485,7 +590,7 @@ public abstract partial class SkiaChartBaseControl : SKElement
             nameof(TitleFontSize),
             typeof(double),
             typeof(SkiaChartBaseControl),
-            new FrameworkPropertyMetadata(16.5d, FrameworkPropertyMetadataOptions.AffectsRender));
+            new FrameworkPropertyMetadata(13d, FrameworkPropertyMetadataOptions.AffectsRender));
 
     public bool ShowXAxis
     {
@@ -571,7 +676,7 @@ public abstract partial class SkiaChartBaseControl : SKElement
             ActualHeight,
             dpi.PixelsPerDip,
             UseSparklineLayout,
-            PlotUiScale,
+            PlotDeviceScale,
             ShowXAxis,
             ShowYAxis,
             AxisFontSize,

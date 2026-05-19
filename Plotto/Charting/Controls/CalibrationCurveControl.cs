@@ -319,13 +319,16 @@ public class CalibrationCurveControl : SkiaChartBaseControl
     protected override void ApplyUiScaleToResources()
     {
         base.ApplyUiScaleToResources();
-        var s = PlotUiScale;
+        var s = PlotDeviceScale;
         _fitPaint.StrokeWidth = 2f * s;
         _pointStrokePaint.StrokeWidth = Math.Max(0.5f, 1f * s);
         _originGuidePaint.StrokeWidth = Math.Max(0.5f, 1f * s);
         _currentQuantifierGuidePaint.StrokeWidth = Math.Max(0.75f, 1.5f * s);
         _currentQuantifierGuidePaint.PathEffect = SKPathEffect.CreateDash(new[] { 6f * s, 4f * s }, 0f);
         _labelConnectorPaint.StrokeWidth = Math.Max(1f, 2.25f * s);
+        _pointDisabledStrokePaint.StrokeWidth = Math.Max(0.5f, 1f * s);
+        _pointQcStrokePaint.StrokeWidth = Math.Max(0.5f, 1f * s);
+        _pointCurrentStrokePaint.StrokeWidth = Math.Max(0.5f, 1f * s);
     }
 
     public override void ApplyTheme(PlottoThemeKind theme)
@@ -506,7 +509,7 @@ public class CalibrationCurveControl : SkiaChartBaseControl
             canvas.DrawLine(plotRect.Left, plotRect.Bottom, plotRect.Right, plotRect.Bottom, AxisStrokePaint);
         }
 
-        var zs = PlotUiScale;
+        var zs = PlotDeviceScale;
         var axOff = ChartPlotLayout.AxisLabelInsetFromPlotLeft(zs);
         var axisMetrics = AxisFont.Metrics;
         var axisFontHeight = Math.Max(1f, -axisMetrics.Ascent + axisMetrics.Descent);
@@ -541,7 +544,8 @@ public class CalibrationCurveControl : SkiaChartBaseControl
                     var label = AxisTickLabelFormatter.FormatSnappedToGrid(candidateTick, candStep, AxisLabelPrecisionX, null, AxisLabelFormatX);
                     var width = AxisFont.MeasureText(label);
                     var left = x - (width * 0.5f);
-                    left = Math.Clamp(left, plotRect.Left, plotRect.Right - width);
+                    var clampMax = Math.Max(plotRect.Left, plotRect.Right - width);
+                    left = Math.Clamp(left, plotRect.Left, clampMax);
                     if (left < lastRight + minGap)
                     {
                         overlaps = true;
@@ -574,7 +578,8 @@ public class CalibrationCurveControl : SkiaChartBaseControl
                 var label = AxisTickLabelFormatter.FormatSnappedToGrid(tick, xStep, AxisLabelPrecisionX, null, AxisLabelFormatX);
                 var width = AxisFont.MeasureText(label);
                 var left = x - (width * 0.5f);
-                left = Math.Clamp(left, plotRect.Left, plotRect.Right - width);
+                var clampMax = Math.Max(plotRect.Left, plotRect.Right - width);
+                left = Math.Clamp(left, plotRect.Left, clampMax);
                 var right = left + width;
                 if (left < lastLabelRight + minGap)
                 {
@@ -764,7 +769,9 @@ public class CalibrationCurveControl : SkiaChartBaseControl
 
         _calibrationLabelHitRegions.Clear();
 
-        var pr = 10f * PlotUiScale;
+        var plotMin = Math.Min(plotRect.Width, plotRect.Height);
+        var prMax = Math.Max(2.25f, plotMin * 0.065f);
+        var pr = Math.Clamp(5.5f * PlotDeviceScale, 2.25f, prMax);
         foreach (var point in CalibrationPoints)
         {
             if (point.PointKind == CalibrationPlotPointKind.CurrentSample)
@@ -792,12 +799,12 @@ public class CalibrationCurveControl : SkiaChartBaseControl
             return;
         }
 
-        var fontPx = (float)Math.Clamp(CalibrationPointLabelFontSize, 6d, 24d) * PlotUiScale;
+        var fontPx = (float)Math.Clamp(CalibrationPointLabelFontSize, 6d, 24d) * PlotDeviceScale;
         using var typeface = SKTypeface.FromFamilyName(null);
         using var font = new SKFont(typeface, fontPx);
         var lineHeight = fontPx * 1.25f;
-        var pad = 4f * PlotUiScale;
-        var borderMargin = 6f * PlotUiScale;
+        var pad = 4f * PlotDeviceScale;
+        var borderMargin = 6f * PlotDeviceScale;
         var placementBounds = GetLabelPlacementBounds(plotRect, borderMargin);
         var (curvePx, markerObstacles) = GetOrBuildLabelPlacementGeometry(plotRect, markerRadiusPx, pad);
         var occupied = new List<SKRect>();
@@ -825,7 +832,7 @@ public class CalibrationCurveControl : SkiaChartBaseControl
             var blockH = lines.Length * lineHeight;
             var wBox = blockW + 2f * pad;
             var hBox = blockH + 2f * pad;
-            var markerClearance = markerRadiusPx + 8f * PlotUiScale;
+            var markerClearance = markerRadiusPx + 8f * PlotDeviceScale;
             if (!TryPlaceCalibrationLabelRect(
                     ax,
                     ay,
@@ -854,7 +861,7 @@ public class CalibrationCurveControl : SkiaChartBaseControl
 
             DrawCalibrationLabelConnector(canvas, new SKPoint(ax, ay), markerRadiusPx, r);
 
-            var hitPad = 3f * PlotUiScale;
+            var hitPad = 3f * PlotDeviceScale;
             _calibrationLabelHitRegions.Add((point, OutsetRect(r, hitPad, hitPad)));
         }
     }
@@ -892,7 +899,7 @@ public class CalibrationCurveControl : SkiaChartBaseControl
         float markerRadiusPx,
         float pad)
     {
-        var ui = (float)PlotUiScale;
+        var ui = (float)PlotDeviceScale;
         if (_labelPlacementGeomSeq == _curveLineMutationSeq
             && RectApproxEquals(plotRect, _cachedLabelPlotRect)
             && Math.Abs(markerRadiusPx - _cachedLabelGeomMarkerR) < 0.01f
@@ -924,7 +931,7 @@ public class CalibrationCurveControl : SkiaChartBaseControl
 
     private SKRect GetLabelPlacementBounds(SKRect plotRect, float margin)
     {
-        var zs = PlotUiScale;
+        var zs = PlotDeviceScale;
         var axisInset = ChartPlotLayout.AxisLabelInsetFromPlotLeft(zs);
         var left = plotRect.Left + margin + axisInset;
         var right = plotRect.Right - margin;
@@ -977,9 +984,9 @@ public class CalibrationCurveControl : SkiaChartBaseControl
             return false;
         }
 
-        var spiralStartRadius = markerRadiusPx + 10f * PlotUiScale;
+        var spiralStartRadius = markerRadiusPx + 10f * PlotDeviceScale;
         var angleStep = MathF.PI / 10f;
-        var radiusGrowthPerRadian = 5f * PlotUiScale;
+        var radiusGrowthPerRadian = 5f * PlotDeviceScale;
         var theta = 0f;
         var bestDistanceSq = float.MaxValue;
         var found = false;
