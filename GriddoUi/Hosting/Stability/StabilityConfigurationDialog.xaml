@@ -3,7 +3,6 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:grid="clr-namespace:Griddo.Grid;assembly=Griddo"
-    xmlns:presentation="clr-namespace:Griddo.Grid.Presentation;assembly=Griddo"
     Title="Stability field configurator"
     Width="1020"
     Height="640"
@@ -31,7 +30,7 @@
         </Border>
         <TabControl x:Name="MainTabs" Margin="8" SelectionChanged="MainTabs_SelectionChanged">
             <TabItem Header="Fields">
-                <presentation:Griddo
+                <grid:Griddo
                     x:Name="SeriesGrid"
                     Margin="8,6"
                     ShowFieldHeaderSelectionColoring="False"
@@ -39,7 +38,7 @@
                     UniformRecordHeight="26" />
             </TabItem>
             <TabItem Header="General settings">
-                <presentation:Griddo
+                <grid:Griddo
                     x:Name="GeneralGrid"
                     Margin="8,6"
                     ShowFieldHeaderSelectionColoring="False"

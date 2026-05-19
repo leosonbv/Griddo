@@ -1,11 +1,11 @@
 using System.Windows;
 
-namespace Griddo.Grid.Presentation;
+namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
-    private double EffectiveHorizontalScrollBarThickness => ShowHorizontalScrollBar ? ScrollBarSize : 0;
-    private double EffectiveVerticalScrollBarThickness => ShowVerticalScrollBar ? ScrollBarSize : 0;
+    private double EffectiveHorizontalScrollBarThickness => ShowHorizontalScrollBar ? Grid.Griddo.ScrollBarSize : 0;
+    private double EffectiveVerticalScrollBarThickness => ShowVerticalScrollBar ? Grid.Griddo.ScrollBarSize : 0;
 
     private double GetFixedFieldsWidth()
     {

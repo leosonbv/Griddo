@@ -1,7 +1,7 @@
 using System.Windows;
 using System.Windows.Media;
 
-namespace Griddo.Grid.Presentation;
+namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
@@ -93,12 +93,12 @@ public sealed partial class Griddo
             return _viewportBodyHeight / Math.Max(1, slots);
         }
 
-        return Math.Max(GetMinimumRecordThickness(), _uniformRecordHeight) * ContentScale;
+        return Math.Max(Grid.Griddo.GetMinimumRecordThickness(), _uniformRecordHeight) * ContentScale;
     }
 
     private void SetUniformRecordHeightFromScreen(double screenPixelHeight)
     {
-        var clamped = Math.Max(GetMinimumRecordThickness(), screenPixelHeight / ContentScale);
+        var clamped = Math.Max(Grid.Griddo.GetMinimumRecordThickness(), screenPixelHeight / ContentScale);
         if (Math.Abs(_uniformRecordHeight - clamped) < double.Epsilon)
         {
             return;
@@ -110,7 +110,7 @@ public sealed partial class Griddo
     }
 
     /// <summary>
-    /// Fill-records mode derives height from the viewport and ignores <see cref="UniformRecordHeight"/>.
+    /// Fill-records mode derives height from the viewport and ignores <see cref="Grid.Griddo.UniformRecordHeight"/>.
     /// Before record-divider hit math (anchor Y), switch to uniform height equal to what is currently drawn
     /// so the first mouse-move does not jump record layout under the cursor.
     /// </summary>
@@ -222,7 +222,7 @@ public sealed partial class Griddo
     {
         if (Records.Count == 0 || _viewportBodyHeight <= 0)
         {
-            return Math.Max(GetMinimumRecordThickness() * ContentScale, bodyPointerY);
+            return Math.Max(Grid.Griddo.GetMinimumRecordThickness() * ContentScale, bodyPointerY);
         }
 
         var k = Math.Clamp(dividerRecordIndex, 0, Records.Count - 1);
@@ -232,7 +232,7 @@ public sealed partial class Griddo
         var hScreen = k < f
             ? bodyPointerY / (k + 1)
             : (bodyPointerY + _verticalOffset) / (k + 1);
-        return Math.Max(GetMinimumRecordThickness() * ContentScale, hScreen);
+        return Math.Max(Grid.Griddo.GetMinimumRecordThickness() * ContentScale, hScreen);
     }
 
     /// <summary>
@@ -244,7 +244,7 @@ public sealed partial class Griddo
     {
         if (Records.Count == 0 || _viewportBodyWidth <= 0)
         {
-            return Math.Max(GetMinimumRecordThickness() * ContentScale, bodyPointerX);
+            return Math.Max(Grid.Griddo.GetMinimumRecordThickness() * ContentScale, bodyPointerX);
         }
 
         var k = Math.Clamp(dividerRecordIndex, 0, Records.Count - 1);
@@ -252,7 +252,7 @@ public sealed partial class Griddo
         var hScreen = k < f
             ? bodyPointerX / (k + 1)
             : (bodyPointerX + _horizontalOffset) / (k + 1);
-        return Math.Max(GetMinimumRecordThickness() * ContentScale, hScreen);
+        return Math.Max(Grid.Griddo.GetMinimumRecordThickness() * ContentScale, hScreen);
     }
 
     /// <summary>One-shot scroll adjustment after interactive record-height drag (see <see cref="SetRecordHeightKeepingRecordTop"/>).</summary>

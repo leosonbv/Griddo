@@ -3,21 +3,20 @@ using System.Linq;
 using System.Windows;
 using Griddo.Abstractions.Fields;
 using Griddo.Fields;
-using Griddo.Grid.Presentation;
-using Griddo.Grid.Presentation;
-using Griddo.Grid.Presentation;
+using Griddo.Grid;
+using Griddo.Grid.Data;
 using GriddoUi.FieldEdit.Dialog;
 using GriddoUi.FieldEdit.Models;
 
 namespace GriddoUi.FieldEdit.Support;
 
-/// <summary>Applies <see cref="FieldConfigurator"/> results to a live <see cref="Griddo.Grid.Presentation.Griddo"/>.</summary>
+/// <summary>Applies <see cref="FieldConfigurator"/> results to a live <see cref="Griddo.Grid.Griddo"/>.</summary>
 public static class FieldChooserGridApplier
 {
-    /// <param name="fieldRegistry">When non-null, snapshot and <see cref="FieldEditRecord.SourceFieldIndex"/> refer to this list (includes hidden fields). When null, uses current <see cref="Griddo.Grid.Presentation.Griddo.Fields"/> only.</param>
+    /// <param name="fieldRegistry">When non-null, snapshot and <see cref="FieldEditRecord.SourceFieldIndex"/> refer to this list (includes hidden fields). When null, uses current <see cref="Griddo.Grid.Griddo.Fields"/> only.</param>
     /// <param name="persistedLayoutSourceFieldIndices">Source field indices that had persisted layout; initial auto-width is skipped for those fields after apply.</param>
     public static void Apply(
-        global::Griddo.Grid.Presentation.Griddo grid,
+        global::Griddo.Grid.Griddo grid,
         IReadOnlyList<FieldEditRecord> orderedRecords,
         int frozenFields,
         int frozenRecords,
@@ -200,7 +199,7 @@ public static class FieldChooserGridApplier
         int sourceFieldIndex,
         IReadOnlyDictionary<int, int> sourceToGridIndex,
         IReadOnlyList<IGriddoFieldView> snap,
-        global::Griddo.Grid.Presentation.Griddo grid,
+        global::Griddo.Grid.Griddo grid,
         out int gridColumnIndex)
     {
         gridColumnIndex = -1;
@@ -229,7 +228,7 @@ public static class FieldChooserGridApplier
     }
 
     private static void ApplyFrozenOnly(
-        global::Griddo.Grid.Presentation.Griddo grid,
+        global::Griddo.Grid.Griddo grid,
         int frozenFields,
         int frozenRecords,
         FieldChooserGeneralOptions? generalOptions)
@@ -238,7 +237,7 @@ public static class FieldChooserGridApplier
         grid.FixedRecordCount = Math.Clamp(frozenRecords, 0, grid.Records.Count);
         if (generalOptions is not null)
         {
-            var minRecordThickness = global::Griddo.Grid.Presentation.Griddo.GetDefaultMinimumRecordThickness();
+            var minRecordThickness = global::Griddo.Grid.Griddo.GetDefaultMinimumRecordThickness();
             grid.UniformRecordHeight = Math.Max(minRecordThickness, generalOptions.RecordThickness);
             grid.VisibleRecordCount = generalOptions.VisibleRecordCount;
             grid.ShowCellSelectionColoring = generalOptions.ShowSelectionColor;

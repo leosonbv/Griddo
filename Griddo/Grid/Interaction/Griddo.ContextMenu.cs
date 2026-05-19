@@ -2,8 +2,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Griddo.Grid.Data;
 
-namespace Griddo.Grid.Presentation;
+namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {

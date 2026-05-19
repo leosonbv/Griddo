@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace Griddo.Grid.Presentation;
+namespace Griddo.Grid;
 
 /// <summary>Transposed layout: logical records extend horizontally, logical fields vertically (property-grid style).</summary>
 public sealed partial class Griddo

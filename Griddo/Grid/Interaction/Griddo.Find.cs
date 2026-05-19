@@ -2,7 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Griddo.Primitives;
 
-namespace Griddo.Grid.Presentation;
+namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {

@@ -1,4 +1,4 @@
-namespace Griddo.Grid.Presentation;
+namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {

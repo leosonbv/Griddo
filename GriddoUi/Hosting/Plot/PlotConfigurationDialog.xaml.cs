@@ -201,7 +201,7 @@ public partial class PlotConfigurationDialog : Window
         _ = grid?.TryMoveSelectedRecordsStep(1);
     }
 
-    private global::Griddo.Grid.Presentation.Griddo? ActiveTitleLikeGrid()
+    private global::Griddo.Grid.Griddo? ActiveTitleLikeGrid()
     {
         return MainTabs.SelectedIndex switch
         {
@@ -374,7 +374,7 @@ public partial class PlotConfigurationDialog : Window
 
     private void BuildPointLabelFieldGridFields() => BuildSegmentGridFields(PointLabelFieldsGrid);
 
-    private static void BuildSegmentGridFields(global::Griddo.Grid.Presentation.Griddo grid)
+    private static void BuildSegmentGridFields(global::Griddo.Grid.Griddo grid)
     {
         grid.Fields.Clear();
         grid.Fields.Add(new GriddoBoolFieldView(

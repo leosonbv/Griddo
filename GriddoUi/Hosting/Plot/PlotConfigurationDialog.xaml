@@ -3,7 +3,6 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:grid="clr-namespace:Griddo.Grid;assembly=Griddo"
-    xmlns:presentation="clr-namespace:Griddo.Grid.Presentation;assembly=Griddo"
     Title="Plot configurator"
     Width="960"
     Height="620"
@@ -54,7 +53,7 @@
         </Border>
         <TabControl x:Name="MainTabs" Margin="8" SelectionChanged="MainTabs_SelectionChanged">
             <TabItem Header="Settings">
-                <presentation:Griddo
+                <grid:Griddo
                     x:Name="SpecificGrid"
                     Margin="8,6"
                     ShowFieldHeaderSelectionColoring="False"
@@ -62,7 +61,7 @@
                     UniformRecordHeight="26" />
             </TabItem>
             <TabItem x:Name="TitleTab" Header="Title">
-                <presentation:Griddo
+                <grid:Griddo
                     x:Name="TitleFieldsGrid"
                     Margin="8,6"
                     ShowFieldHeaderSelectionColoring="False"
@@ -70,7 +69,7 @@
                     UniformRecordHeight="26" />
             </TabItem>
             <TabItem x:Name="LabelsTab" Header="Labels" Visibility="Collapsed">
-                <presentation:Griddo
+                <grid:Griddo
                     x:Name="PointLabelFieldsGrid"
                     Margin="8,6"
                     ShowFieldHeaderSelectionColoring="False"

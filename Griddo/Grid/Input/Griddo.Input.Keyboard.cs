@@ -4,7 +4,7 @@ using System.Windows.Media;
 using Griddo.Abstractions.Fields;
 using Griddo.Primitives;
 
-namespace Griddo.Grid.Presentation;
+namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {

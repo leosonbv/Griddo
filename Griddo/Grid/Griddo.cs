@@ -8,11 +8,12 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Griddo.Abstractions.Fields;
-using Griddo.Fields;
 using Griddo.Editing;
+using Griddo.Fields;
+using Griddo.Grid.Data;
 using Griddo.Primitives;
 
-namespace Griddo.Grid.Presentation;
+namespace Griddo.Grid;
 
 public sealed partial class Griddo : FrameworkElement
 {
@@ -380,7 +381,7 @@ public sealed partial class Griddo : FrameworkElement
     /// <summary>Fires when <see cref="ContentScale"/> changes (e.g. Ctrl+mouse wheel).</summary>
     public event EventHandler? ContentScaleChanged;
 
-    /// <summary>Fires when column/field widths change (divider drag, double-click auto-fit, <see cref="AutoSizeAllFields"/>).</summary>
+    /// <summary>Fires when column/field widths change (divider drag, double-click auto-fit, <see cref="Data.Griddo.AutoSizeAllFields"/>).</summary>
     public event EventHandler? FieldWidthsChanged;
 
     /// <summary>Fires on record header right-click; see <see cref="GriddoRecordHeaderMouseEventArgs.SelectedRecordIndices"/> for the full scope.</summary>

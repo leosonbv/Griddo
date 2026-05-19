@@ -49,7 +49,7 @@ public static class GeneralSettingsValidationService
     public static bool TryValidateRecordThickness(int value, bool isTransposed, out int committed, out string? error)
     {
         committed = 24;
-        var minRecordThickness = (int)Math.Ceiling(global::Griddo.Grid.Presentation.Griddo.GetDefaultMinimumRecordThickness());
+        var minRecordThickness = (int)Math.Ceiling(global::Griddo.Grid.Griddo.GetDefaultMinimumRecordThickness());
         if (value < minRecordThickness || value > 400)
         {
             var axisLabel = isTransposed ? "width" : "height";

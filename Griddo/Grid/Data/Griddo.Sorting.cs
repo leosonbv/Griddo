@@ -1,10 +1,9 @@
 using System.Collections.Specialized;
 using System.Globalization;
 using Griddo.Abstractions.Fields;
+using Griddo.Grid.Data;
 
-namespace Griddo.Grid.Presentation;
-
-public readonly record struct GriddoSortDescriptor(int FieldIndex, bool Ascending, int Priority);
+namespace Griddo.Grid;
 
 public sealed partial class Griddo
 

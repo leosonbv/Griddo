@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using System.Windows.Input;
 using Griddo.Abstractions.Fields;
 
-namespace Griddo.Grid.Presentation;
+namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {

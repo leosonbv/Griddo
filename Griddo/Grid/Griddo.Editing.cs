@@ -4,11 +4,9 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using Griddo.Abstractions.Editing;
 using Griddo.Abstractions.Fields;
-using Griddo.Fields;
-using Griddo.Editing;
 using Griddo.Primitives;
 
-namespace Griddo.Grid.Presentation;
+namespace Griddo.Grid;
 
 public sealed partial class Griddo
 {
