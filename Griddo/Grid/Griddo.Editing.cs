@@ -521,7 +521,7 @@ public sealed partial class Griddo
 
     private int GetCaretIndexFromEditPoint(Point pointer)
     {
-        if (!TryGetEditTextLayout(out var editText, out _, out var textOrigin))
+        if (!TryGetEditTextLayout(out var editText, out var editContentRect, out var textOrigin))
         {
             return _editSession.CaretIndex;
         }
@@ -532,20 +532,76 @@ public sealed partial class Griddo
             return 0;
         }
 
-        var bestIndex = 0;
-        var bestDistance = double.MaxValue;
+        if (!TryGetCurrentField(out var field))
+        {
+            return _editSession.CaretIndex;
+        }
+
+        var textPointerX = pointer.X;
+
+        // Calculate caret positions based on text measurement
+        // This method is more robust than relying on BuildHighlightGeometry for right-aligned text
+        var typeface = new Typeface("Segoe UI");
+        var fontSize = EffectiveFontSize;
+        var cultureInfo = System.Globalization.CultureInfo.CurrentCulture;
+
+        var caretPositions = new List<(int index, double x)>();
+        var accumulatedWidth = 0.0;
+
         for (var i = 0; i <= text.Length; i++)
         {
-            if (!TryGetCaretBounds(editText, textOrigin, i, out var caretBounds))
+            double caretX;
+
+            if (field.ContentAlignment == TextAlignment.Right)
             {
-                continue;
+                // For right-aligned text: caret position moves LEFT as index increases
+                caretX = textOrigin.X - accumulatedWidth;
+            }
+            else if (field.ContentAlignment == TextAlignment.Center)
+            {
+                // For center-aligned text: calculate based on text start position
+                caretX = textOrigin.X + accumulatedWidth;
+            }
+            else
+            {
+                // For left-aligned text: caret position moves RIGHT as index increases
+                caretX = textOrigin.X + accumulatedWidth;
             }
 
-            var dx = Math.Abs(pointer.X - caretBounds.X);
-            if (dx < bestDistance)
+            caretPositions.Add((i, caretX));
+
+            // Add width of next character for next iteration
+            if (i < text.Length)
             {
-                bestDistance = dx;
-                bestIndex = i;
+                var charMetrics = new FormattedText(
+                    text[i].ToString(),
+                    cultureInfo,
+                    FlowDirection.LeftToRight,
+                    typeface,
+                    fontSize,
+                    Brushes.Black,
+                    1.0);
+                accumulatedWidth += charMetrics.Width;
+            }
+        }
+
+        // Find the caret position closest to the pointer X coordinate
+        if (caretPositions.Count == 0)
+        {
+            return 0;
+        }
+
+        var bestIndex = caretPositions[0].index;
+        var bestDistance = Math.Abs(textPointerX - caretPositions[0].x);
+
+        for (int i = 1; i < caretPositions.Count; i++)
+        {
+            var (index, x) = caretPositions[i];
+            var distance = Math.Abs(textPointerX - x);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                bestIndex = index;
             }
         }
 
