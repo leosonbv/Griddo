@@ -1,6 +1,3 @@
-using System.Collections.Generic;
-using System.Linq;
-using System.Windows;
 using Griddo.Abstractions.Fields;
 using Griddo.Fields;
 using Griddo.Grid;

@@ -1,6 +1,5 @@
 using Plotto.Abstractions.Charting.Core;
 using SkiaSharp;
-using Plotto.Charting.Core;
 using Plotto.Charting.Rendering;
 
 namespace Plotto.Charting.Controls;

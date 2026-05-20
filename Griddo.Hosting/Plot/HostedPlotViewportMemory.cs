@@ -4,7 +4,6 @@ using System.Windows;
 using System.Windows.Threading;
 using Plotto.Abstractions.Charting.Core;
 using Plotto.Charting.Controls;
-using Plotto.Charting.Core;
 
 namespace Griddo.Hosting.Plot;
 

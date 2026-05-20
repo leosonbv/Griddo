@@ -1,9 +1,7 @@
 using Griddo.Hosting.Configuration;
 using Plotto.Charting.Axes;
 using Plotto.Charting.Controls;
-using Plotto.Charting.Core;
 using SkiaSharp;
-using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;

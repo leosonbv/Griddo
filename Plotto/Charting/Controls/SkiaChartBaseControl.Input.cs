@@ -1,8 +1,6 @@
 using System.Windows;
-using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using System.Windows.Media;
 using Plotto.Abstractions.Charting.Core;
 using Plotto.Charting.Core;
 using Plotto.Charting.Geometry;
