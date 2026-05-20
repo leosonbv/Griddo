@@ -161,7 +161,7 @@ public sealed partial class Griddo
 
     private void ClearHeaderFocus()
     {
-        _headerFocusKind = Grid.Griddo.HeaderFocusKind.None;
+        _headerFocusKind = HeaderFocusKind.None;
     }
 
     private void StopFieldMoveTracking()
@@ -210,7 +210,7 @@ public sealed partial class Griddo
 
     private void RemapHeaderFocusFieldAfterMove(int fromIndex, int toIndex)
     {
-        if (_headerFocusKind != Grid.Griddo.HeaderFocusKind.Field)
+        if (_headerFocusKind != HeaderFocusKind.Field)
         {
             return;
         }
@@ -552,7 +552,7 @@ public sealed partial class Griddo
         _selectedCells.Clear();
         _selectedCells.UnionWith(remapped);
 
-        if (_headerFocusKind == Grid.Griddo.HeaderFocusKind.Field
+        if (_headerFocusKind == HeaderFocusKind.Field
             && _headerFocusFieldIndex >= 0
             && _headerFocusFieldIndex < oldToNew.Length)
         {
@@ -621,7 +621,7 @@ public sealed partial class Griddo
         _selectedCells.Clear();
         _selectedCells.UnionWith(remapped);
 
-        if (_headerFocusKind == Grid.Griddo.HeaderFocusKind.Record
+        if (_headerFocusKind == HeaderFocusKind.Record
             && _headerFocusRecordIndex >= 0
             && _headerFocusRecordIndex < oldToNew.Length)
         {

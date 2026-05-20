@@ -560,7 +560,7 @@ public partial class FieldConfigurator : Window
         var fc = record.IntValue;
         if (!GeneralSettingsValidationService.TryValidateFrozenFields(fc, FieldGrid.Records.Count, out frozenFields, out var error))
         {
-            System.Windows.MessageBox.Show(
+            MessageBox.Show(
                 this,
                 error,
                 Title,
@@ -583,7 +583,7 @@ public partial class FieldConfigurator : Window
         var fr = record.IntValue;
         if (!GeneralSettingsValidationService.TryValidateFrozenRecords(fr, out frozenRecords, out var error))
         {
-            System.Windows.MessageBox.Show(
+            MessageBox.Show(
                 this,
                 error,
                 Title,
@@ -606,7 +606,7 @@ public partial class FieldConfigurator : Window
         var vr = record.IntValue;
         if (!GeneralSettingsValidationService.TryValidateVisibleRecords(vr, out visibleRecords, out var error))
         {
-            System.Windows.MessageBox.Show(
+            MessageBox.Show(
                 this,
                 error,
                 Title,
@@ -629,7 +629,7 @@ public partial class FieldConfigurator : Window
         var rh = record.IntValue;
         if (!GeneralSettingsValidationService.TryValidateRecordThickness(rh, IsGeneralLayoutTransposed(), out recordThickness, out var error))
         {
-            System.Windows.MessageBox.Show(
+            MessageBox.Show(
                 this,
                 error,
                 Title,
@@ -871,7 +871,7 @@ public partial class FieldConfigurator : Window
         var numberValid = true;
         try
         {
-            _ = 12345.6789.ToString(normalized, System.Globalization.CultureInfo.CurrentCulture);
+            _ = 12345.6789.ToString(normalized, CultureInfo.CurrentCulture);
         }
         catch (FormatException)
         {
@@ -881,7 +881,7 @@ public partial class FieldConfigurator : Window
         var dateValid = true;
         try
         {
-            _ = DateTime.Now.ToString(normalized, System.Globalization.CultureInfo.CurrentCulture);
+            _ = DateTime.Now.ToString(normalized, CultureInfo.CurrentCulture);
         }
         catch (FormatException)
         {

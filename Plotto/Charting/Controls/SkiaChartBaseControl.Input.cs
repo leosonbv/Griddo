@@ -465,7 +465,7 @@ public abstract partial class SkiaChartBaseControl
     }
 
     /// <summary>Mouse position in Skia surface pixels (matches drawing / plot rect coordinates).</summary>
-    protected System.Windows.Point MapMouseEventToSurfacePixels(MouseEventArgs e)
+    protected Point MapMouseEventToSurfacePixels(MouseEventArgs e)
     {
         SyncHitTestGeometryFromLayout();
         return _coordinates.LogicalPointToSurface(e.GetPosition(this), ActualWidth, ActualHeight);

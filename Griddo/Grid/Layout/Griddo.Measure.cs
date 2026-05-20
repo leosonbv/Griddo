@@ -51,7 +51,7 @@ public sealed partial class Griddo
     {
         var formattedText = new FormattedText(
             text,
-            System.Globalization.CultureInfo.CurrentCulture,
+            CultureInfo.CurrentCulture,
             FlowDirection.LeftToRight,
             typeface,
             fontSize,
@@ -65,7 +65,7 @@ public sealed partial class Griddo
     {
         var formattedText = new FormattedText(
             text,
-            System.Globalization.CultureInfo.CurrentCulture,
+            CultureInfo.CurrentCulture,
             FlowDirection.LeftToRight,
             typeface,
             fontSize,

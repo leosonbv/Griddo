@@ -108,20 +108,20 @@ public sealed partial class Griddo
         var menuItemStyle = new Style(typeof(MenuItem));
         menuItemStyle.Setters.Add(new Setter(Control.BackgroundProperty, Brushes.Transparent));
         menuItemStyle.Setters.Add(new Setter(Control.ForegroundProperty, Brushes.Black));
-        menuItemStyle.Setters.Add(new Setter(UIElement.OpacityProperty, 1.0));
+        menuItemStyle.Setters.Add(new Setter(OpacityProperty, 1.0));
 
         var highlightedTrigger = new Trigger { Property = MenuItem.IsHighlightedProperty, Value = true };
         highlightedTrigger.Setters.Add(new Setter(Control.BackgroundProperty, GriddoContextMenuSelectionBrush));
         highlightedTrigger.Setters.Add(new Setter(Control.ForegroundProperty, GriddoContextMenuSelectionForegroundBrush));
         menuItemStyle.Triggers.Add(highlightedTrigger);
 
-        var disabledTrigger = new Trigger { Property = UIElement.IsEnabledProperty, Value = false };
+        var disabledTrigger = new Trigger { Property = IsEnabledProperty, Value = false };
         disabledTrigger.Setters.Add(new Setter(Control.ForegroundProperty, Brushes.DimGray));
-        disabledTrigger.Setters.Add(new Setter(UIElement.OpacityProperty, 1.0));
+        disabledTrigger.Setters.Add(new Setter(OpacityProperty, 1.0));
         menuItemStyle.Triggers.Add(disabledTrigger);
 
         var disabledHighlightedTrigger = new MultiTrigger();
-        disabledHighlightedTrigger.Conditions.Add(new Condition(UIElement.IsEnabledProperty, false));
+        disabledHighlightedTrigger.Conditions.Add(new Condition(IsEnabledProperty, false));
         disabledHighlightedTrigger.Conditions.Add(new Condition(MenuItem.IsHighlightedProperty, true));
         disabledHighlightedTrigger.Setters.Add(new Setter(Control.BackgroundProperty, GriddoContextMenuSelectionBrush));
         disabledHighlightedTrigger.Setters.Add(new Setter(Control.ForegroundProperty, Brushes.DimGray));

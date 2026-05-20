@@ -4,7 +4,7 @@ namespace GriddoUi.FieldEdit.Models;
 
 using System.Windows;
 using Griddo.Fields;
-using GriddoUi.FieldEdit.Dialog;
+using Dialog;
 
 /// <summary>One editable record in <see cref="FieldConfigurator"/> (maps to a property on the data shape).</summary>
 public sealed class FieldEditRecord

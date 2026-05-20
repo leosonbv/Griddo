@@ -122,7 +122,7 @@ public partial class ChromatogramControl : SkiaChartBaseControl
     public ChromatogramControl()
     {
         var descriptor = DependencyPropertyDescriptor.FromProperty(
-            SkiaChartBaseControl.RenderModeProperty,
+            RenderModeProperty,
             typeof(ChromatogramControl));
         descriptor?.AddValueChanged(this, (_, _) => OnRenderModeChanged());
     }

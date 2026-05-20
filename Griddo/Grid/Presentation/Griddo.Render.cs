@@ -125,7 +125,7 @@ public sealed partial class Griddo
         var headerLabel = Fields[col].Header;
         var headerText = new FormattedText(
             headerLabel,
-            System.Globalization.CultureInfo.CurrentCulture,
+            CultureInfo.CurrentCulture,
             FlowDirection.LeftToRight,
             typeface,
             EffectiveFontSize,
@@ -172,15 +172,15 @@ public sealed partial class Griddo
         var arrecordText = ascending ? "▲" : "▼";
         var arrecord = new FormattedText(
             arrecordText,
-            System.Globalization.CultureInfo.CurrentCulture,
+            CultureInfo.CurrentCulture,
             FlowDirection.LeftToRight,
             typeface,
             Math.Max(7.0, EffectiveFontSize * 0.7),
             indicatorBrush,
             1.0);
         var prio = new FormattedText(
-            priority.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            System.Globalization.CultureInfo.CurrentCulture,
+            priority.ToString(CultureInfo.InvariantCulture),
+            CultureInfo.CurrentCulture,
             FlowDirection.LeftToRight,
             typeface,
             Math.Max(8.0, EffectiveFontSize * 0.65),
@@ -1285,7 +1285,7 @@ public sealed partial class Griddo
             dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(240, 240, 240)), new Pen(Brushes.Gray, 1), dialogButtonRect);
             var buttonText = new FormattedText(
                 "...",
-                System.Globalization.CultureInfo.CurrentCulture,
+                CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight,
                 typeface,
                 Math.Max(9, fontSize * 0.9),
@@ -1303,7 +1303,7 @@ public sealed partial class Griddo
         var displayText = _editSession.Buffer;
         var editText = new FormattedText(
             displayText,
-            System.Globalization.CultureInfo.CurrentCulture,
+            CultureInfo.CurrentCulture,
             FlowDirection.LeftToRight,
             typeface,
             fontSize,
@@ -1319,7 +1319,7 @@ public sealed partial class Griddo
         var prefixText = displayText[.._editSession.CaretIndex];
         var prefixFormattedText = new FormattedText(
             prefixText,
-            System.Globalization.CultureInfo.CurrentCulture,
+            CultureInfo.CurrentCulture,
             FlowDirection.LeftToRight,
             typeface,
             fontSize,
@@ -1356,7 +1356,7 @@ public sealed partial class Griddo
                 var selectedText = displayText[selectionStart..selectionEnd];
                 var beforeWidth = new FormattedText(
                     beforeSelection,
-                    System.Globalization.CultureInfo.CurrentCulture,
+                    CultureInfo.CurrentCulture,
                     FlowDirection.LeftToRight,
                     typeface,
                     fontSize,
@@ -1364,7 +1364,7 @@ public sealed partial class Griddo
                     1.0).WidthIncludingTrailingWhitespace;
                 var selectedWidth = new FormattedText(
                     selectedText,
-                    System.Globalization.CultureInfo.CurrentCulture,
+                    CultureInfo.CurrentCulture,
                     FlowDirection.LeftToRight,
                     typeface,
                     fontSize,

@@ -64,7 +64,7 @@ public sealed partial class Griddo
         var totalFillWeight = _cachedTotalFieldFillWeight;
         if (totalFillWeight <= 0)
         {
-            return Grid.Griddo.MinFieldWidth * ContentScale;
+            return MinFieldWidth * ContentScale;
         }
 
         var nonFillWidth = _cachedNonFillFieldWidthSum;
@@ -75,7 +75,7 @@ public sealed partial class Griddo
             totalFillWeight,
             nonFillWidth,
             viewportAlongFieldAxis,
-            Grid.Griddo.MinFieldWidth,
+            MinFieldWidth,
             ContentScale);
     }
 
@@ -86,7 +86,7 @@ public sealed partial class Griddo
             field.Width,
             _fieldWidthOverrides.TryGetValue(field, out var o),
             o,
-            Grid.Griddo.MinFieldWidth,
+            MinFieldWidth,
             ContentScale);
     }
 
@@ -98,7 +98,7 @@ public sealed partial class Griddo
         }
 
         var field = Fields[fieldIndex];
-        _fieldWidthOverrides[field] = Math.Max(Grid.Griddo.MinFieldWidth, screenPixelWidth / ContentScale);
+        _fieldWidthOverrides[field] = Math.Max(MinFieldWidth, screenPixelWidth / ContentScale);
         InvalidateFieldFillWidthCache();
         UpdateScrollBars();
     }
@@ -106,7 +106,7 @@ public sealed partial class Griddo
     /// <summary>Sets field width in logical units (same as <see cref="IGriddoFieldView.Width"/>), independent of <see cref="Grid.Griddo.ContentScale"/>.</summary>
     public void SetLogicalFieldWidth(int fieldIndex, double logicalWidth)
     {
-        SetFieldWidth(fieldIndex, Math.Max(Grid.Griddo.MinFieldWidth, logicalWidth) * ContentScale);
+        SetFieldWidth(fieldIndex, Math.Max(MinFieldWidth, logicalWidth) * ContentScale);
         InvalidateVisual();
     }
 
@@ -117,14 +117,14 @@ public sealed partial class Griddo
     {
         if (fieldIndex < 0 || fieldIndex >= Fields.Count)
         {
-            return Grid.Griddo.MinFieldWidth;
+            return MinFieldWidth;
         }
 
         var field = Fields[fieldIndex];
         var logical = _fieldWidthOverrides.TryGetValue(field, out var overrideWidth)
             ? overrideWidth
             : field.Width;
-        return Math.Max(Grid.Griddo.MinFieldWidth, logical);
+        return Math.Max(MinFieldWidth, logical);
     }
 
     /// <summary>Clears per-field width overrides so layout uses each field view’s nominal <see cref="IGriddoFieldView.Width"/>.</summary>
@@ -314,7 +314,7 @@ public sealed partial class Griddo
         const double HtmlAutoHeightMaxDip = 220d;
         if (field is IGriddoHostedFieldView)
         {
-            return Math.Max(Grid.Griddo.MinFieldWidth * ContentScale, GetFieldWidth(fieldIndex));
+            return Math.Max(MinFieldWidth * ContentScale, GetFieldWidth(fieldIndex));
         }
 
         var fallbackTypeface = new Typeface("Segoe UI");

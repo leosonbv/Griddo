@@ -501,7 +501,7 @@ public sealed partial class Griddo
         {
             var fixedRecordsW = GetTransposeFixedRecordsWidth();
             var scrollRecordsViewport = Math.Max((double)0, _viewportBodyWidth - fixedRecordsW);
-            var h = Records.Count > 0 ? GetRecordHeight(0) : Grid.Griddo.GetMinimumRecordThickness() * ContentScale;
+            var h = Records.Count > 0 ? GetRecordHeight(0) : GetMinimumRecordThickness() * ContentScale;
             var fr = GetEffectiveFixedRecordCount();
             var scrollRecordsContent = Math.Max((int)0, (int)(Records.Count - fr)) * h;
             var rawMaxHorizontal = Math.Max(0, scrollRecordsContent - scrollRecordsViewport);
