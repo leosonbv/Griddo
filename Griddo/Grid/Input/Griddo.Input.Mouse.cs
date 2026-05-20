@@ -1208,6 +1208,8 @@ public sealed partial class Griddo
 
     protected override void OnMouseLeave(MouseEventArgs e)
     {
+        HideHeaderInactivePopup();
+
         // Pointer left the grid; allow the next header hover to run a fresh ToolTip attach cycle.
         // Do not reset while the field-header tooltip is open — the pointer often leaves the grid to read the popup.
         if (ReferenceEquals(ToolTip, _fieldHeaderToolTip) && !_fieldHeaderToolTip.IsOpen)
@@ -1258,46 +1260,34 @@ public sealed partial class Griddo
 
         var headerCol = HitTestFieldHeader(pointer);
         var inStrip = headerCol >= 0 && headerCol < Fields.Count;
-        if (inStrip && TryGetFieldHeaderDescription(Fields[headerCol], out var text))
+
+        // Always use the custom popup for header tooltips (both active and inactive state),
+        // so the tooltip is never suppressed by WPF's focus/activation rules.
+        if (inStrip && TryGetFieldHeaderDescription(Fields[headerCol], out var popupText))
         {
-            // Reattach when (a) tooltip service asked for it after close, or (b) pointer re-enters a described
-            // header from body / undescribed header — WPF will not reopen on the same attach after leaving the strip
-            // if we only rely on ToolTip.Closed (it may not run when IsOpen is cleared from mouse moves).
-            if (!_priorPointerOnDescribedFieldHeader || _fieldHeaderToolTipNeedsReattach)
+            if (_headerInactivePopupFieldIndex != headerCol)
             {
-                _fieldHeaderToolTipClosedSuppress++;
-                try
+                if (_headerInactivePopup.IsOpen)
                 {
-                    ToolTip = null;
-                    ToolTip = _fieldHeaderToolTip;
-                }
-                finally
-                {
-                    _fieldHeaderToolTipClosedSuppress--;
+                    _headerInactivePopup.IsOpen = false;
+                    _headerInactivePopupFieldIndex = -1;
                 }
 
-                _fieldHeaderToolTipNeedsReattach = false;
+                if (_headerInactivePopupPendingFieldIndex != headerCol)
+                {
+                    _headerInactivePopupText.Text = popupText;
+                    _headerInactivePopupPendingFieldIndex = headerCol;
+                    _headerInactivePopupDelayTimer.Stop();
+                    _headerInactivePopupDelayTimer.Start();
+                }
             }
-
-            _priorPointerOnDescribedFieldHeader = true;
-            ApplyFieldHeaderToolTipText(text);
-            return;
         }
-
-        _priorPointerOnDescribedFieldHeader = false;
-
-        if (inStrip)
+        else
         {
-            if (_fieldHeaderToolTip.IsOpen)
-            {
-                _fieldHeaderToolTip.IsOpen = false;
-            }
-
-            ClearFieldHeaderToolTipContent();
-            _fieldHeaderToolTipNeedsReattach = true;
-            return;
+            HideHeaderInactivePopup();
         }
 
+        // Clear the WPF ToolTip content so it never shows its own tooltip.
         if (_fieldHeaderToolTip.IsOpen)
         {
             _fieldHeaderToolTip.IsOpen = false;
@@ -1305,6 +1295,33 @@ public sealed partial class Griddo
 
         ClearFieldHeaderToolTipContent();
         _fieldHeaderToolTipNeedsReattach = true;
+    }
+
+    private void HideHeaderInactivePopup()
+    {
+        _headerInactivePopupDelayTimer.Stop();
+        _headerInactivePopupPendingFieldIndex = -1;
+        if (_headerInactivePopup.IsOpen)
+        {
+            _headerInactivePopup.IsOpen = false;
+        }
+
+        _headerInactivePopupFieldIndex = -1;
+    }
+
+    private void OnHeaderInactivePopupDelayTick(object? sender, EventArgs e)
+    {
+        _headerInactivePopupDelayTimer.Stop();
+        var pending = _headerInactivePopupPendingFieldIndex;
+        if (pending < 0 || pending >= Fields.Count)
+        {
+            _headerInactivePopupPendingFieldIndex = -1;
+            return;
+        }
+
+        _headerInactivePopup.IsOpen = true;
+        _headerInactivePopupFieldIndex = pending;
+        _headerInactivePopupPendingFieldIndex = -1;
     }
 
     private void ApplyFieldHeaderToolTipText(string text)

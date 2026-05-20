@@ -83,8 +83,10 @@ public partial class PlotConfigurationDialog : Window
         _rows.Clear();
         TitleFieldsGrid.Records.Clear();
         var savedByIndex = _initial.TitleSegments
-            .GroupBy(s => s.SourceFieldIndex)
-            .ToDictionary(g => g.Key, g => g.First());
+            .Select(s => (segment: s, resolved: ResolveSourceFieldIndex(s)))
+            .Where(x => x.resolved >= 0)
+            .GroupBy(x => x.resolved)
+            .ToDictionary(g => g.Key, g => g.First().segment);
         var excluded = new HashSet<int>();
         for (var sourceFieldIndex = 0; sourceFieldIndex < _allFields.Count; sourceFieldIndex++)
         {
@@ -135,8 +137,10 @@ public partial class PlotConfigurationDialog : Window
         }
 
         var savedByIndex = _initial.CalibrationPointLabelSegments
-            .GroupBy(s => s.SourceFieldIndex)
-            .ToDictionary(g => g.Key, g => g.First());
+            .Select(s => (segment: s, resolved: ResolvePointLabelFieldIndex(s)))
+            .Where(x => x.resolved >= 0)
+            .GroupBy(x => x.resolved)
+            .ToDictionary(g => g.Key, g => g.First().segment);
 
         var configuredOrder = _initial.CalibrationPointLabelSegments
             .Select(ResolvePointLabelFieldIndex)
@@ -388,7 +392,10 @@ public partial class PlotConfigurationDialog : Window
 
                 ((PlotTitleFieldEditRecord)r).Enabled = b;
                 return true;
-            }));
+            })
+        {
+            Description = "Whether this field segment is included in the title or label"
+        });
         grid.Fields.Add(new GriddoBoolFieldView(
             "Line break",
             100,
@@ -402,19 +409,28 @@ public partial class PlotConfigurationDialog : Window
 
                 ((PlotTitleFieldEditRecord)r).AddLineBreakAfter = b;
                 return true;
-            }));
+            })
+        {
+            Description = "Insert a line break after this segment"
+        });
         grid.Fields.Add(new GriddoFieldView(
             "Source",
             140,
             r => ((PlotTitleFieldEditRecord)r).Source,
             static (_, _) => false,
-            GriddoCellEditors.Text));
+            GriddoCellEditors.Text)
+        {
+            Description = "Source object the segment value comes from"
+        });
         grid.Fields.Add(new GriddoFieldView(
             "Property",
             140,
             r => ((PlotTitleFieldEditRecord)r).Property,
             static (_, _) => false,
-            GriddoCellEditors.Text));
+            GriddoCellEditors.Text)
+        {
+            Description = "Property name of the segment value"
+        });
         grid.Fields.Add(new GriddoFieldView(
             "Header",
             180,
@@ -424,7 +440,10 @@ public partial class PlotConfigurationDialog : Window
                 ((PlotTitleFieldEditRecord)r).Header = v?.ToString() ?? string.Empty;
                 return true;
             },
-            GriddoCellEditors.Text));
+            GriddoCellEditors.Text)
+        {
+            Description = "Label displayed before the segment value"
+        });
         grid.Fields.Add(new GriddoFieldView(
             "Format",
             120,
@@ -434,7 +453,10 @@ public partial class PlotConfigurationDialog : Window
                 ((PlotTitleFieldEditRecord)r).FormatString = v?.ToString() ?? string.Empty;
                 return true;
             },
-            GriddoCellEditors.StandardNumericFormatStringOptions));
+            GriddoCellEditors.StandardNumericFormatStringOptions)
+        {
+            Description = "Format string applied to numeric or date values"
+        });
     }
 
     private static PlotTitleFieldEditRecord CreateSegmentEditRecord(
@@ -462,13 +484,19 @@ public partial class PlotConfigurationDialog : Window
             160,
             r => ((PlotSpecificSettingRecord)r).Category,
             static (_, _) => false,
-            GriddoCellEditors.Text));
+            GriddoCellEditors.Text)
+        {
+            Description = "Setting category"
+        });
         SpecificGrid.Fields.Add(new GriddoFieldView(
             "Property",
             220,
             r => ((PlotSpecificSettingRecord)r).Property,
             static (_, _) => false,
-            GriddoCellEditors.Text));
+            GriddoCellEditors.Text)
+        {
+            Description = "Plot-specific setting name"
+        });
         SpecificGrid.Fields.Add(new PlotSpecificValueField());
     }
 

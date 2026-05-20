@@ -104,9 +104,10 @@ public partial class HtmlConfigurationDialog : Window
             fontStyleName: seed.FontStyleName));
 
         var savedByIndex = seed.Segments
-            .Where(s => s.SourceFieldIndex >= 0)
-            .GroupBy(s => s.SourceFieldIndex)
-            .ToDictionary(g => g.Key, g => g.First());
+            .Select(s => (segment: s, resolved: ResolveEffectiveSourceFieldIndex(s, allFields)))
+            .Where(x => x.resolved >= 0)
+            .GroupBy(x => x.resolved)
+            .ToDictionary(g => g.Key, g => g.First().segment);
         var excluded = new HashSet<int>();
         for (var sourceFieldIndex = 0; sourceFieldIndex < allFields.Count; sourceFieldIndex++)
         {
@@ -255,19 +256,28 @@ public partial class HtmlConfigurationDialog : Window
 
                 ((HtmlSegmentEditRecord)r).Enabled = b;
                 return true;
-            }));
+            })
+        {
+            Description = "Whether this field segment is included in the cell display"
+        });
         SegmentsGrid.Fields.Add(new GriddoFieldView(
             "Source",
             140,
             r => ((HtmlSegmentEditRecord)r).Source,
             static (_, _) => false,
-            GriddoCellEditors.Text));
+            GriddoCellEditors.Text)
+        {
+            Description = "Source object the segment value comes from"
+        });
         SegmentsGrid.Fields.Add(new GriddoFieldView(
             "Property",
             140,
             r => ((HtmlSegmentEditRecord)r).Property,
             static (_, _) => false,
-            GriddoCellEditors.Text));
+            GriddoCellEditors.Text)
+        {
+            Description = "Property name of the segment value"
+        });
         SegmentsGrid.Fields.Add(new GriddoFieldView(
             "Header",
             180,
@@ -277,7 +287,10 @@ public partial class HtmlConfigurationDialog : Window
                 ((HtmlSegmentEditRecord)r).Header = v?.ToString() ?? string.Empty;
                 return true;
             },
-            GriddoCellEditors.Text));
+            GriddoCellEditors.Text)
+        {
+            Description = "Label displayed before the segment value in the cell"
+        });
         SegmentsGrid.Fields.Add(new GriddoFieldView(
             "Format",
             120,
@@ -287,7 +300,10 @@ public partial class HtmlConfigurationDialog : Window
                 ((HtmlSegmentEditRecord)r).FormatString = v?.ToString() ?? string.Empty;
                 return true;
             },
-            GriddoCellEditors.StandardNumericFormatStringOptions));
+            GriddoCellEditors.StandardNumericFormatStringOptions)
+        {
+            Description = "Format string applied to numeric or date values"
+        });
     }
 
     private static HtmlSegmentEditRecord CreateSegmentEditRecord(
@@ -317,7 +333,10 @@ public partial class HtmlConfigurationDialog : Window
             220,
             r => ((HtmlGeneralSettingRecord)r).DisplayName,
             static (_, _) => false,
-            GriddoCellEditors.Text));
+            GriddoCellEditors.Text)
+        {
+            Description = "General cell display setting name"
+        });
         _generalValueFieldIndex = GeneralGrid.Fields.Count;
         GeneralGrid.Fields.Add(new HtmlGeneralValueField(this));
     }

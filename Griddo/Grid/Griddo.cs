@@ -200,6 +200,15 @@ public sealed partial class Griddo : FrameworkElement
     private bool _priorPointerOnDescribedFieldHeader;
     private int _fieldHeaderToolTipClosedSuppress;
 
+    /// <summary>Popup used to display the field-header description when the grid has no keyboard focus (WPF ToolTipService suppresses tooltips on inactive controls).</summary>
+    private readonly Popup _headerInactivePopup = new();
+    private readonly TextBlock _headerInactivePopupText = new();
+    /// <summary>Last field index whose description is currently shown in <see cref="_headerInactivePopup"/>; -1 when hidden.</summary>
+    private int _headerInactivePopupFieldIndex = -1;
+    /// <summary>Field index waiting for the show-delay timer to fire before the popup opens; -1 when none.</summary>
+    private int _headerInactivePopupPendingFieldIndex = -1;
+    private readonly DispatcherTimer _headerInactivePopupDelayTimer;
+
     /// <summary>
     /// Synthetic MouseDown from hosted-plot direct-edit relay bubbles to this element; when non-zero, ignore that re-entrant pass.
     /// </summary>
@@ -291,6 +300,28 @@ public sealed partial class Griddo : FrameworkElement
         _fieldHeaderToolTip.Closed += FieldHeaderToolTipOnClosed;
         ToolTip = _fieldHeaderToolTip;
         ToolTipService.SetBetweenShowDelay(this, 0);
+
+        _headerInactivePopupText.TextWrapping = TextWrapping.Wrap;
+        _headerInactivePopupText.MaxWidth = 480;
+        _headerInactivePopupText.Focusable = false;
+        _headerInactivePopupText.Foreground = SystemColors.InfoTextBrush;
+        _headerInactivePopupText.Margin = new Thickness(4, 3, 4, 3);
+        var headerInactivePopupBorder = new Border
+        {
+            Background = SystemColors.InfoBrush,
+            BorderBrush = SystemColors.ActiveBorderBrush,
+            BorderThickness = new Thickness(1),
+            Child = _headerInactivePopupText
+        };
+        _headerInactivePopup.Child = headerInactivePopupBorder;
+        _headerInactivePopup.PlacementTarget = this;
+        _headerInactivePopup.Placement = PlacementMode.MousePoint;
+        _headerInactivePopup.VerticalOffset = 16;
+        _headerInactivePopup.AllowsTransparency = false;
+        _headerInactivePopup.StaysOpen = true;
+        _headerInactivePopup.IsOpen = false;
+        _headerInactivePopupDelayTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        _headerInactivePopupDelayTimer.Tick += OnHeaderInactivePopupDelayTick;
         Loaded += OnLoadedThemeRegistration;
         Unloaded += OnUnloadedThemeRegistration;
         Loaded += OnLoadedRequestFocus;

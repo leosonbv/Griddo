@@ -144,6 +144,7 @@ public sealed partial class Griddo
     protected override void OnGotKeyboardFocus(KeyboardFocusChangedEventArgs e)
     {
         base.OnGotKeyboardFocus(e);
+        HideHeaderInactivePopup();
         if (HideSelectionWhenGridLosesFocus)
         {
             InvalidateVisual();
