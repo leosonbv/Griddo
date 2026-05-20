@@ -82,7 +82,7 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
             var value = field.GetValue(recordSource);
             var rendered = field.IsHtml
                 ? (value?.ToString() ?? string.Empty)
-                : WebUtility.HtmlEncode(FormatSegmentValue(value, field, segment.FormatString));
+                : HtmlEncodePreservingGreaterThan(FormatSegmentValue(value, field, segment.FormatString));
 
             if (!segment.WordWrap)
             {
@@ -105,7 +105,7 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
         }
 
         var rows = pairs
-            .Select(p => $"<tr><td><b>{WebUtility.HtmlEncode(p.Label)}</b></td><td>{p.Rendered}</td></tr>")
+            .Select(p => $"<tr><td><b>{HtmlEncodePreservingGreaterThan(p.Label)}</b></td><td>{p.Rendered}</td></tr>")
             .ToList();
         return $"<table style='border-collapse:collapse;border:none;{tableWidthStyle}{style}'><tbody>{string.Join(string.Empty, rows)}</tbody></table>";
     }
@@ -118,7 +118,7 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
         for (var i = 0; i < pairs.Count; i++)
         {
             var pair = pairs[i];
-            chunks.Add($"<span><b>{WebUtility.HtmlEncode(pair.Label)}</b>: {pair.Rendered}</span>");
+            chunks.Add($"<span><b>{HtmlEncodePreservingGreaterThan(pair.Label)}</b>: {pair.Rendered}</span>");
             if (i >= pairs.Count - 1)
             {
                 continue;
@@ -161,7 +161,7 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
         var sb = new StringBuilder();
         if (!string.IsNullOrWhiteSpace(FontFamilyName))
         {
-            sb.Append("font-family:").Append(WebUtility.HtmlEncode(FontFamilyName)).Append(';');
+            sb.Append("font-family:").Append(HtmlEncodePreservingGreaterThan(FontFamilyName)).Append(';');
         }
 
         if (FontSize > 0)
@@ -171,9 +171,25 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
 
         if (!string.IsNullOrWhiteSpace(FontStyleName))
         {
-            sb.Append("font-style:").Append(WebUtility.HtmlEncode(FontStyleName)).Append(';');
+            sb.Append("font-style:").Append(HtmlEncodePreservingGreaterThan(FontStyleName)).Append(';');
         }
 
         return sb.ToString();
     }
+
+    /// <summary>
+    /// HTML encodes a string but preserves literal '>' characters (not encoding them to &gt;).
+    /// All other HTML special characters are encoded normally.
+    /// </summary>
+    private static string HtmlEncodePreservingGreaterThan(string input)
+    {
+        if (string.IsNullOrEmpty(input))
+            return input;
+
+        // First encode everything normally
+        var encoded = WebUtility.HtmlEncode(input);
+        // Then decode &gt; back to > to preserve literal greater-than characters
+        return encoded.Replace("&gt;", ">", StringComparison.Ordinal);
+    }
 }
+

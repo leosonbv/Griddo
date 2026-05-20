@@ -550,23 +550,7 @@ public sealed partial class Griddo
 
         for (var i = 0; i <= text.Length; i++)
         {
-            double caretX;
-
-            if (field.ContentAlignment == TextAlignment.Right)
-            {
-                // For right-aligned text: caret position moves LEFT as index increases
-                caretX = textOrigin.X - accumulatedWidth;
-            }
-            else if (field.ContentAlignment == TextAlignment.Center)
-            {
-                // For center-aligned text: calculate based on text start position
-                caretX = textOrigin.X + accumulatedWidth;
-            }
-            else
-            {
-                // For left-aligned text: caret position moves RIGHT as index increases
-                caretX = textOrigin.X + accumulatedWidth;
-            }
+            var caretX = textOrigin.X + accumulatedWidth;
 
             caretPositions.Add((i, caretX));
 
