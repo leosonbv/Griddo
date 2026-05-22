@@ -668,6 +668,8 @@ public abstract partial class SkiaChartBaseControl : SKElement
     /// Plot rect and surface pixel size are normally updated in <see cref="OnPaintSurface"/>.
     /// When the chart is reparented or resized, hit-testing can run before the next paint — sync from layout first.
     /// </summary>
+    protected void EnsurePlotGeometrySync() => SyncHitTestGeometryFromLayout();
+
     private void SyncHitTestGeometryFromLayout()
     {
         var dpi = VisualTreeHelper.GetDpi(this);

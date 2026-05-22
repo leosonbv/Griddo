@@ -54,6 +54,35 @@ internal static class HostedPlotViewportMemory
     }
 
     /// <summary>
+    /// After layout: restore remembered zoom if needed, then reserve Y headroom for peak labels when needed.
+    /// </summary>
+    internal static void ScheduleDeferredViewportFinalize(
+        FrameworkElement host,
+        object recordSource,
+        string plotKey,
+        SkiaChartBaseControl chart,
+        Func<object?, string?>? recordKeyFactory)
+    {
+        var expectedRow = recordSource;
+        chart.Dispatcher.BeginInvoke(
+            () =>
+            {
+                if (!ReferenceEquals(host.Tag, expectedRow))
+                {
+                    return;
+                }
+
+                TryRestore(expectedRow, plotKey, chart, recordKeyFactory);
+
+                if (chart is ChromatogramControl chrom)
+                {
+                    chrom.FinalizeViewportForInitialDisplay();
+                }
+            },
+            DispatcherPriority.Render);
+    }
+
+    /// <summary>
     /// Runs after the current layout/render pass so restoring wins over synchronous data callbacks
     /// (e.g. <see cref="SkiaChartBaseControl"/> point changed → fit viewport) when those queue further work.
     /// </summary>

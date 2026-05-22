@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Input;
 using Plotto.Abstractions.Charting.Core;
 using SkiaSharp;
+using SkiaSharp.Views.Desktop;
 using Plotto.Charting.Core;
 using Plotto.Charting.Rendering;
 
@@ -23,6 +24,9 @@ public partial class ChromatogramControl : SkiaChartBaseControl
     private double _overlayLineWidthDip = 1.5d;
     private readonly List<double> _peakSplitStaticX = [];
     private double? _peakSplitHoverX;
+    private bool _pendingPeakLabelViewportExpand;
+    private bool _deferPaintUntilPeakLabelViewportReady;
+    private bool _peakLabelExpandScheduled;
     private readonly SKPaint _integrationFillPaint = new()
     {
         IsAntialias = true,
@@ -220,6 +224,210 @@ public partial class ChromatogramControl : SkiaChartBaseControl
     /// <summary>When set with <see cref="DefaultFitXMin"/>, initial fit and zoom-out use this X range (method RT window).</summary>
     public double? DefaultFitXMax { get; set; }
 
+    protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
+    {
+        base.OnRenderSizeChanged(sizeInfo);
+        TryCompletePendingPeakLabelViewportExpand();
+    }
+
+    /// <summary>Fit Y headroom for peak labels before the first visible paint on a new row.</summary>
+    public void FinalizeViewportForInitialDisplay()
+    {
+        if (!ShowPeakLabels || PeakLabels.Count == 0)
+        {
+            _deferPaintUntilPeakLabelViewportReady = false;
+            _pendingPeakLabelViewportExpand = false;
+            return;
+        }
+
+        _deferPaintUntilPeakLabelViewportReady = true;
+        UpdateLayout();
+        ExpandViewportForPeakLabels();
+        if (!_pendingPeakLabelViewportExpand)
+        {
+            _deferPaintUntilPeakLabelViewportReady = false;
+        }
+    }
+
+    /// <summary>Reserves Y headroom above the trace so peak labels fit after zoom-out or auto-fit.</summary>
+    public void ExpandViewportForPeakLabels()
+    {
+        if (!ShowPeakLabels || PeakLabels.Count == 0)
+        {
+            _pendingPeakLabelViewportExpand = false;
+            return;
+        }
+
+        var previousYMax = Viewport.YMax;
+        const int maxPasses = 3;
+        for (var pass = 0; pass < maxPasses; pass++)
+        {
+            if (!TryExpandViewportForPeakLabelsOnce(out var plotRect, out var margin))
+            {
+                return;
+            }
+
+            ApplyViewportInteractionClamp();
+
+            if (!ChartSkiaPeakLabels.TryGetMinVisibleLabelTopPixelY(
+                    plotRect,
+                    PeakLabels,
+                    PlotDeviceScale,
+                    PeakLabelFontSize,
+                    ToPixelX,
+                    ToPixelY,
+                    PeakLabelRotate,
+                    PeakLabelTicOverlayMode,
+                    out var remainingTop)
+                || remainingTop >= plotRect.Top + margin - 0.5f)
+            {
+                _pendingPeakLabelViewportExpand = false;
+                break;
+            }
+
+            if (pass == maxPasses - 1)
+            {
+                _pendingPeakLabelViewportExpand = true;
+            }
+        }
+
+        if (Viewport.YMin >= -1e-12)
+        {
+            Viewport.YMin = Math.Max(0d, Viewport.YMin);
+        }
+
+        Viewport.EnsureMinimumSize();
+
+        if (Math.Abs(Viewport.YMax - previousYMax) > 1e-12)
+        {
+            NotifyViewportChanged();
+            InvalidateVisual();
+        }
+        else if (_pendingPeakLabelViewportExpand)
+        {
+            InvalidateVisual();
+        }
+    }
+
+    private bool TryExpandViewportForPeakLabelsOnce(out SKRect plotRect, out float margin)
+    {
+        plotRect = default;
+        margin = 4f * (float)PlotDeviceScale;
+
+        EnsurePlotGeometrySync();
+        plotRect = GetDrawPlotRect();
+        if (plotRect.Width <= 1f || plotRect.Height <= 1f)
+        {
+            _pendingPeakLabelViewportExpand = true;
+            return false;
+        }
+
+        const int maxIterations = 10;
+        for (var iteration = 0; iteration < maxIterations; iteration++)
+        {
+            EnsurePlotGeometrySync();
+            plotRect = GetDrawPlotRect();
+            if (plotRect.Width <= 1f || plotRect.Height <= 1f)
+            {
+                _pendingPeakLabelViewportExpand = true;
+                return false;
+            }
+
+            if (!ChartSkiaPeakLabels.TryGetMinVisibleLabelTopPixelY(
+                    plotRect,
+                    PeakLabels,
+                    PlotDeviceScale,
+                    PeakLabelFontSize,
+                    ToPixelX,
+                    ToPixelY,
+                    PeakLabelRotate,
+                    PeakLabelTicOverlayMode,
+                    out var minTop))
+            {
+                _pendingPeakLabelViewportExpand = false;
+                return false;
+            }
+
+            if (minTop >= plotRect.Top + margin)
+            {
+                return true;
+            }
+
+            var span = Viewport.YMax - Viewport.YMin;
+            if (!(span > 0))
+            {
+                return true;
+            }
+
+            var deficitPx = plotRect.Top + margin - minTop;
+            Viewport.YMax += deficitPx / plotRect.Height * span;
+            Viewport.EnsureMinimumSize();
+        }
+
+        return true;
+    }
+
+    /// <summary>Runs after layout and viewport restore so label headroom is not overwritten.</summary>
+    public void ScheduleExpandViewportForPeakLabels()
+    {
+        if (!ShowPeakLabels || PeakLabels.Count == 0)
+        {
+            _pendingPeakLabelViewportExpand = false;
+            return;
+        }
+
+        _pendingPeakLabelViewportExpand = true;
+        if (_peakLabelExpandScheduled)
+        {
+            return;
+        }
+
+        _peakLabelExpandScheduled = true;
+        Dispatcher.BeginInvoke(
+            () =>
+            {
+                _peakLabelExpandScheduled = false;
+                ExpandViewportForPeakLabels();
+            },
+            System.Windows.Threading.DispatcherPriority.Render);
+    }
+
+    protected override void OnPaintSurface(SKPaintSurfaceEventArgs e)
+    {
+        if (_deferPaintUntilPeakLabelViewportReady)
+        {
+            TryCompletePendingPeakLabelViewportExpand();
+            if (_pendingPeakLabelViewportExpand)
+            {
+                return;
+            }
+
+            _deferPaintUntilPeakLabelViewportReady = false;
+        }
+
+        base.OnPaintSurface(e);
+    }
+
+    private void TryCompletePendingPeakLabelViewportExpand()
+    {
+        if (!_pendingPeakLabelViewportExpand)
+        {
+            return;
+        }
+
+        var previousYMax = Viewport.YMax;
+        ExpandViewportForPeakLabels();
+        if (!_pendingPeakLabelViewportExpand)
+        {
+            _deferPaintUntilPeakLabelViewportReady = false;
+        }
+
+        if (Math.Abs(Viewport.YMax - previousYMax) > 1e-12)
+        {
+            InvalidateVisual();
+        }
+    }
+
     public override void ZoomOutCompletely()
     {
         if (!CanInteract())
@@ -233,11 +441,13 @@ public partial class ChromatogramControl : SkiaChartBaseControl
             && Points.Count > 0)
         {
             FitViewportToXInterval(xMin, xMax);
+            ExpandViewportForPeakLabels();
             InvalidateVisual();
             return;
         }
 
         base.ZoomOutCompletely();
+        ExpandViewportForPeakLabels();
     }
 
     /// <summary>
@@ -420,6 +630,45 @@ public partial class ChromatogramControl : SkiaChartBaseControl
             typeof(ChromatogramControl),
             new FrameworkPropertyMetadata(Array.Empty<ChromatogramPeakLabel>(), FrameworkPropertyMetadataOptions.AffectsRender));
 
+    public int PeakLabelRotate
+    {
+        get => (int)GetValue(PeakLabelRotateProperty);
+        set => SetValue(PeakLabelRotateProperty, value);
+    }
+
+    public static readonly DependencyProperty PeakLabelRotateProperty =
+        DependencyProperty.Register(
+            nameof(PeakLabelRotate),
+            typeof(int),
+            typeof(ChromatogramControl),
+            new FrameworkPropertyMetadata(0, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public bool PeakLabelTicOverlayMode
+    {
+        get => (bool)GetValue(PeakLabelTicOverlayModeProperty);
+        set => SetValue(PeakLabelTicOverlayModeProperty, value);
+    }
+
+    public static readonly DependencyProperty PeakLabelTicOverlayModeProperty =
+        DependencyProperty.Register(
+            nameof(PeakLabelTicOverlayMode),
+            typeof(bool),
+            typeof(ChromatogramControl),
+            new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public bool ShowPeakLabelDebugRect
+    {
+        get => (bool)GetValue(ShowPeakLabelDebugRectProperty);
+        set => SetValue(ShowPeakLabelDebugRectProperty, value);
+    }
+
+    public static readonly DependencyProperty ShowPeakLabelDebugRectProperty =
+        DependencyProperty.Register(
+            nameof(ShowPeakLabelDebugRect),
+            typeof(bool),
+            typeof(ChromatogramControl),
+            new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+
     private void OnRenderModeChanged()
     {
         _awaitingActivationClick = false;
@@ -555,8 +804,6 @@ public partial class ChromatogramControl : SkiaChartBaseControl
             }
         }
 
-        DrawVerticalMarkersInPlot(canvas, plotRect);
-
         if (ShowPeakLabels)
         {
             ChartSkiaPeakLabels.Draw(
@@ -568,8 +815,13 @@ public partial class ChromatogramControl : SkiaChartBaseControl
                 ToPixelX,
                 ToPixelY,
                 _peakLabelTextPaint,
-                _peakLabelConnectorPaint);
+                PeakLabelTicOverlayMode ? null : _peakLabelConnectorPaint,
+                PeakLabelRotate,
+                PeakLabelTicOverlayMode,
+                ShowPeakLabelDebugRect);
         }
+
+        DrawVerticalMarkersInPlot(canvas, plotRect);
 
         if (RenderMode == ChartRenderMode.Renderer)
         {
@@ -658,6 +910,27 @@ public partial class ChromatogramControl : SkiaChartBaseControl
                 var t1 = Math.Clamp(m.YEndFraction, 0f, 1f);
                 var yTop = plotRect.Top + Math.Min(t0, t1) * h;
                 var yBottom = plotRect.Top + Math.Max(t0, t1) * h;
+                if (ShowPeakLabels
+                    && ChartSkiaPeakLabels.TryGetVerticalMarkerTopPixelYAt(
+                        px,
+                        plotRect,
+                        PeakLabels,
+                        PlotDeviceScale,
+                        PeakLabelFontSize,
+                        ToPixelX,
+                        ToPixelY,
+                        PeakLabelRotate,
+                        PeakLabelTicOverlayMode,
+                        out var capY))
+                {
+                    yTop = Math.Max(yTop, capY);
+                }
+
+                if (yTop >= yBottom - 0.5f)
+                {
+                    continue;
+                }
+
                 var paint = m.LightStroke ? _verticalMarkerLightPaint : _verticalMarkerPaint;
                 canvas.DrawLine(px, yTop, px, yBottom, paint);
             }

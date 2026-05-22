@@ -251,14 +251,14 @@ internal static class PlotTitleHtmlBuilder
                 continue;
             }
 
-            if (segment.AddLineBreakAfter && rowCells.Count > 0)
+            rowCells.AddRange(cells);
+
+            if (segment.AddLineBreakAfter)
             {
                 tableRows.Add(FormatTitleTableRow(rowCells, breakBefore: !isFirstTableRow));
                 isFirstTableRow = false;
                 rowCells.Clear();
             }
-
-            rowCells.AddRange(cells);
         }
 
         if (rowCells.Count > 0)
@@ -304,13 +304,13 @@ internal static class PlotTitleHtmlBuilder
                 continue;
             }
 
-            if (segment.AddLineBreakAfter && lineParts.Count > 0)
+            lineParts.Add(part);
+
+            if (segment.AddLineBreakAfter)
             {
                 lines.Add(string.Join(PairSeparatorPlain, lineParts));
                 lineParts.Clear();
             }
-
-            lineParts.Add(part);
         }
 
         if (lineParts.Count > 0)

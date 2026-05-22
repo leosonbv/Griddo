@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -318,29 +319,87 @@ public partial class PlotConfigurationDialog : Window
                     : _initial.ChromatogramShowSelectionCorrectedRtOnTic)
                 : _initial.ChromatogramShowSelectionCorrectedRtOnTic,
             CalibrationShowRegression: GetSpecificBool(PlotSpecificSettingKind.CalibrationShowRegression),
-            ShowCalibrationPointLabels: SupportsPointLabelTab()
-                ? GetSpecificBool(PlotSpecificSettingKind.CalibrationShowPointLabels)
-                : _initial.ShowCalibrationPointLabels,
+            ShowCalibrationPointLabels: ResolveShowCalibrationPointLabels(calibrationPointLabelSegments),
             CalibrationPointLabelSegments: calibrationPointLabelSegments,
             SpectrumNormalizeIntensity: GetSpecificBool(PlotSpecificSettingKind.SpectrumNormalizeIntensity),
-            PeakLabelRotate: _initial.PeakLabelRotate);
+            PeakLabelRotate: PlotPeakLabelRotation.Normalize(
+                GetSpecificInt(PlotSpecificSettingKind.PeakLabelRotate, _initial.PeakLabelRotate)));
         return true;
+    }
+
+    private bool ResolveShowCalibrationPointLabels(IReadOnlyList<PlotTitleSegmentConfiguration> segments)
+    {
+        if (!SupportsPointLabelTab())
+        {
+            return _initial.ShowCalibrationPointLabels;
+        }
+
+        if (IsChromatogramPlot())
+        {
+            return segments.Any(static s => s.Enabled);
+        }
+
+        return GetSpecificBool(PlotSpecificSettingKind.CalibrationShowPointLabels);
     }
 
     private bool GetSpecificBool(PlotSpecificSettingKind kind)
     {
-        return SpecificGrid.Records
+        var record = SpecificGrid.Records
             .OfType<PlotSpecificSettingRecord>()
-            .FirstOrDefault(r => r.Setting == kind)?
-            .BoolValue ?? false;
+            .FirstOrDefault(r => r.Setting == kind);
+        if (record is not null)
+        {
+            return record.BoolValue;
+        }
+
+        return kind switch
+        {
+            PlotSpecificSettingKind.ShowTitle => _initial.ShowTitle,
+            PlotSpecificSettingKind.ShowXAxis => _initial.ShowXAxis,
+            PlotSpecificSettingKind.ShowYAxis => _initial.ShowYAxis,
+            PlotSpecificSettingKind.ShowXAxisTitle => _initial.ShowXAxisTitle,
+            PlotSpecificSettingKind.ShowYAxisTitle => _initial.ShowYAxisTitle,
+            PlotSpecificSettingKind.ChromatogramShowPeaks => _initial.ChromatogramShowPeaks,
+            PlotSpecificSettingKind.ChromatogramShowExpectedRtLine => _initial.ChromatogramShowExpectedRtLine,
+            PlotSpecificSettingKind.ChromatogramShowRtLimitLines => _initial.ChromatogramShowRtLimitLines,
+            PlotSpecificSettingKind.ChromatogramShowSelectionCorrectedRtOnTic => _initial.ChromatogramShowSelectionCorrectedRtOnTic,
+            PlotSpecificSettingKind.CalibrationShowRegression => _initial.CalibrationShowRegression,
+            PlotSpecificSettingKind.CalibrationShowPointLabels => _initial.ShowCalibrationPointLabels,
+            PlotSpecificSettingKind.SpectrumNormalizeIntensity => _initial.SpectrumNormalizeIntensity,
+            _ => false,
+        };
     }
 
     private string GetSpecificText(PlotSpecificSettingKind kind)
     {
-        return SpecificGrid.Records
+        var record = SpecificGrid.Records
             .OfType<PlotSpecificSettingRecord>()
-            .FirstOrDefault(r => r.Setting == kind)?
-            .TextValue ?? string.Empty;
+            .FirstOrDefault(r => r.Setting == kind);
+        if (record is not null)
+        {
+            return record.TextValue;
+        }
+
+        return kind switch
+        {
+            PlotSpecificSettingKind.Label => _initial.Label,
+            PlotSpecificSettingKind.XAxisTitle => _initial.XAxisTitle,
+            PlotSpecificSettingKind.YAxisTitle => _initial.YAxisTitle,
+            PlotSpecificSettingKind.XAxisFormat => _initial.XAxisLabelFormat,
+            PlotSpecificSettingKind.YAxisFormat => _initial.YAxisLabelFormat,
+            PlotSpecificSettingKind.TitleFontSize => _initial.TitleFontSize.ToString("0.##", CultureInfo.InvariantCulture),
+            PlotSpecificSettingKind.AxisFontSize => _initial.AxisFontSize.ToString("0.##", CultureInfo.InvariantCulture),
+            PlotSpecificSettingKind.PeakLabelRotate => _initial.PeakLabelRotate.ToString(CultureInfo.InvariantCulture),
+            _ => string.Empty,
+        };
+    }
+
+    private int GetSpecificInt(PlotSpecificSettingKind kind, int fallback)
+    {
+        var text = GetSpecificText(kind);
+        return int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : fallback;
     }
 
     private double GetSpecificDouble(PlotSpecificSettingKind kind, double fallback, double min, double max)
@@ -501,31 +560,77 @@ public partial class PlotConfigurationDialog : Window
         SpecificGrid.Fields.Add(new PlotSpecificValueField());
     }
 
+    private bool IsChromatogramPlot() => _initial.PlotTypeKey == "Chromatogram";
+
+    private bool IsSampleTicPlot() =>
+        _initial is HostedChromatogramFieldView chrom
+        && HostedChromatogramFieldView.IsSampleTicPlot(chrom.SourceMemberName);
+
+    private bool IncludesPlotSpecificSetting(PlotSpecificSettingKind kind)
+    {
+        if (IsChromatogramPlot() && kind is
+            PlotSpecificSettingKind.Label
+            or PlotSpecificSettingKind.ShowTitle
+            or PlotSpecificSettingKind.CalibrationShowPointLabels)
+        {
+            return false;
+        }
+
+        if (IsSampleTicPlot() && kind is
+            PlotSpecificSettingKind.ChromatogramShowExpectedRtLine
+            or PlotSpecificSettingKind.ChromatogramShowRtLimitLines
+            or PlotSpecificSettingKind.XAxisFormat
+            or PlotSpecificSettingKind.YAxisFormat)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private void AddPlotSpecificSetting(PlotSpecificSettingRecord record)
+    {
+        if (IncludesPlotSpecificSetting(record.Setting))
+        {
+            SpecificGrid.Records.Add(record);
+        }
+    }
+
     private void SeedSpecificRows()
     {
         SpecificGrid.Records.Clear();
-        SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+        AddPlotSpecificSetting(new PlotSpecificSettingRecord(
             PlotSpecificSettingKind.Label, "General", "Plot label", textValue: _initial.Label));
-        SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+        AddPlotSpecificSetting(new PlotSpecificSettingRecord(
             PlotSpecificSettingKind.ShowTitle, "Title", "Show title", boolValue: _initial.ShowTitle));
-        SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+        AddPlotSpecificSetting(new PlotSpecificSettingRecord(
             PlotSpecificSettingKind.TitleFontSize, "Title", "Font size", textValue: _initial.TitleFontSize.ToString("0.##", CultureInfo.InvariantCulture)));
         if (_initial.PlotTypeKey == "Chromatogram")
         {
-            SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+            AddPlotSpecificSetting(new PlotSpecificSettingRecord(
                 PlotSpecificSettingKind.CalibrationShowPointLabels,
                 "Peak labels",
                 "Show peak labels and connector lines",
                 boolValue: _initial.ShowCalibrationPointLabels));
-            SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+            AddPlotSpecificSetting(new PlotSpecificSettingRecord(
                 PlotSpecificSettingKind.ChromatogramShowPeaks, "Type", "Show peak fill", boolValue: _initial.ChromatogramShowPeaks));
-            SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+            AddPlotSpecificSetting(new PlotSpecificSettingRecord(
                 PlotSpecificSettingKind.ChromatogramShowExpectedRtLine, "Markers", "Show expected RT line (corrected)", boolValue: _initial.ChromatogramShowExpectedRtLine));
-            SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+            AddPlotSpecificSetting(new PlotSpecificSettingRecord(
                 PlotSpecificSettingKind.ChromatogramShowRtLimitLines, "Markers", "Show RT limit lines (±TimeWindow/2 on corrected RT)", boolValue: _initial.ChromatogramShowRtLimitLines));
+            if (_initial is HostedChromatogramFieldView { SourceMemberName: var chromMember }
+                && HostedChromatogramFieldView.UsesFixedPeakLabelOverlayDrawing(chromMember))
+            {
+                AddPlotSpecificSetting(new PlotSpecificSettingRecord(
+                    PlotSpecificSettingKind.PeakLabelRotate,
+                    "General",
+                    "Rotate labels (°)",
+                    textValue: _initial.PeakLabelRotate.ToString(CultureInfo.InvariantCulture)));
+            }
+
             if (_initial is HostedChromatogramFieldView { SourceMemberName: "TotalIon" })
             {
-                SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+                AddPlotSpecificSetting(new PlotSpecificSettingRecord(
                     PlotSpecificSettingKind.ChromatogramShowSelectionCorrectedRtOnTic,
                     "Markers",
                     "Show compound-selection corrected RT on TIC",
@@ -548,24 +653,24 @@ public partial class PlotConfigurationDialog : Window
                 PlotSpecificSettingKind.SpectrumNormalizeIntensity, "Type", "Normalize intensity", boolValue: _initial.SpectrumNormalizeIntensity));
         }
 
-        SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+        AddPlotSpecificSetting(new PlotSpecificSettingRecord(
             PlotSpecificSettingKind.ShowXAxis, "X axis", "Show axis", boolValue: _initial.ShowXAxis));
-        SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+        AddPlotSpecificSetting(new PlotSpecificSettingRecord(
             PlotSpecificSettingKind.ShowXAxisTitle, "X axis", "Show title", boolValue: _initial.ShowXAxisTitle));
-        SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+        AddPlotSpecificSetting(new PlotSpecificSettingRecord(
             PlotSpecificSettingKind.XAxisTitle, "X axis", "Title", textValue: _initial.XAxisTitle));
-        SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+        AddPlotSpecificSetting(new PlotSpecificSettingRecord(
             PlotSpecificSettingKind.XAxisFormat, "X axis", "Format", textValue: _initial.XAxisLabelFormat));
 
-        SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+        AddPlotSpecificSetting(new PlotSpecificSettingRecord(
             PlotSpecificSettingKind.ShowYAxis, "Y axis", "Show axis", boolValue: _initial.ShowYAxis));
-        SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+        AddPlotSpecificSetting(new PlotSpecificSettingRecord(
             PlotSpecificSettingKind.ShowYAxisTitle, "Y axis", "Show title", boolValue: _initial.ShowYAxisTitle));
-        SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+        AddPlotSpecificSetting(new PlotSpecificSettingRecord(
             PlotSpecificSettingKind.YAxisTitle, "Y axis", "Title", textValue: _initial.YAxisTitle));
-        SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+        AddPlotSpecificSetting(new PlotSpecificSettingRecord(
             PlotSpecificSettingKind.YAxisFormat, "Y axis", "Format", textValue: _initial.YAxisLabelFormat));
-        SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+        AddPlotSpecificSetting(new PlotSpecificSettingRecord(
             PlotSpecificSettingKind.AxisFontSize, "Axes", "Font size", textValue: _initial.AxisFontSize.ToString("0.##", CultureInfo.InvariantCulture)));
     }
 
@@ -589,7 +694,8 @@ public partial class PlotConfigurationDialog : Window
         XAxisFormat,
         YAxisFormat,
         AxisFontSize,
-        TitleFontSize
+        TitleFontSize,
+        PeakLabelRotate
     }
 
     private sealed class PlotTitleFieldEditRecord
@@ -726,13 +832,23 @@ public partial class PlotConfigurationDialog : Window
                 return EmptyOptions;
             }
 
-            return r.Setting is PlotSpecificSettingKind.XAxisFormat or PlotSpecificSettingKind.YAxisFormat
-                ? FormatEditor.Options
-                : EmptyOptions;
+            return r.Setting switch
+            {
+                PlotSpecificSettingKind.XAxisFormat or PlotSpecificSettingKind.YAxisFormat => FormatEditor.Options,
+                PlotSpecificSettingKind.PeakLabelRotate => PlotPeakLabelRotation.DegreeOptionStrings.ToArray(),
+                _ => EmptyOptions
+            };
         }
 
         public bool TryGetOptionExample(object? recordSource, string option, out string example)
         {
+            if (recordSource is PlotSpecificSettingRecord r
+                && r.Setting == PlotSpecificSettingKind.PeakLabelRotate)
+            {
+                example = string.Empty;
+                return false;
+            }
+
             if (FormatEditor is IGriddoContextualOptionsCellEditor contextual)
             {
                 return contextual.TryGetOptionExample(recordSource, option, out example);

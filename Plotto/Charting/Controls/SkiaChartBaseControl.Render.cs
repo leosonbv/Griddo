@@ -147,6 +147,20 @@ public abstract partial class SkiaChartBaseControl
         return titleBand;
     }
 
+    /// <summary>Plot area used for series/overlay drawing (matches <see cref="DrawChart"/> after title band).</summary>
+    protected SKRect GetDrawPlotRect()
+    {
+        EnsurePlotGeometrySync();
+        var plotRect = PlotRect;
+        var titleBand = MeasureChartTitleTopInsetPixels(plotRect);
+        if (titleBand <= 0.5f)
+        {
+            return plotRect;
+        }
+
+        return new SKRect(plotRect.Left, plotRect.Top + titleBand, plotRect.Right, plotRect.Bottom);
+    }
+
     private SKRect DrawChartTitle(SKCanvas canvas, SKRect plotRect)
     {
         var titleBand = MeasureChartTitleTopInsetPixels(plotRect);

@@ -124,6 +124,10 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
                && char.IsDigit(sourceMemberName[1]);
     }
 
+    /// <summary>Sample total-ion chromatogram (<c>TotalIon</c> member on sample or compound rows).</summary>
+    public static bool IsSampleTicPlot(string? sourceMemberName) =>
+        string.Equals(sourceMemberName, "TotalIon", StringComparison.Ordinal);
+
     public object? GetValue(object recordSource) => null;
     public bool TrySetValue(object recordSource, object? value) => false;
     public string FormatValue(object? value) => string.Empty;
@@ -170,11 +174,6 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
             chart.SuppressAutomaticViewportFitOnNextPointsChange = points.Count > 0;
             chart.SetValue(SkiaChartBaseControl.PointsProperty, pointsValue);
             SyncDefaultMethodRtViewport(chart, recordSource);
-            var restored = HostedPlotViewportMemory.TryRestore(recordSource, plotKey, chart, ViewportZoomRecordKey);
-            if (!restored && chart.Points.Count > 0)
-            {
-                FitChromatogramViewport(chart, recordSource);
-            }
         }
 
         ApplyChartSettings(chart, recordSource);
@@ -192,7 +191,23 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
 
         if (recordChanged)
         {
-            HostedPlotViewportMemory.ScheduleDeferredTryRestore(host, recordSource, plotKey, chart, ViewportZoomRecordKey);
+            var restored = HostedPlotViewportMemory.TryRestore(recordSource, plotKey, chart, ViewportZoomRecordKey);
+            if (!restored && chart.Points.Count > 0)
+            {
+                FitChromatogramViewport(chart, recordSource);
+            }
+
+            if (chart is ChromatogramControl chromViewport)
+            {
+                chromViewport.FinalizeViewportForInitialDisplay();
+            }
+
+            HostedPlotViewportMemory.ScheduleDeferredViewportFinalize(
+                host,
+                recordSource,
+                plotKey,
+                chart,
+                ViewportZoomRecordKey);
         }
     }
 
@@ -407,8 +422,11 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         if (chart is ChromatogramControl chromatogram)
         {
             chromatogram.ShowPeakRegionFill = ChromatogramShowPeaks;
-            chromatogram.ShowPeakLabels = ShowCalibrationPointLabels;
+            chromatogram.ShowPeakLabels = ShowCalibrationPointLabels
+                                          || PlotHostedVisibility.HasEnabledSegments(CalibrationPointLabelSegments);
             chromatogram.PeakLabelFontSize = Math.Clamp(AxisFontSize * 0.85, 6d, 22d);
+            chromatogram.PeakLabelRotate = PlotPeakLabelRotation.Normalize(PeakLabelRotate);
+            chromatogram.PeakLabelTicOverlayMode = UsesFixedPeakLabelOverlayDrawing(SourceMemberName);
             chromatogram.SetPeakOverlayColors(
                 new SkiaSharp.SKColor(SelectedPeakOverlayColor.R, SelectedPeakOverlayColor.G, SelectedPeakOverlayColor.B, SelectedPeakOverlayColor.A),
                 new SkiaSharp.SKColor(AlternativePeakOverlayColor.R, AlternativePeakOverlayColor.G, AlternativePeakOverlayColor.B, AlternativePeakOverlayColor.A),
@@ -421,8 +439,7 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
 
     private IReadOnlyList<ChromatogramPeakLabel> BuildPeakLabels(ChromatogramControl chart, object recordSource)
     {
-        if (!ShowCalibrationPointLabels
-            || !PlotHostedVisibility.HasEnabledSegments(CalibrationPointLabelSegments))
+        if (!PlotHostedVisibility.HasEnabledSegments(CalibrationPointLabelSegments))
         {
             return Array.Empty<ChromatogramPeakLabel>();
         }
@@ -513,6 +530,7 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
                 }
 
                 plain = BuildPeakLabelPlainText(row);
+                var peakFound = true;
                 if (string.IsNullOrWhiteSpace(plain)
                     || !ticProvider.TryGetPeakOverlayLabelAnchor(
                         recordSource,
@@ -520,10 +538,18 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
                         overlayShapePoints,
                         out x,
                         out y,
-                        out _))
+                        out peakFound))
                 {
                     return;
                 }
+
+                if (!seen.Add((Math.Round(x, 6), Math.Round(y, 6))))
+                {
+                    return;
+                }
+
+                labels.Add(new ChromatogramPeakLabel(x, y, plain, peakFound));
+                return;
             }
             else if (_signalProvider is IFixedPeakLabelAnchorProvider anchorProvider
                      && _signalProvider is IFixedPeakLabelRecordProvider recordProvider)
@@ -535,6 +561,7 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
                 }
 
                 plain = BuildPeakLabelPlainText(row);
+                var peakFound = true;
                 if (string.IsNullOrWhiteSpace(plain)
                     || !anchorProvider.TryGetFixedPeakLabelAnchor(
                         recordSource,
@@ -542,10 +569,18 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
                         ordered,
                         out x,
                         out y,
-                        out _))
+                        out peakFound))
                 {
                     return;
                 }
+
+                if (!seen.Add((Math.Round(x, 6), Math.Round(y, 6))))
+                {
+                    return;
+                }
+
+                labels.Add(new ChromatogramPeakLabel(x, y, plain, peakFound));
+                return;
             }
             else
             {
@@ -561,9 +596,18 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
             labels.Add(new ChromatogramPeakLabel(x, y, plain));
         }
 
+        var primaryPeakLabelsOnly = _signalProvider is IFixedPeakLabelAnchorProvider
+                                    && _signalProvider is IFixedPeakLabelRecordProvider
+                                    && _signalProvider is not ITicPeakOverlayLabelProvider;
+
         foreach (var region in chart.IntegrationRegions)
         {
             TryAdd(region, null);
+        }
+
+        if (primaryPeakLabelsOnly)
+        {
+            return labels;
         }
 
         foreach (var region in chart.AlternativeIntegrationRegions)

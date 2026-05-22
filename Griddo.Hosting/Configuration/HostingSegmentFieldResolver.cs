@@ -30,6 +30,35 @@ public static class HostingSegmentFieldResolver
             }
         }
 
+        if (string.IsNullOrEmpty(sourceObjectName) && !string.IsNullOrEmpty(propertyName))
+        {
+            var matchIndex = -1;
+            for (var i = 0; i < allFields.Count; i++)
+            {
+                if (allFields[i] is not IGriddoFieldSourceMember member)
+                {
+                    continue;
+                }
+
+                if (!string.Equals(member.SourceMemberName.Trim(), propertyName, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (matchIndex >= 0)
+                {
+                    return -1;
+                }
+
+                matchIndex = i;
+            }
+
+            if (matchIndex >= 0)
+            {
+                return matchIndex;
+            }
+        }
+
         if (sourceFieldIndex >= 0 && sourceFieldIndex < allFields.Count)
         {
             return sourceFieldIndex;
