@@ -93,8 +93,14 @@ public sealed partial class Griddo
         }
 
         var field = Fields[_currentCell.FieldIndex];
-        if (field is IGriddoHostedFieldView)
+        if (field is IGriddoHostedFieldView hostedField)
         {
+            // For hosted fields that also declare edit constraints, respect the AllowCellEdit flag
+            if (field is IGriddoFieldEditableHeaderView editableField && !editableField.AllowCellEdit)
+            {
+                return;
+            }
+
             SetCurrentHostedCellEditMode(true);
             return;
         }

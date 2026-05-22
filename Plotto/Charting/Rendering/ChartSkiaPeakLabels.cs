@@ -281,6 +281,9 @@ internal static class ChartSkiaPeakLabels
         var bot = layout.BottomLocalY;
         var top = layout.TopLocalY;
 
+        // anchorX and anchorY are computed below after determining the 2 lowest rotated corners.
+
+        // For vertical alignment: the 2 lowest corners (after rotation) should be at apexPixelY - gap.
         // Always use center-bottom as AnchorLocal.
         var anchorLocalX = w * 0.5f;
         var anchorLocalY = bot;
@@ -311,23 +314,29 @@ internal static class ChartSkiaPeakLabels
         var tl_screenY = tl_relX * sinA + tl_relY * cosA;
 
         // Find the 2 corners with highest screen Y (lowest on screen).
+        // After rotation, bottom-left and bottom-right are the original bottom corners.
         var corners = new[] { (bl_screenX, bl_screenY), (br_screenX, br_screenY), (tr_screenX, tr_screenY), (tl_screenX, tl_screenY) };
         System.Array.Sort(corners, (a, b) => b.Item2.CompareTo(a.Item2));
 
-        // Take the 2 with highest Y (within tolerance).
-        const float tolerance = 0.05f;
+        // Take exactly the 2 with highest Y values (the 2 lowest corners on screen).
+        var lowestY = corners[0].Item2;
         var lowest = new List<(float screenX, float screenY)>();
-        for (var i = 0; i < corners.Length && i < 2; i++)
+        for (var i = 0; i < corners.Length; i++)
         {
-            if (i == 0 || corners[i].Item2 >= corners[0].Item2 - tolerance)
+            if (corners[i].Item2 >= lowestY - 0.05f)  // Allow small tolerance for floating point
             {
                 lowest.Add(corners[i]);
             }
+            if (lowest.Count >= 2)
+            {
+                break;
+            }
         }
 
-        if (lowest.Count == 0)
+        if (lowest.Count < 2)
         {
-            return false;
+            // Fallback: just take the first 2 sorted corners
+            lowest = new List<(float screenX, float screenY)> { corners[0], corners[1] };
         }
 
         // Average screen offset of the 2 lowest corners.
@@ -342,7 +351,9 @@ internal static class ChartSkiaPeakLabels
         var avgScreenX = sumScreenX / lowest.Count;
         var avgScreenY = sumScreenY / lowest.Count;
 
-        // Place anchor so average screen position of the 2 lowest corners = (apexPixelX, apexPixelY - gap).
+        // Position the anchor so that:
+        // - The average X of the 2 lowest rotated corners is aligned with the apex X.
+        // - The average Y of the 2 lowest rotated corners is at apexPixelY - gap.
         var anchorX = apexPixelX - avgScreenX;
         var anchorY = apexPixelY - gap - avgScreenY;
 

@@ -372,6 +372,18 @@ public sealed partial class Griddo
                     return;
                 }
 
+                // For hosted fields that also declare edit constraints, respect the AllowCellEdit flag
+                if (Fields[clicked.FieldIndex] is IGriddoFieldEditableHeaderView editableHosted && !editableHosted.AllowCellEdit)
+                {
+                    _selectedCells.Clear();
+                    _selectedCells.Add(clicked);
+                    AssignCurrentCell(clicked);
+                    _isDraggingSelection = false;
+                    InvalidateVisual();
+                    CompleteMouseDown(e, handled: true);
+                    return;
+                }
+
                 _selectedCells.Clear();
                 _selectedCells.Add(clicked);
                 AssignCurrentCell(clicked);
@@ -1650,7 +1662,10 @@ public sealed partial class Griddo
                 && _pendingHostedEditCell.IsValid
                 && _dragAnchorCell == _pendingHostedEditCell
                 && _dragCurrentCell == _pendingHostedEditCell
-                && _currentCell == _pendingHostedEditCell;
+                && _currentCell == _pendingHostedEditCell
+                && !(_pendingHostedEditCell.IsValid
+                    && Fields[_pendingHostedEditCell.FieldIndex] is IGriddoFieldEditableHeaderView editableField
+                    && !editableField.AllowCellEdit);
             _isDraggingSelection = false;
             if (IsMouseCaptured)
             {
