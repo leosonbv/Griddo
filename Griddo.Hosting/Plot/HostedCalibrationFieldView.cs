@@ -18,6 +18,12 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
     private readonly ICalibrationSignalProvider _signalProvider;
     private readonly Func<IReadOnlyList<IGriddoFieldView>>? _allFieldsAccessor;
 
+    // Cached resolved segment bindings — computed once per unique (field-list, segments-list) pair.
+    private (IGriddoFieldView field, IGriddoFieldView displayField)?[]? _titleBindings;
+    private List<PlotTitleSegmentConfiguration>? _titleBindingsKey;
+    private (IGriddoFieldView field, IGriddoFieldView displayField)?[]? _calPointLabelBindings;
+    private List<PlotTitleSegmentConfiguration>? _calPointLabelBindingsKey;
+
     public HostedCalibrationFieldView(
         string header,
         double width,
@@ -341,10 +347,9 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
                     plain = PlotTitleHtmlBuilder.BuildCalibrationPointLabelPlainText(
                         recordSource,
                         i,
-                        _allFieldsAccessor,
                         CalibrationPointLabelSegments,
-                        _signalProvider,
-                        CalibrationPointLabelFieldsAccessor);
+                        GetCalPointLabelBindings(),
+                        _signalProvider);
                 }
                 else
                 {
@@ -431,6 +436,31 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
         return true;
     }
 
+    private (IGriddoFieldView field, IGriddoFieldView displayField)?[] GetTitleBindings()
+    {
+        if (!ReferenceEquals(_titleBindingsKey, TitleSegments) || _titleBindings is null)
+        {
+            var allFields = _allFieldsAccessor?.Invoke() ?? [];
+            _titleBindings = HostingSegmentFieldResolver.ResolveAll(TitleSegments, allFields, allFields);
+            _titleBindingsKey = TitleSegments;
+        }
+
+        return _titleBindings;
+    }
+
+    private (IGriddoFieldView field, IGriddoFieldView displayField)?[] GetCalPointLabelBindings()
+    {
+        if (!ReferenceEquals(_calPointLabelBindingsKey, CalibrationPointLabelSegments) || _calPointLabelBindings is null)
+        {
+            var hostingFields = _allFieldsAccessor?.Invoke() ?? [];
+            var resolveFields = CalibrationPointLabelFieldsAccessor?.Invoke() ?? hostingFields;
+            _calPointLabelBindings = HostingSegmentFieldResolver.ResolveAll(CalibrationPointLabelSegments, resolveFields, hostingFields);
+            _calPointLabelBindingsKey = CalibrationPointLabelSegments;
+        }
+
+        return _calPointLabelBindings;
+    }
+
     private void ApplyCurveOverlay(CalibrationCurveControl chart, object recordSource)
     {
         var samples = _signalProvider.GetCurveLineSamples(recordSource, 160);
@@ -470,7 +500,9 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
             }
         }
 
-        chart.ChartTitle = PlotTitleHtmlBuilder.BuildTitleHtml(recordSource, _allFieldsAccessor, TitleSegments);
+        chart.ChartTitle = recordSource is null
+            ? string.Empty
+            : PlotTitleHtmlBuilder.BuildTitleHtml(recordSource, TitleSegments, GetTitleBindings());
         chart.ShowChartTitle = ShowTitle;
         chart.AxisLabelX = ShowXAxisTitle ? xTitle : string.Empty;
         chart.AxisLabelY = ShowYAxisTitle ? yTitle : string.Empty;

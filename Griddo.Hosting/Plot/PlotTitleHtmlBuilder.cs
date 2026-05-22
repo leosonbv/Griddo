@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using Griddo.Abstractions.Fields;
 using Griddo.Hosting.Abstractions;
@@ -8,6 +9,41 @@ using Griddo.Hosting.Configuration;
 namespace Griddo.Hosting.Plot;
 
 internal readonly record struct PreformattedSegmentValue(string Text);
+
+/// <summary>
+/// Caches resolved <c>(field, displayField)</c> bindings per <c>(resolveFields, hostingFields, segments)</c> triplet.
+/// Field lists and segment lists are stable at runtime, so resolution is paid exactly once per unique combination.
+/// </summary>
+internal static class SegmentBindingCache
+{
+    // Outer key: resolveFields instance. Inner key: (hostingFields, segments) tuple.
+    private static readonly ConditionalWeakTable<IReadOnlyList<IGriddoFieldView>,
+        Dictionary<(IReadOnlyList<IGriddoFieldView>, IReadOnlyList<PlotTitleSegmentConfiguration>),
+            (IGriddoFieldView field, IGriddoFieldView displayField)?[]>> _cache = new();
+
+    /// <summary>
+    /// Returns a cached array of <c>(field, displayField)?</c>, one entry per segment in <paramref name="segments"/>.
+    /// A <c>null</c> entry means the segment could not be resolved.
+    /// </summary>
+    public static (IGriddoFieldView field, IGriddoFieldView displayField)?[] Get(
+        IReadOnlyList<IGriddoFieldView> resolveFields,
+        IReadOnlyList<IGriddoFieldView> hostingFields,
+        IReadOnlyList<PlotTitleSegmentConfiguration> segments)
+    {
+        var inner = _cache.GetOrCreateValue(resolveFields);
+        var key = (hostingFields, segments);
+        lock (inner)
+        {
+            if (!inner.TryGetValue(key, out var bindings))
+            {
+                bindings = HostingSegmentFieldResolver.ResolveAll(segments, resolveFields, hostingFields);
+                inner[key] = bindings;
+            }
+
+            return bindings;
+        }
+    }
+}
 
 internal static class PlotTitleHtmlBuilder
 {
@@ -27,19 +63,25 @@ internal static class PlotTitleHtmlBuilder
         }
 
         var allFields = allFieldsAccessor();
-        return BuildComposedHtml(
-            titleSegments,
-            segment =>
-            {
-                var resolved = ResolveSegment(segment, allFields, allFields);
-                if (resolved is null)
-                {
-                    return null;
-                }
+        var bindings = SegmentBindingCache.Get(allFields, allFields, titleSegments);
+        return BuildComposedHtml(titleSegments, bindings, i => bindings[i]?.field.GetValue(recordSource));
+    }
 
-                var (field, displayField) = resolved.Value;
-                return (field, displayField, () => field.GetValue(recordSource));
-            });
+    /// <summary>
+    /// Fast overload: caller supplies pre-resolved <paramref name="bindings"/> from its own cache field —
+    /// no dictionary lookup, no allocation.
+    /// </summary>
+    internal static string BuildTitleHtml(
+        object? recordSource,
+        IReadOnlyList<PlotTitleSegmentConfiguration> titleSegments,
+        (IGriddoFieldView field, IGriddoFieldView displayField)?[] bindings)
+    {
+        if (recordSource is null)
+        {
+            return string.Empty;
+        }
+
+        return BuildComposedHtml(titleSegments, bindings, i => bindings[i]?.field.GetValue(recordSource));
     }
 
     public static string BuildCalibrationPointLabelHtml(
@@ -58,38 +100,18 @@ internal static class PlotTitleHtmlBuilder
         var hostingFields = allFieldsAccessor();
         var resolveFields = calibrationLabelFieldsAccessor?.Invoke() ?? hostingFields;
         var pointRow = signalProvider.TryGetCalibrationPointLabelRecord(recordSource, pointIndex);
+        var bindings = SegmentBindingCache.Get(resolveFields, hostingFields, titleSegments);
 
-        return BuildComposedHtml(
-            titleSegments,
-            segment =>
-            {
-                var resolved = ResolveSegment(segment, resolveFields, hostingFields);
-                if (resolved is null)
-                {
-                    return null;
-                }
-
-                var (field, displayField) = resolved.Value;
-                return (field, displayField, () =>
-                {
-                    var plainOverride = signalProvider.TryGetCalibrationPointSegmentPlainValue(
-                        recordSource,
-                        pointIndex,
-                        segment,
-                        field);
-                    if (plainOverride != null)
-                    {
-                        return new PreformattedSegmentValue(plainOverride);
-                    }
-
-                    if (pointRow is null)
-                    {
-                        return null;
-                    }
-
-                    return field.GetValue(pointRow);
-                });
-            });
+        return BuildComposedHtml(titleSegments, bindings, i =>
+        {
+            var b = bindings[i];
+            if (b is null) return null;
+            var field = b.Value.field;
+            var seg = titleSegments[i];
+            var plainOverride = signalProvider.TryGetCalibrationPointSegmentPlainValue(recordSource, pointIndex, seg, field);
+            if (plainOverride != null) return new PreformattedSegmentValue(plainOverride);
+            return pointRow is null ? null : field.GetValue(pointRow);
+        });
     }
 
     public static string BuildRecordLabelPlainText(
@@ -103,19 +125,8 @@ internal static class PlotTitleHtmlBuilder
         }
 
         var allFields = allFieldsAccessor();
-        return BuildComposedPlainText(
-            segments,
-            segment =>
-            {
-                var resolved = ResolveSegment(segment, allFields, allFields);
-                if (resolved is null)
-                {
-                    return null;
-                }
-
-                var (field, displayField) = resolved.Value;
-                return (field, displayField, () => field.GetValue(recordSource));
-            });
+        var bindings = SegmentBindingCache.Get(allFields, allFields, segments);
+        return BuildComposedPlainText(segments, bindings, i => bindings[i]?.field.GetValue(recordSource));
     }
 
     public static string BuildPeakLabelPlainText(
@@ -131,20 +142,24 @@ internal static class PlotTitleHtmlBuilder
 
         var hostingFields = allFieldsAccessor();
         var resolveFields = labelFieldsAccessor?.Invoke() ?? hostingFields;
+        var bindings = SegmentBindingCache.Get(resolveFields, hostingFields, segments);
+        return BuildComposedPlainText(segments, bindings, i => bindings[i]?.field.GetValue(labelRecord));
+    }
 
-        return BuildComposedPlainText(
-            segments,
-            segment =>
-            {
-                var resolved = ResolveSegment(segment, resolveFields, hostingFields);
-                if (resolved is null)
-                {
-                    return null;
-                }
+    /// <summary>
+    /// Fast overload: caller supplies pre-resolved <paramref name="bindings"/> from its own cache field.
+    /// </summary>
+    internal static string BuildPeakLabelPlainText(
+        object? labelRecord,
+        IReadOnlyList<PlotTitleSegmentConfiguration> segments,
+        (IGriddoFieldView field, IGriddoFieldView displayField)?[] bindings)
+    {
+        if (labelRecord is null)
+        {
+            return string.Empty;
+        }
 
-                var (field, displayField) = resolved.Value;
-                return (field, displayField, () => field.GetValue(labelRecord));
-            });
+        return BuildComposedPlainText(segments, bindings, i => bindings[i]?.field.GetValue(labelRecord));
     }
 
     public static string BuildCalibrationPointLabelPlainText(
@@ -163,90 +178,71 @@ internal static class PlotTitleHtmlBuilder
         var hostingFields = allFieldsAccessor();
         var resolveFields = calibrationLabelFieldsAccessor?.Invoke() ?? hostingFields;
         var pointRow = signalProvider.TryGetCalibrationPointLabelRecord(recordSource, pointIndex);
+        var bindings = SegmentBindingCache.Get(resolveFields, hostingFields, segments);
 
-        return BuildComposedPlainText(
-            segments,
-            segment =>
-            {
-                var resolved = ResolveSegment(segment, resolveFields, hostingFields);
-                if (resolved is null)
-                {
-                    return null;
-                }
-
-                var (field, displayField) = resolved.Value;
-                return (field, displayField, () =>
-                {
-                    var plainOverride = signalProvider.TryGetCalibrationPointSegmentPlainValue(
-                        recordSource,
-                        pointIndex,
-                        segment,
-                        field);
-                    if (plainOverride != null)
-                    {
-                        return new PreformattedSegmentValue(plainOverride);
-                    }
-
-                    if (pointRow is null)
-                    {
-                        return null;
-                    }
-
-                    return field.GetValue(pointRow);
-                });
-            });
-    }
-
-    private static (IGriddoFieldView field, IGriddoFieldView displayField)? ResolveSegment(
-        PlotTitleSegmentConfiguration segment,
-        IReadOnlyList<IGriddoFieldView> resolveFields,
-        IReadOnlyList<IGriddoFieldView> hostingFields)
-    {
-        var sourceFieldIndex = HostingSegmentFieldResolver.Resolve(
-            resolveFields,
-            segment.SourceObjectName,
-            segment.PropertyName,
-            segment.SourceFieldIndex);
-        if (sourceFieldIndex < 0 || sourceFieldIndex >= resolveFields.Count)
+        return BuildComposedPlainText(segments, bindings, i =>
         {
-            return null;
-        }
-
-        var field = resolveFields[sourceFieldIndex];
-        var hostingFieldIndex = HostingSegmentFieldResolver.Resolve(
-            hostingFields,
-            segment.SourceObjectName,
-            segment.PropertyName,
-            segment.SourceFieldIndex);
-        var displayField = hostingFieldIndex >= 0 && hostingFieldIndex < hostingFields.Count
-            ? hostingFields[hostingFieldIndex]
-            : field;
-        return (field, displayField);
+            var b = bindings[i];
+            if (b is null) return null;
+            var field = b.Value.field;
+            var seg = segments[i];
+            var plainOverride = signalProvider.TryGetCalibrationPointSegmentPlainValue(recordSource, pointIndex, seg, field);
+            if (plainOverride != null) return new PreformattedSegmentValue(plainOverride);
+            return pointRow is null ? null : field.GetValue(pointRow);
+        });
     }
 
-    private static string BuildComposedHtml(
+    /// <summary>
+    /// Fast overload: caller supplies pre-resolved <paramref name="bindings"/> from its own cache field.
+    /// </summary>
+    internal static string BuildCalibrationPointLabelPlainText(
+        object? recordSource,
+        int pointIndex,
         IReadOnlyList<PlotTitleSegmentConfiguration> segments,
-        Func<PlotTitleSegmentConfiguration, (IGriddoFieldView field, IGriddoFieldView displayField, Func<object?> getValue)?> resolveSegment)
+        (IGriddoFieldView field, IGriddoFieldView displayField)?[] bindings,
+        ICalibrationSignalProvider signalProvider)
     {
-        var enabled = segments.Where(static s => s.Enabled).ToList();
-        if (enabled.Count == 0)
+        if (recordSource is null)
         {
             return string.Empty;
         }
 
+        var pointRow = signalProvider.TryGetCalibrationPointLabelRecord(recordSource, pointIndex);
+        return BuildComposedPlainText(segments, bindings, i =>
+        {
+            var b = bindings[i];
+            if (b is null) return null;
+            var field = b.Value.field;
+            var seg = segments[i];
+            var plainOverride = signalProvider.TryGetCalibrationPointSegmentPlainValue(recordSource, pointIndex, seg, field);
+            if (plainOverride != null) return new PreformattedSegmentValue(plainOverride);
+            return pointRow is null ? null : field.GetValue(pointRow);
+        });
+    }
+
+    private static string BuildComposedHtml(
+        IReadOnlyList<PlotTitleSegmentConfiguration> segments,
+        (IGriddoFieldView field, IGriddoFieldView displayField)?[] bindings,
+        Func<int, object?> getValue)
+    {
         var tableRows = new List<string>();
         var rowCells = new List<string>();
         var isFirstTableRow = true;
-        foreach (var segment in enabled)
+        for (var i = 0; i < segments.Count; i++)
         {
-            var resolved = resolveSegment(segment);
-            if (resolved is null)
+            var segment = segments[i];
+            if (!segment.Enabled)
             {
                 continue;
             }
 
-            var (field, displayField, getValue) = resolved.Value;
-            if (!TryBuildTableCells(segment, field, displayField, getValue(), out var cells))
+            var b = bindings[i];
+            if (b is null)
+            {
+                continue;
+            }
+
+            if (!TryBuildTableCells(segment, b.Value.field, b.Value.displayField, getValue(i), out var cells))
             {
                 continue;
             }
@@ -273,33 +269,33 @@ internal static class PlotTitleHtmlBuilder
               + "</tbody></table>";
     }
 
-    private static string FormatTitleTableRow(IReadOnlyList<string> cells, bool breakBefore) =>
+            private static string FormatTitleTableRow(IReadOnlyList<string> cells, bool breakBefore) =>
         breakBefore
             ? $"<tr data-break-before='1'>{string.Join(string.Empty, cells)}</tr>"
             : $"<tr>{string.Join(string.Empty, cells)}</tr>";
 
     private static string BuildComposedPlainText(
         IReadOnlyList<PlotTitleSegmentConfiguration> segments,
-        Func<PlotTitleSegmentConfiguration, (IGriddoFieldView field, IGriddoFieldView displayField, Func<object?> getValue)?> resolveSegment)
+        (IGriddoFieldView field, IGriddoFieldView displayField)?[] bindings,
+        Func<int, object?> getValue)
     {
-        var enabled = segments.Where(static s => s.Enabled).ToList();
-        if (enabled.Count == 0)
-        {
-            return string.Empty;
-        }
-
         var lines = new List<string>();
         var lineParts = new List<string>();
-        foreach (var segment in enabled)
+        for (var i = 0; i < segments.Count; i++)
         {
-            var resolved = resolveSegment(segment);
-            if (resolved is null)
+            var segment = segments[i];
+            if (!segment.Enabled)
             {
                 continue;
             }
 
-            var (field, displayField, getValue) = resolved.Value;
-            if (!TryBuildPlainPart(segment, field, displayField, getValue(), out var part))
+            var b = bindings[i];
+            if (b is null)
+            {
+                continue;
+            }
+
+            if (!TryBuildPlainPart(segment, b.Value.field, b.Value.displayField, getValue(i), out var part))
             {
                 continue;
             }

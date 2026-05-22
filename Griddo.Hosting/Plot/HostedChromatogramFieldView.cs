@@ -20,6 +20,12 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
     private readonly IChromatogramSignalProvider _signalProvider;
     private readonly Func<IReadOnlyList<IGriddoFieldView>>? _allFieldsAccessor;
 
+    // Cached resolved segment bindings — computed once per unique (field-list, segments-list) pair.
+    private (IGriddoFieldView field, IGriddoFieldView displayField)?[]? _titleBindings;
+    private List<PlotTitleSegmentConfiguration>? _titleBindingsKey;
+    private (IGriddoFieldView field, IGriddoFieldView displayField)?[]? _peakLabelBindings;
+    private List<PlotTitleSegmentConfiguration>? _peakLabelBindingsKey;
+
     public HostedChromatogramFieldView(
         string header,
         double width,
@@ -407,7 +413,9 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
 
     private void ApplyChartSettings(SkiaChartBaseControl chart, object? recordSource)
     {
-        chart.ChartTitle = PlotTitleHtmlBuilder.BuildTitleHtml(recordSource, _allFieldsAccessor, TitleSegments);
+        chart.ChartTitle = recordSource is null
+            ? string.Empty
+            : PlotTitleHtmlBuilder.BuildTitleHtml(recordSource, TitleSegments, GetTitleBindings());
         chart.ShowChartTitle = ShowTitle;
         chart.AxisLabelX = ShowXAxisTitle ? XAxisTitle : string.Empty;
         chart.AxisLabelY = ShowYAxisTitle ? YAxisTitle : string.Empty;
@@ -458,10 +466,7 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
             return Array.Empty<ChromatogramPeakLabel>();
         }
 
-        var plain = PlotTitleHtmlBuilder.BuildRecordLabelPlainText(
-            recordSource,
-            _allFieldsAccessor,
-            CalibrationPointLabelSegments);
+        var plain = PlotTitleHtmlBuilder.BuildPeakLabelPlainText(recordSource, CalibrationPointLabelSegments, GetPeakLabelBindings());
         if (string.IsNullOrWhiteSpace(plain))
         {
             return Array.Empty<ChromatogramPeakLabel>();
@@ -626,11 +631,32 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
     }
 
     private string BuildPeakLabelPlainText(object labelRecord) =>
-        PlotTitleHtmlBuilder.BuildPeakLabelPlainText(
-            labelRecord,
-            _allFieldsAccessor,
-            CalibrationPointLabelSegments,
-            PeakLabelFieldsAccessor);
+        PlotTitleHtmlBuilder.BuildPeakLabelPlainText(labelRecord, CalibrationPointLabelSegments, GetPeakLabelBindings());
+
+    private (IGriddoFieldView field, IGriddoFieldView displayField)?[] GetTitleBindings()
+    {
+        if (!ReferenceEquals(_titleBindingsKey, TitleSegments) || _titleBindings is null)
+        {
+            var allFields = _allFieldsAccessor?.Invoke() ?? [];
+            _titleBindings = HostingSegmentFieldResolver.ResolveAll(TitleSegments, allFields, allFields);
+            _titleBindingsKey = TitleSegments;
+        }
+
+        return _titleBindings;
+    }
+
+    private (IGriddoFieldView field, IGriddoFieldView displayField)?[] GetPeakLabelBindings()
+    {
+        if (!ReferenceEquals(_peakLabelBindingsKey, CalibrationPointLabelSegments) || _peakLabelBindings is null)
+        {
+            var hostingFields = _allFieldsAccessor?.Invoke() ?? [];
+            var resolveFields = PeakLabelFieldsAccessor?.Invoke() ?? hostingFields;
+            _peakLabelBindings = HostingSegmentFieldResolver.ResolveAll(CalibrationPointLabelSegments, resolveFields, hostingFields);
+            _peakLabelBindingsKey = CalibrationPointLabelSegments;
+        }
+
+        return _peakLabelBindings;
+    }
 
     private static bool TryGetPeakLabelAnchor(
         IntegrationRegion region,
