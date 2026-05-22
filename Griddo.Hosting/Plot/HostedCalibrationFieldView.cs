@@ -67,6 +67,7 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
     public bool CalibrationShowRegression { get; set; }
     public bool ShowCalibrationPointLabels { get; set; } = true;
     public List<PlotTitleSegmentConfiguration> CalibrationPointLabelSegments { get; set; } = [];
+    public int PeakLabelRotate { get; set; }
     public bool SpectrumNormalizeIntensity { get; set; }
 
     /// <summary>

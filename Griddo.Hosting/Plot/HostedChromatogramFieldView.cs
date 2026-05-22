@@ -75,7 +75,14 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
     public bool CalibrationShowRegression { get; set; }
     public bool ShowCalibrationPointLabels { get; set; }
     public List<PlotTitleSegmentConfiguration> CalibrationPointLabelSegments { get; set; } = [];
+    public int PeakLabelRotate { get; set; }
     public bool SpectrumNormalizeIntensity { get; set; }
+
+    /// <summary>
+    /// When set, peak label segments resolve against this field list (e.g. Quanto peak/response columns).
+    /// Defaults to the grid registry when null.
+    /// </summary>
+    public Func<IReadOnlyList<IGriddoFieldView>>? PeakLabelFieldsAccessor { get; set; }
 
     /// <summary>
     /// When set, viewport zoom is remembered per this string across navigations (same logical row can use new CLR instances).
@@ -90,6 +97,32 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
     public bool IsHtml => false;
     public TextAlignment ContentAlignment { get; }
     public IGriddoCellEditor Editor { get; }
+
+    /// <summary>
+    /// Chromatogram plots that use fixed overlay peak labels (TIC and quantification traces), not connector-based labels.
+    /// </summary>
+    public static bool UsesFixedPeakLabelOverlayDrawing(string? sourceMemberName)
+    {
+        if (string.IsNullOrEmpty(sourceMemberName))
+        {
+            return false;
+        }
+
+        if (string.Equals(sourceMemberName, "TotalIon", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (sourceMemberName is "QuantificationSignal" or "IstdSignal" or "QualifierSignal")
+        {
+            return true;
+        }
+
+        return sourceMemberName.EndsWith("Signal", StringComparison.Ordinal)
+               && sourceMemberName.Length >= 8
+               && sourceMemberName[0] == 'Q'
+               && char.IsDigit(sourceMemberName[1]);
+    }
 
     public object? GetValue(object recordSource) => null;
     public bool TrySetValue(object recordSource, object? value) => false;
@@ -389,6 +422,17 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
     private IReadOnlyList<ChromatogramPeakLabel> BuildPeakLabels(ChromatogramControl chart, object recordSource)
     {
         if (!ShowCalibrationPointLabels
+            || !PlotHostedVisibility.HasEnabledSegments(CalibrationPointLabelSegments))
+        {
+            return Array.Empty<ChromatogramPeakLabel>();
+        }
+
+        if (UsesFixedPeakLabelOverlayDrawing(SourceMemberName))
+        {
+            return BuildFixedOverlayPeakLabels(chart, recordSource);
+        }
+
+        if (!ShowCalibrationPointLabels
             || CalibrationPointLabelSegments.Count == 0
             || !CalibrationPointLabelSegments.Exists(static s => s.Enabled))
         {
@@ -443,6 +487,104 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
 
         return labels;
     }
+
+    private IReadOnlyList<ChromatogramPeakLabel> BuildFixedOverlayPeakLabels(
+        ChromatogramControl chart,
+        object recordSource)
+    {
+        var ordered = chart.Points.Count == 0
+            ? (IReadOnlyList<ChartPoint>)Array.Empty<ChartPoint>()
+            : chart.Points.OrderBy(static p => p.X).ToList();
+        var labels = new List<ChromatogramPeakLabel>();
+        var seen = new HashSet<(double X, double Y)>();
+
+        void TryAdd(IntegrationRegion region, IReadOnlyList<ChartPoint>? overlayShapePoints)
+        {
+            string plain;
+            double x;
+            double y;
+
+            if (_signalProvider is ITicPeakOverlayLabelProvider ticProvider)
+            {
+                var row = ticProvider.TryGetPeakOverlayLabelRecord(recordSource, region);
+                if (row is null)
+                {
+                    return;
+                }
+
+                plain = BuildPeakLabelPlainText(row);
+                if (string.IsNullOrWhiteSpace(plain)
+                    || !ticProvider.TryGetPeakOverlayLabelAnchor(
+                        recordSource,
+                        region,
+                        overlayShapePoints,
+                        out x,
+                        out y,
+                        out _))
+                {
+                    return;
+                }
+            }
+            else if (_signalProvider is IFixedPeakLabelAnchorProvider anchorProvider
+                     && _signalProvider is IFixedPeakLabelRecordProvider recordProvider)
+            {
+                var row = recordProvider.TryGetFixedPeakLabelRecord(recordSource, region);
+                if (row is null)
+                {
+                    return;
+                }
+
+                plain = BuildPeakLabelPlainText(row);
+                if (string.IsNullOrWhiteSpace(plain)
+                    || !anchorProvider.TryGetFixedPeakLabelAnchor(
+                        recordSource,
+                        region,
+                        ordered,
+                        out x,
+                        out y,
+                        out _))
+                {
+                    return;
+                }
+            }
+            else
+            {
+                return;
+            }
+
+            var key = (Math.Round(x, 6), Math.Round(y, 6));
+            if (!seen.Add(key))
+            {
+                return;
+            }
+
+            labels.Add(new ChromatogramPeakLabel(x, y, plain));
+        }
+
+        foreach (var region in chart.IntegrationRegions)
+        {
+            TryAdd(region, null);
+        }
+
+        foreach (var region in chart.AlternativeIntegrationRegions)
+        {
+            TryAdd(region, null);
+        }
+
+        foreach (var colored in chart.ColoredIntegrationRegions)
+        {
+            TryAdd(colored.Region, colored.ShapePoints);
+        }
+
+        return labels;
+    }
+
+    private string BuildPeakLabelPlainText(object labelRecord) =>
+        PlotTitleHtmlBuilder.BuildPeakLabelPlainText(
+            labelRecord,
+            _allFieldsAccessor,
+            CalibrationPointLabelSegments,
+            PeakLabelFieldsAccessor);
 
     private static bool TryGetPeakLabelAnchor(
         IntegrationRegion region,

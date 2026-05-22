@@ -37,5 +37,7 @@ public interface IPlotFieldLayoutTarget
     /// <summary>When true, calibration plots show HTML point labels and connector lines from markers to labels (content is configured on the Point labels tab).</summary>
     bool ShowCalibrationPointLabels { get; set; }
     List<PlotTitleSegmentConfiguration> CalibrationPointLabelSegments { get; set; }
+    /// <summary>Peak label rotation in degrees (0 = horizontal). Used by chromatogram plots with fixed overlay labels.</summary>
+    int PeakLabelRotate { get; set; }
     bool SpectrumNormalizeIntensity { get; set; }
 }

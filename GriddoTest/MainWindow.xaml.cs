@@ -2905,6 +2905,7 @@ public partial class MainWindow : Window
                 FormatString = s.FormatString ?? string.Empty
             })
             .ToList();
+        target.PeakLabelRotate = settings.PeakLabelRotate;
         target.SpectrumNormalizeIntensity = settings.SpectrumNormalizeIntensity;
     }
 

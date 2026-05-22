@@ -1,5 +1,6 @@
 using Griddo.Abstractions.Fields;
 using Griddo.Hosting.Configuration;
+using Plotto.Abstractions.Charting.Core;
 using Plotto.Charting.Core;
 
 namespace Griddo.Hosting.Abstractions;
@@ -53,6 +54,38 @@ public interface IChromatogramVerticalMarkersProvider
 public interface IChromatogramMethodRtViewportProvider
 {
     bool TryGetMethodRtExtractionViewport(object recordSource, out double xMin, out double xMax);
+}
+
+/// <summary>Per-integration-band label row for fixed overlay peak labels on quantification chromatograms.</summary>
+public interface IFixedPeakLabelRecordProvider
+{
+    object? TryGetFixedPeakLabelRecord(object recordSource, IntegrationRegion region);
+}
+
+/// <summary>Anchor placement for fixed overlay peak labels on quantification chromatograms.</summary>
+public interface IFixedPeakLabelAnchorProvider
+{
+    bool TryGetFixedPeakLabelAnchor(
+        object recordSource,
+        IntegrationRegion region,
+        IReadOnlyList<ChartPoint> trace,
+        out double anchorX,
+        out double anchorY,
+        out bool peakFound);
+}
+
+/// <summary>Per-colored-overlay label row and anchor for TIC peak overlay labels.</summary>
+public interface ITicPeakOverlayLabelProvider
+{
+    object? TryGetPeakOverlayLabelRecord(object recordSource, IntegrationRegion region);
+
+    bool TryGetPeakOverlayLabelAnchor(
+        object recordSource,
+        IntegrationRegion region,
+        IReadOnlyList<ChartPoint>? overlayShapePoints,
+        out double anchorX,
+        out double anchorY,
+        out bool peakFound);
 }
 
 public interface IChromatogramSignalProvider

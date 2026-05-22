@@ -118,6 +118,35 @@ internal static class PlotTitleHtmlBuilder
             });
     }
 
+    public static string BuildPeakLabelPlainText(
+        object? labelRecord,
+        Func<IReadOnlyList<IGriddoFieldView>>? allFieldsAccessor,
+        IReadOnlyList<PlotTitleSegmentConfiguration> segments,
+        Func<IReadOnlyList<IGriddoFieldView>>? labelFieldsAccessor = null)
+    {
+        if (labelRecord is null || allFieldsAccessor is null)
+        {
+            return string.Empty;
+        }
+
+        var hostingFields = allFieldsAccessor();
+        var resolveFields = labelFieldsAccessor?.Invoke() ?? hostingFields;
+
+        return BuildComposedPlainText(
+            segments,
+            segment =>
+            {
+                var resolved = ResolveSegment(segment, resolveFields, hostingFields);
+                if (resolved is null)
+                {
+                    return null;
+                }
+
+                var (field, displayField) = resolved.Value;
+                return (field, displayField, () => field.GetValue(labelRecord));
+            });
+    }
+
     public static string BuildCalibrationPointLabelPlainText(
         object? recordSource,
         int pointIndex,

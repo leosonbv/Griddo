@@ -322,7 +322,8 @@ public partial class PlotConfigurationDialog : Window
                 ? GetSpecificBool(PlotSpecificSettingKind.CalibrationShowPointLabels)
                 : _initial.ShowCalibrationPointLabels,
             CalibrationPointLabelSegments: calibrationPointLabelSegments,
-            SpectrumNormalizeIntensity: GetSpecificBool(PlotSpecificSettingKind.SpectrumNormalizeIntensity));
+            SpectrumNormalizeIntensity: GetSpecificBool(PlotSpecificSettingKind.SpectrumNormalizeIntensity),
+            PeakLabelRotate: _initial.PeakLabelRotate);
         return true;
     }
 
@@ -767,4 +768,5 @@ public sealed record PlotFieldDialogResult(
     bool CalibrationShowRegression,
     bool ShowCalibrationPointLabels,
     List<PlotTitleSegmentConfiguration> CalibrationPointLabelSegments,
-    bool SpectrumNormalizeIntensity);
+    bool SpectrumNormalizeIntensity,
+    int PeakLabelRotate);

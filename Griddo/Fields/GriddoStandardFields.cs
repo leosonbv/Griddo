@@ -7,7 +7,7 @@ using Griddo.Editing;
 
 namespace Griddo.Fields;
 
-public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoCheckboxToggleFieldView, IGriddoFieldWrapView, IGriddoFieldAlignmentView, IGriddoFieldEditableHeaderView
+public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoDynamicFieldColorView, IGriddoCheckboxToggleFieldView, IGriddoFieldWrapView, IGriddoFieldAlignmentView, IGriddoFieldEditableHeaderView
 {
     private readonly Func<object, object?> _valueGetter;
     private readonly Func<object, object?, bool> _valueSetter;
@@ -106,6 +106,8 @@ public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember
     public string FontStyleName { get; set; } = string.Empty;
     public string ForegroundColor { get; set; } = string.Empty;
     public string BackgroundColor { get; set; } = string.Empty;
+    public Func<object, string>? DynamicForegroundColorGetter { get; set; }
+    public Func<object, string>? DynamicBackgroundColorGetter { get; set; }
     public bool NoWrap { get; set; } = true;
 
     /// <inheritdoc cref="IGriddoFieldSourceMember.SourceMemberName"/>
@@ -194,6 +196,12 @@ public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember
     public object? GetValue(object recordSource) => _valueGetter(recordSource);
 
     public bool TrySetValue(object recordSource, object? value) => _valueSetter(recordSource, value);
+
+    public string GetForegroundColor(object recordSource) =>
+        DynamicForegroundColorGetter?.Invoke(recordSource) ?? ForegroundColor;
+
+    public string GetBackgroundColor(object recordSource) =>
+        DynamicBackgroundColorGetter?.Invoke(recordSource) ?? BackgroundColor;
 
     public string FormatValue(object? value)
     {
