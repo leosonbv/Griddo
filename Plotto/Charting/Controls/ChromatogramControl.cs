@@ -889,12 +889,29 @@ public partial class ChromatogramControl : SkiaChartBaseControl
             return;
         }
 
+        // Pre-compute label cap-Y for all markers in a single layout pass (avoids O(N) passes).
+        float[]? ticCapY = null;
+        if (ShowPeakLabels && PeakLabelTicOverlayMode && PeakLabels.Count > 0)
+        {
+            var markerXs = markers.Select(m => ToPixelX(m.X, plotRect)).ToList();
+            ticCapY = ChartSkiaPeakLabels.GetTicOverlayVerticalMarkerCapYBatch(
+                plotRect,
+                PeakLabels,
+                PlotDeviceScale,
+                PeakLabelFontSize,
+                ToPixelX,
+                ToPixelY,
+                PeakLabelRotate,
+                markerXs);
+        }
+
         canvas.Save();
         canvas.ClipRect(plotRect);
         try
         {
-            foreach (var m in markers)
+            for (var mi = 0; mi < markers.Count; mi++)
             {
+                var m = markers[mi];
                 if (!double.IsFinite(m.X))
                 {
                     continue;
@@ -910,8 +927,18 @@ public partial class ChromatogramControl : SkiaChartBaseControl
                 var t1 = Math.Clamp(m.YEndFraction, 0f, 1f);
                 var yTop = plotRect.Top + Math.Min(t0, t1) * h;
                 var yBottom = plotRect.Top + Math.Max(t0, t1) * h;
-                if (ShowPeakLabels
-                    && ChartSkiaPeakLabels.TryGetVerticalMarkerTopPixelYAt(
+
+                if (ShowPeakLabels)
+                {
+                    if (ticCapY is not null)
+                    {
+                        var capY = ticCapY[mi];
+                        if (capY > float.NegativeInfinity && capY < plotRect.Bottom)
+                        {
+                            yTop = Math.Max(yTop, capY);
+                        }
+                    }
+                    else if (ChartSkiaPeakLabels.TryGetVerticalMarkerTopPixelYAt(
                         px,
                         plotRect,
                         PeakLabels,
@@ -921,9 +948,10 @@ public partial class ChromatogramControl : SkiaChartBaseControl
                         ToPixelY,
                         PeakLabelRotate,
                         PeakLabelTicOverlayMode,
-                        out var capY))
-                {
-                    yTop = Math.Max(yTop, capY);
+                        out var capY2))
+                    {
+                        yTop = Math.Max(yTop, capY2);
+                    }
                 }
 
                 if (yTop >= yBottom - 0.5f)

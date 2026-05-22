@@ -275,42 +275,85 @@ internal static class ChartSkiaPeakLabels
 
         var gap = 4f * uiScale;
         var apexPixelY = toPixelY(label.Y, plotRect);
-        var anchorPixelX = toPixelX(label.X, plotRect);
+        var apexPixelX = toPixelX(label.X, plotRect);
 
-        if (IsNearHorizontalRotation(peakLabelRotateDegrees))
+        var w = layout.Width;
+        var bot = layout.BottomLocalY;
+        var top = layout.TopLocalY;
+
+        // Always use center-bottom as AnchorLocal.
+        var anchorLocalX = w * 0.5f;
+        var anchorLocalY = bot;
+
+        // Compute rotation matrix.
+        var rad = peakLabelRotateDegrees * MathF.PI / 180f;
+        var cosA = MathF.Cos(rad);
+        var sinA = MathF.Sin(rad);
+
+        // The 4 local corners, relative to AnchorLocal.
+        var bl_relX = 0f - anchorLocalX;
+        var bl_relY = bot - anchorLocalY;
+        var br_relX = w - anchorLocalX;
+        var br_relY = bot - anchorLocalY;
+        var tr_relX = w - anchorLocalX;
+        var tr_relY = top - anchorLocalY;
+        var tl_relX = 0f - anchorLocalX;
+        var tl_relY = top - anchorLocalY;
+
+        // Screen offsets (relative to anchor) after rotation.
+        var bl_screenX = bl_relX * cosA - bl_relY * sinA;
+        var bl_screenY = bl_relX * sinA + bl_relY * cosA;
+        var br_screenX = br_relX * cosA - br_relY * sinA;
+        var br_screenY = br_relX * sinA + br_relY * cosA;
+        var tr_screenX = tr_relX * cosA - tr_relY * sinA;
+        var tr_screenY = tr_relX * sinA + tr_relY * cosA;
+        var tl_screenX = tl_relX * cosA - tl_relY * sinA;
+        var tl_screenY = tl_relX * sinA + tl_relY * cosA;
+
+        // Find the 2 corners with highest screen Y (lowest on screen).
+        var corners = new[] { (bl_screenX, bl_screenY), (br_screenX, br_screenY), (tr_screenX, tr_screenY), (tl_screenX, tl_screenY) };
+        System.Array.Sort(corners, (a, b) => b.Item2.CompareTo(a.Item2));
+
+        // Take the 2 with highest Y (within tolerance).
+        const float tolerance = 0.05f;
+        var lowest = new List<(float screenX, float screenY)>();
+        for (var i = 0; i < corners.Length && i < 2; i++)
         {
-            var anchorLocal = new SKPoint(layout.Width * 0.5f, layout.LastLineBottom);
-            placement = new TicLabelPlacement(
-                anchorPixelX,
-                apexPixelY - gap,
-                layout.Width,
-                layout.TopLocalY,
-                layout.BottomLocalY,
-                peakLabelRotateDegrees,
-                anchorLocal);
-            return true;
+            if (i == 0 || corners[i].Item2 >= corners[0].Item2 - tolerance)
+            {
+                lowest.Add(corners[i]);
+            }
         }
 
-        var rotatedAnchorLocal = GetAnchorLocal(
-            layout.Width,
-            layout.TopLocalY,
-            layout.BottomLocalY,
-            peakLabelRotateDegrees);
+        if (lowest.Count == 0)
+        {
+            return false;
+        }
+
+        // Average screen offset of the 2 lowest corners.
+        var sumScreenX = 0f;
+        var sumScreenY = 0f;
+        foreach (var c in lowest)
+        {
+            sumScreenX += c.screenX;
+            sumScreenY += c.screenY;
+        }
+
+        var avgScreenX = sumScreenX / lowest.Count;
+        var avgScreenY = sumScreenY / lowest.Count;
+
+        // Place anchor so average screen position of the 2 lowest corners = (apexPixelX, apexPixelY - gap).
+        var anchorX = apexPixelX - avgScreenX;
+        var anchorY = apexPixelY - gap - avgScreenY;
+
         placement = new TicLabelPlacement(
-            anchorPixelX,
-            apexPixelY,
-            layout.Width,
-            layout.TopLocalY,
-            layout.BottomLocalY,
+            anchorX,
+            anchorY,
+            w,
+            top,
+            bot,
             peakLabelRotateDegrees,
-            rotatedAnchorLocal);
-
-        GetScreenBounds(placement, out _, out _, out _, out var maxBottom);
-        if (maxBottom > apexPixelY - gap)
-        {
-            placement = placement with { AnchorY = placement.AnchorY - (maxBottom - apexPixelY + gap) };
-        }
-
+            new SKPoint(anchorLocalX, anchorLocalY));
         return true;
     }
 
@@ -874,19 +917,20 @@ internal static class ChartSkiaPeakLabels
         return topPixelY < plotRect.Bottom;
     }
 
-    private static bool TryGetTicOverlayLabelPixelExtents(
+    /// <summary>
+    /// Builds the collision-resolved TIC overlay placements for <paramref name="labels"/> once.
+    /// Returns the list (possibly empty) and the shared font resources so callers can reuse them.
+    /// </summary>
+    private static List<TicLabelPlacement> TryBuildTicOverlayPlacements(
         SKRect plotRect,
         IReadOnlyList<ChromatogramPeakLabel> labels,
         double uiScale,
         double fontSizeDip,
         Func<double, SKRect, float> toPixelX,
         Func<double, SKRect, float> toPixelY,
-        int peakLabelRotateDegrees,
-        out float minTop,
-        out float maxBottom)
+        int peakLabelRotateDegrees)
     {
-        minTop = float.MaxValue;
-        maxBottom = float.MinValue;
+        var result = new List<TicLabelPlacement>();
         var fontPx = (float)Math.Clamp(fontSizeDip, 6d, 24d) * (float)uiScale;
         using var typeface = SKTypeface.FromFamilyName(null);
         using var font = new SKFont(typeface, fontPx);
@@ -899,10 +943,9 @@ internal static class ChartSkiaPeakLabels
             Math.Max(0, plotRect.Height - 2f * margin));
         if (bounds.Width <= 0 || bounds.Height <= 0)
         {
-            return false;
+            return result;
         }
 
-        var occupied = new List<TicLabelPlacement>();
         var ordered = labels
             .Where(static l => !string.IsNullOrWhiteSpace(l.LabelPlainText)
                                && double.IsFinite(l.X)
@@ -910,7 +953,7 @@ internal static class ChartSkiaPeakLabels
             .OrderByDescending(static l => l.Y)
             .ThenByDescending(static l => l.X)
             .ToList();
-        var found = false;
+
         foreach (var label in ordered)
         {
             var text = label.LabelPlainText.Trim();
@@ -930,19 +973,94 @@ internal static class ChartSkiaPeakLabels
                 continue;
             }
 
-            if (IntersectsAnyRotated(placement, occupied, 2f))
+            if (IntersectsAnyRotated(placement, result, 2f))
             {
                 continue;
             }
 
-            occupied.Add(placement);
+            result.Add(placement);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Computes label placements once and returns the lowest label pixel-Y that each vertical
+    /// marker at <paramref name="markerPixelXs"/> would collide with.  Index in the output array
+    /// corresponds to index in <paramref name="markerPixelXs"/>; a value of
+    /// <see cref="float.NegativeInfinity"/> means no label covers that marker.
+    /// </summary>
+    public static float[] GetTicOverlayVerticalMarkerCapYBatch(
+        SKRect plotRect,
+        IReadOnlyList<ChromatogramPeakLabel> labels,
+        double uiScale,
+        double fontSizeDip,
+        Func<double, SKRect, float> toPixelX,
+        Func<double, SKRect, float> toPixelY,
+        int peakLabelRotateDegrees,
+        IReadOnlyList<float> markerPixelXs)
+    {
+        var capY = new float[markerPixelXs.Count];
+        for (var i = 0; i < capY.Length; i++)
+        {
+            capY[i] = float.NegativeInfinity;
+        }
+
+        if (plotRect.Width <= 1f || plotRect.Height <= 1f || labels.Count == 0 || markerPixelXs.Count == 0)
+        {
+            return capY;
+        }
+
+        var pad = 4f * (float)uiScale;
+        var placements = TryBuildTicOverlayPlacements(
+            plotRect, labels, uiScale, fontSizeDip, toPixelX, toPixelY, peakLabelRotateDegrees);
+
+        foreach (var placement in placements)
+        {
+            for (var i = 0; i < markerPixelXs.Count; i++)
+            {
+                if (TryGetMaxScreenYOnVerticalSlice(placement, markerPixelXs[i], pad, out var sliceBottom))
+                {
+                    var candidate = sliceBottom + pad;
+                    if (candidate > capY[i])
+                    {
+                        capY[i] = candidate;
+                    }
+                }
+            }
+        }
+
+        return capY;
+    }
+
+    private static bool TryGetTicOverlayLabelPixelExtents(
+        SKRect plotRect,
+        IReadOnlyList<ChromatogramPeakLabel> labels,
+        double uiScale,
+        double fontSizeDip,
+        Func<double, SKRect, float> toPixelX,
+        Func<double, SKRect, float> toPixelY,
+        int peakLabelRotateDegrees,
+        out float minTop,
+        out float maxBottom)
+    {
+        minTop = float.MaxValue;
+        maxBottom = float.MinValue;
+        var placements = TryBuildTicOverlayPlacements(
+            plotRect, labels, uiScale, fontSizeDip, toPixelX, toPixelY, peakLabelRotateDegrees);
+        if (placements.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var placement in placements)
+        {
             GetScreenBounds(placement, out _, out var top, out _, out var bottom);
             minTop = Math.Min(minTop, top);
             maxBottom = Math.Max(maxBottom, bottom);
-            found = true;
         }
 
-        return found;
+        return true;
     }
 
     private static bool TryGetTicOverlayMarkerTopAt(
@@ -958,69 +1076,16 @@ internal static class ChartSkiaPeakLabels
         out float topPixelY)
     {
         topPixelY = plotRect.Top;
-        if (!TryGetTicOverlayLabelPixelExtents(
-                plotRect,
-                labels,
-                uiScale,
-                fontSizeDip,
-                toPixelX,
-                toPixelY,
-                peakLabelRotateDegrees,
-                out _,
-                out _))
+        var placements = TryBuildTicOverlayPlacements(
+            plotRect, labels, uiScale, fontSizeDip, toPixelX, toPixelY, peakLabelRotateDegrees);
+        if (placements.Count == 0)
         {
             return false;
         }
 
-        var fontPx = (float)Math.Clamp(fontSizeDip, 6d, 24d) * (float)uiScale;
-        using var typeface = SKTypeface.FromFamilyName(null);
-        using var font = new SKFont(typeface, fontPx);
-        var labelPad = 2f * (float)uiScale;
-        var margin = 6f * (float)uiScale;
-        var bounds = SKRect.Create(
-            plotRect.Left + margin,
-            plotRect.Top + margin,
-            Math.Max(0, plotRect.Width - 2f * margin),
-            Math.Max(0, plotRect.Height - 2f * margin));
-        if (bounds.Width <= 0 || bounds.Height <= 0)
-        {
-            return false;
-        }
-
-        var occupied = new List<TicLabelPlacement>();
-        var ordered = labels
-            .Where(static l => !string.IsNullOrWhiteSpace(l.LabelPlainText)
-                               && double.IsFinite(l.X)
-                               && double.IsFinite(l.Y))
-            .OrderByDescending(static l => l.Y)
-            .ThenByDescending(static l => l.X)
-            .ToList();
         var found = false;
-        foreach (var label in ordered)
+        foreach (var placement in placements)
         {
-            var text = label.LabelPlainText.Trim();
-            var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
-            var layout = MeasureTicLabelLayout(font, lines, labelPad);
-            if (!TryCreateTicOverlayPlacement(
-                    label,
-                    layout,
-                    lines.Length,
-                    plotRect,
-                    toPixelX,
-                    toPixelY,
-                    peakLabelRotateDegrees,
-                    (float)uiScale,
-                    out var placement))
-            {
-                continue;
-            }
-
-            if (IntersectsAnyRotated(placement, occupied, 2f))
-            {
-                continue;
-            }
-
-            occupied.Add(placement);
             if (!TryGetMaxScreenYOnVerticalSlice(placement, markerPixelX, pad, out var sliceBottom))
             {
                 continue;
