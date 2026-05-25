@@ -3,7 +3,7 @@ using Griddo.Hosting.Configuration;
 using Plotto.Abstractions.Charting.Core;
 using Plotto.Charting.Core;
 
-namespace Griddo.Hosting.Abstractions;
+namespace Griddo.Hosting.Contracts;
 
 public readonly record struct SignalPoint(double X, double Y);
 

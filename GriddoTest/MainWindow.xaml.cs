@@ -8,15 +8,17 @@ using System.IO;
 using System.Net;
 using Griddo;
 using Griddo.Fields;
+using Griddo.Abstractions.Fields;
+using Griddo.Abstractions.Editing;
 using Griddo.Fields.Attributes;
 using Griddo.Editing;
 using Griddo.Grid;
-using Griddo.Hosting.Abstractions;
+using Griddo.Hosting.Contracts;
 using Griddo.Hosting.Configuration;
 using Griddo.Hosting.Html;
 using Griddo.Hosting.Plot;
 using Plotto.Charting.Controls;
-using Plotto.Charting.Core;
+using Plotto.Abstractions.Charting.Core;
 using GriddoUi.FieldEdit.Dialog;
 using GriddoUi.FieldEdit.Models;
 using GriddoUi.FieldEdit.Support;
@@ -24,8 +26,11 @@ using GriddoUi.Hosting.Html;
 using GriddoUi.Hosting.Plot;
 using GriddoUi.Hosting.Stability;
 using GriddoModelView;
+using GriddoModelView.Configuration;
+using GriddoModelView.Stores;
 using GriddoTest.Stability;
 using System.Text;
+using Plotto.Charting.Core;
 
 namespace GriddoTest;
 
@@ -1561,7 +1566,7 @@ public partial class MainWindow : Window
         IReadOnlyList<int>? selectedGridFieldIndices = null,
         int preferredCenterGridFieldIndex = -1)
     {
-        var records = FieldMetadataBuilder.BuildRecordsFromGrid(grid, fieldRegistry);
+        var records = MetadataBuilder.BuildRecordsFromGrid(grid, fieldRegistry);
         var sourceIndexByField = fieldRegistry
             .Select((field, index) => (field, index))
             .ToDictionary(x => x.field, x => x.index);
@@ -1682,7 +1687,7 @@ public partial class MainWindow : Window
         dlg.TargetSourceGrid = grid;
         dlg.ApplyToSourceGrid = (r, fc, fr, go) =>
         {
-            FieldChooserGridApplier.Apply(grid, r, fc, fr, go, fieldRegistry);
+            GridApplier.Apply(grid, r, fc, fr, go, fieldRegistry);
             if (shouldPersistPropertyViews)
             {
                 PersistPropertyViews(r);
@@ -1727,7 +1732,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var records = FieldMetadataBuilder.BuildRecordsFromGrid(grid, registry);
+        var records = MetadataBuilder.BuildRecordsFromGrid(grid, registry);
         var byIndex = layout.Fields.ToDictionary(c => c.SourceFieldIndex);
         foreach (var record in records)
         {
@@ -1760,7 +1765,7 @@ public partial class MainWindow : Window
             ImmediatePlottoEdit = layout.ImmediatePlottoEdit
         };
 
-        FieldChooserGridApplier.Apply(
+        GridApplier.Apply(
             grid,
             records,
             layout.FrozenFields,
@@ -2014,7 +2019,7 @@ public partial class MainWindow : Window
                 })
                 .ToList();
         }
-        var records = FieldMetadataBuilder.BuildRecordsFromGrid(grid, _allFields);
+        var records = MetadataBuilder.BuildRecordsFromGrid(grid, _allFields);
         ApplyPersistedRecordMetadata(records);
         var byIndex = layout.Fields.ToDictionary(c => c.SourceFieldIndex);
         foreach (var record in records)
@@ -2047,7 +2052,7 @@ public partial class MainWindow : Window
             IsTransposed = layout.IsTransposed,
             ImmediatePlottoEdit = layout.ImmediatePlottoEdit
         };
-        FieldChooserGridApplier.Apply(
+        GridApplier.Apply(
             grid,
             records,
             layout.FrozenFields,
@@ -2261,7 +2266,7 @@ public partial class MainWindow : Window
         global::Griddo.Grid.Griddo grid,
         IReadOnlyList<IGriddoFieldView> registry)
     {
-        var records = FieldMetadataBuilder.BuildRecordsFromGrid(grid, registry);
+        var records = MetadataBuilder.BuildRecordsFromGrid(grid, registry);
         if (records.Count == 0 || registry.Count == 0)
         {
             return records;

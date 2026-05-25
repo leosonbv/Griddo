@@ -6,7 +6,7 @@ using Griddo.Abstractions.Editing;
 using Griddo.Abstractions.Fields;
 using Griddo.Editing;
 using Griddo.Fields;
-using Griddo.Hosting.Abstractions;
+using Griddo.Hosting.Contracts;
 using Griddo.Hosting.Configuration;
 using Plotto.Abstractions.Charting.Core;
 using Plotto.Charting.Controls;

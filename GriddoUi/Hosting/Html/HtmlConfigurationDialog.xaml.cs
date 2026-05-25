@@ -18,7 +18,7 @@ namespace GriddoUi.Hosting.Html;
 public partial class HtmlConfigurationDialog : Window
 {
     private readonly List<HtmlSegmentEditRecord> _rows = [];
-    private readonly FontSummaryDialogCellEditor _fontEditor = new();
+    private readonly FontSummaryCellEditor _fontEditor = new();
     private int _generalValueFieldIndex = -1;
     private readonly IReadOnlyList<IGriddoFieldView> _allFields;
 
@@ -385,7 +385,7 @@ public partial class HtmlConfigurationDialog : Window
     private sealed class HtmlGeneralValueField : IGriddoFieldView, IGriddoCheckboxToggleFieldView
     {
         private readonly HtmlConfigurationDialog _owner;
-        private readonly FontSummaryDialogCellEditor _editor = new();
+        private readonly FontSummaryCellEditor _editor = new();
 
         public HtmlGeneralValueField(HtmlConfigurationDialog owner)
         {

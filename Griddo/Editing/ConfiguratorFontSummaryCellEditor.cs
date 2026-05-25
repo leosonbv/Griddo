@@ -5,7 +5,7 @@ namespace Griddo.Editing;
 /// <summary>
 /// Grid configurator "Font" field: dropdown for default / font dialog, accepts pasted summary lines.
 /// </summary>
-public sealed class GriddoConfiguratorFontSummaryCellEditor : IGriddoOptionsCellEditor
+public sealed class ConfiguratorFontSummaryCellEditor : IGriddoOptionsCellEditor
 {
     public const string DefaultToken = "(default)";
     public const string ChooseFontToken = "Choose font…";

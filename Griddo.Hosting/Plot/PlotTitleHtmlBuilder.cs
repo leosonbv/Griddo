@@ -3,7 +3,7 @@ using System.Net;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using Griddo.Abstractions.Fields;
-using Griddo.Hosting.Abstractions;
+using Griddo.Hosting.Contracts;
 using Griddo.Hosting.Configuration;
 
 namespace Griddo.Hosting.Plot;

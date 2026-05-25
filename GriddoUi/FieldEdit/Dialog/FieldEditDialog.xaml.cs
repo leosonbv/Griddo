@@ -45,13 +45,13 @@ public partial class FieldConfigurator : Window
     /// to the field metadata builder and to hosts that need to build separate preview dictionaries.
     /// When null the configurator behaves exactly as before (single flat registry).
     /// </summary>
-    public IReadOnlyList<FieldRegistryGroup>? SourceRegistries { get; private set; }
+    public IReadOnlyList<RegistryGroup>? SourceRegistries { get; private set; }
 
     /// <summary>
     /// Registers independent per-source field groups.  The flat <see cref="FieldHeaderRegistry"/> is
     /// kept in sync automatically (group order → field order within each group).
     /// </summary>
-    public void SetSourceRegistries(IReadOnlyList<FieldRegistryGroup> groups)
+    public void SetSourceRegistries(IReadOnlyList<RegistryGroup> groups)
     {
         SourceRegistries = groups;
     }
@@ -137,7 +137,7 @@ public partial class FieldConfigurator : Window
         GeneralPropertyGrid.Records.Clear();
         var categoryField = new GeneralCategoryFieldView(() => GeneralPropertyGrid.Records, "Category", 130);
         var settingField = new GeneralSettingNameFieldView("Setting", 220, GetGeneralSettingDisplayName);
-        var valueField = new GeneralSettingValueFieldView("Value", 120);
+        var valueField = new SettingValueFieldView("Value", 120);
         GeneralPropertyGrid.Fields.Add(categoryField);
         GeneralPropertyGrid.Fields.Add(settingField);
         GeneralPropertyGrid.Fields.Add(valueField);
@@ -416,7 +416,7 @@ public partial class FieldConfigurator : Window
 
                 return FontSummaryParser.TryApplyFontSummaryText(record, v?.ToString() ?? string.Empty);
             },
-            new FontSummaryDialogCellEditor()));
+            new FontSummaryCellEditor()));
         _backColorFieldIndex = FieldGrid.Fields.Count;
         AddField(new GriddoFieldView(
             "BackColor",
@@ -558,7 +558,7 @@ public partial class FieldConfigurator : Window
         }
 
         var fc = record.IntValue;
-        if (!GeneralSettingsValidationService.TryValidateFrozenFields(fc, FieldGrid.Records.Count, out frozenFields, out var error))
+        if (!ValidationService.TryValidateFrozenFields(fc, FieldGrid.Records.Count, out frozenFields, out var error))
         {
             MessageBox.Show(
                 this,
@@ -581,7 +581,7 @@ public partial class FieldConfigurator : Window
         }
 
         var fr = record.IntValue;
-        if (!GeneralSettingsValidationService.TryValidateFrozenRecords(fr, out frozenRecords, out var error))
+        if (!ValidationService.TryValidateFrozenRecords(fr, out frozenRecords, out var error))
         {
             MessageBox.Show(
                 this,
@@ -604,7 +604,7 @@ public partial class FieldConfigurator : Window
         }
 
         var vr = record.IntValue;
-        if (!GeneralSettingsValidationService.TryValidateVisibleRecords(vr, out visibleRecords, out var error))
+        if (!ValidationService.TryValidateVisibleRecords(vr, out visibleRecords, out var error))
         {
             MessageBox.Show(
                 this,
@@ -627,7 +627,7 @@ public partial class FieldConfigurator : Window
         }
 
         var rh = record.IntValue;
-        if (!GeneralSettingsValidationService.TryValidateRecordThickness(rh, IsGeneralLayoutTransposed(), out recordThickness, out var error))
+        if (!ValidationService.TryValidateRecordThickness(rh, IsGeneralLayoutTransposed(), out recordThickness, out var error))
         {
             MessageBox.Show(
                 this,

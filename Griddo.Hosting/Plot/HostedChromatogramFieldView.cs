@@ -7,7 +7,7 @@ using Griddo.Abstractions.Editing;
 using Griddo.Abstractions.Fields;
 using Griddo.Editing;
 using Griddo.Fields;
-using Griddo.Hosting.Abstractions;
+using Griddo.Hosting.Contracts;
 using Griddo.Hosting.Configuration;
 using Plotto.Abstractions.Charting.Core;
 using Plotto.Charting.Controls;
@@ -593,14 +593,6 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
             {
                 return;
             }
-
-            var key = (Math.Round(x, 6), Math.Round(y, 6));
-            if (!seen.Add(key))
-            {
-                return;
-            }
-
-            labels.Add(new ChromatogramPeakLabel(x, y, plain));
         }
 
         var primaryPeakLabelsOnly = _signalProvider is IFixedPeakLabelAnchorProvider

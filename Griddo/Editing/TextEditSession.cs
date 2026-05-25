@@ -1,6 +1,6 @@
 namespace Griddo.Editing;
 
-internal sealed class GriddoTextEditSession
+internal sealed class TextEditSession
 {
     public string Buffer { get; private set; } = string.Empty;
     public int CaretIndex { get; private set; }

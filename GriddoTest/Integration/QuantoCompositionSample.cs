@@ -2,6 +2,7 @@ using Griddo.Hosting.Fluent;
 using Griddo.Hosting.Html;
 using Griddo.Hosting.Plot;
 using Griddo.Fields;
+using Griddo.Abstractions.Fields;
 using Plotto.Fluent;
 
 namespace GriddoTest.Integration;

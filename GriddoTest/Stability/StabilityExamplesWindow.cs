@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using Plotto.Abstractions.Charting.Core;
 using Plotto.Charting.Core;
 
 namespace GriddoTest.Stability;

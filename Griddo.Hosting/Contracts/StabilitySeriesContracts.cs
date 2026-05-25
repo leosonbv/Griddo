@@ -1,4 +1,4 @@
-namespace Griddo.Hosting.Abstractions;
+namespace Griddo.Hosting.Contracts;
 
 public readonly record struct StabilityPoint(double AcquisitionTime, double Value);
 

@@ -9,9 +9,9 @@ using GriddoUi.FieldEdit.Models;
 namespace GriddoUi.FieldEdit.Support;
 
 /// <summary>Value field for <see cref="GeneralSettingRecord"/> records: unsigned int or bool (checkbox when bool).</summary>
-public sealed class GeneralSettingValueFieldView : IGriddoFieldView, IGriddoCheckboxToggleFieldView, IGriddoFieldDescriptionView
+public sealed class SettingValueFieldView : IGriddoFieldView, IGriddoCheckboxToggleFieldView, IGriddoFieldDescriptionView
 {
-    public GeneralSettingValueFieldView(string header = "Value", double width = 140)
+    public SettingValueFieldView(string header = "Value", double width = 140)
     {
         Header = header;
         Width = width;

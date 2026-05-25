@@ -1,6 +1,6 @@
 namespace Griddo.Core.Layout;
 
-public static class GridFieldWidthService
+public static class FieldWidthService
 {
     public static double ResolveFieldBaseWidth(
         double declaredWidth,

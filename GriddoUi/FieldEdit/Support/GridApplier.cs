@@ -8,7 +8,7 @@ using GriddoUi.FieldEdit.Models;
 namespace GriddoUi.FieldEdit.Support;
 
 /// <summary>Applies <see cref="FieldConfigurator"/> results to a live <see cref="Griddo.Grid.Griddo"/>.</summary>
-public static class FieldChooserGridApplier
+public static class GridApplier
 {
     /// <param name="fieldRegistry">When non-null, snapshot and <see cref="FieldEditRecord.SourceFieldIndex"/> refer to this list (includes hidden fields). When null, uses current <see cref="Griddo.Grid.Griddo.Fields"/> only.</param>
     /// <param name="persistedLayoutSourceFieldIndices">Source field indices that had persisted layout; initial auto-width is skipped for those fields after apply.</param>
@@ -177,7 +177,7 @@ public static class FieldChooserGridApplier
 
         if (field is IGriddoFieldAlignmentView alignmentView)
         {
-            alignmentView.ContentAlignment = FieldMetadataBuilder.EnsureDefaultContentAlignment(
+            alignmentView.ContentAlignment = MetadataBuilder.EnsureDefaultContentAlignment(
                 record.ContentAlignment,
                 field,
                 record.SampleValue,

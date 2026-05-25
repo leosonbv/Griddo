@@ -52,7 +52,7 @@ public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember
         ContentAlignment = resolvedAlignment ?? (Editor is GriddoNumberCellEditor ? TextAlignment.Right : TextAlignment.Left);
 
         var hasReflectedPublicSetter = inferBooleanCheckboxFromMemberTypes is { Count: > 0 }
-            && GriddoFieldReflectionHeader.HasPublicSetterForMember(SourceMemberName, inferBooleanCheckboxFromMemberTypes);
+            && FieldReflectionHeader.HasPublicSetterForMember(SourceMemberName, inferBooleanCheckboxFromMemberTypes);
         AllowCellEdit = allowCellEdit
             ?? (inferBooleanCheckboxFromMemberTypes is null
                 || inferBooleanCheckboxFromMemberTypes.Count == 0
@@ -329,7 +329,7 @@ public sealed class GriddoBoolFieldView : IGriddoFieldView, IGriddoFieldSourceMe
         ContentAlignment = TextAlignment.Center;
 
         var hasReflected = inferDeclaringTypesForMemberHeader is { Count: > 0 }
-            && GriddoFieldReflectionHeader.HasPublicSetterForMember(SourceMemberName, inferDeclaringTypesForMemberHeader);
+            && FieldReflectionHeader.HasPublicSetterForMember(SourceMemberName, inferDeclaringTypesForMemberHeader);
         AllowCellEdit = allowCellEdit
             ?? (inferDeclaringTypesForMemberHeader is null
                 || inferDeclaringTypesForMemberHeader.Count == 0

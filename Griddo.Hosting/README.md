@@ -8,11 +8,11 @@
   - `HostedChromatogramFieldView`
   - `HostedCalibrationFieldView`
   - `HostedSpectrumFieldView`
-  - `IPlotFieldLayoutTarget`
+  - `IPlotFieldLayoutTarget` (aggregate; also see segregated `IPlotLayoutTarget`, `IChromatogramPlotLayoutTarget`, `ICalibrationPlotLayoutTarget`, `ISpectrumPlotLayoutTarget` for ISP)
 - `Griddo.Hosting.Html`
   - `ComposedHtmlFieldView`
   - `IHtmlFieldLayoutTarget`
-- `Griddo.Hosting.Abstractions`
+- `Griddo.Hosting.Contracts`
   - signal provider contracts (`IChromatogramSignalProvider`, `ICalibrationSignalProvider`, `ISpectrumSignalProvider`)
 
 ## Quanto integration steps
@@ -23,7 +23,7 @@
    - `ICalibrationSignalProvider`
    - `ISpectrumSignalProvider`
 3. Register hosted fields on your grid using the adapters.
-4. Use `IPlotFieldLayoutTarget` and `IHtmlFieldLayoutTarget` for persisted layout/config dialogs.
+4. Use `IPlotFieldLayoutTarget` (and its segregated bases) and `IHtmlFieldLayoutTarget` for persisted layout/config dialogs.
 
 ## Enum/Flags fields in Griddo
 

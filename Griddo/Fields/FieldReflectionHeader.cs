@@ -2,7 +2,7 @@ using System.Reflection;
 
 namespace Griddo.Fields;
 
-internal static class GriddoFieldReflectionHeader
+internal static class FieldReflectionHeader
 {
     /// <summary>
     /// Returns true when <paramref name="memberName"/> resolves on any <paramref name="declaringTypes"/>

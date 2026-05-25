@@ -274,7 +274,7 @@ public sealed partial class Griddo
                 var flatHeader = header.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ');
                 headerValues.Add(flatHeader);
                 tableHtml.Append("<th style=\"text-align:left\">")
-                    .Append(GriddoClipboardHtml.EscapeCellText(flatHeader))
+                    .Append(ClipboardHtml.EscapeCellText(flatHeader))
                     .Append("</th>");
             }
 
@@ -335,7 +335,7 @@ public sealed partial class Griddo
                 else
                 {
                     tableHtml.Append("<td style=\"vertical-align:middle\">")
-                        .Append(GriddoClipboardHtml.EscapeCellText(flat))
+                        .Append(ClipboardHtml.EscapeCellText(flat))
                         .Append("</td>");
                 }
             }
@@ -346,7 +346,7 @@ public sealed partial class Griddo
 
         tableHtml.Append("</table>");
         tsv = string.Join(Environment.NewLine, lines);
-        cfHtml = GriddoClipboardHtml.EncodeHtmlFragment(tableHtml.ToString());
+        cfHtml = ClipboardHtml.EncodeHtmlFragment(tableHtml.ToString());
         return true;
     }
 

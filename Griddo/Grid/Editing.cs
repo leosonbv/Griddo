@@ -156,7 +156,8 @@ public sealed partial class Griddo
 
         _editSession.Start(field.Editor.BeginEdit(GetCurrentValue()));
         _isEditing = true;
-        if (field.Editor is IGriddoOptionsCellEditor optionsEditor)
+        if (field.Editor is IGriddoOptionsCellEditor optionsEditor
+            && field.Editor is not IGriddoFreeTextOptionsCellEditor)
         {
             OpenEditOptionsMenu(optionsEditor);
         }

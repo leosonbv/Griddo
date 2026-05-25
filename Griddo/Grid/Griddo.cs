@@ -90,7 +90,7 @@ public sealed partial class Griddo : FrameworkElement
     private Pen? _cachedFixedRecordBottomPen;
     private Brush? _cachedFixedRecordBottomPenBrush;
     private double _cachedFixedRecordBottomPenThickness = double.NaN;
-    private readonly GriddoTextEditSession _editSession = new();
+    private readonly TextEditSession _editSession = new();
     private ContextMenu? _activeEditOptionsMenu;
     private readonly VisualCollection _children;
     private readonly Canvas _scrollHostCanvas = new()

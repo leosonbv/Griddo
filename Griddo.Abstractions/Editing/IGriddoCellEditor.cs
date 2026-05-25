@@ -21,6 +21,14 @@ public interface IGriddoContextualOptionsCellEditor : IGriddoOptionsCellEditor
     bool TryGetOptionExample(object? recordSource, string option, out string example);
 }
 
+/// <summary>
+/// Options editor that also accepts values not in the option list (e.g. sample dose free text).
+/// Does not auto-open the options menu on F2; use Alt+Down or F4 while editing.
+/// </summary>
+public interface IGriddoFreeTextOptionsCellEditor : IGriddoOptionsCellEditor
+{
+}
+
 public interface IGriddoSwatchOptionsCellEditor : IGriddoOptionsCellEditor
 {
     bool TryGetSwatchBrush(string option, out System.Windows.Media.Brush brush);

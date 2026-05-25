@@ -70,7 +70,7 @@ public sealed partial class Griddo
         var nonFillWidth = _cachedNonFillFieldWidthSum;
 
         var viewportAlongFieldAxis = IsBodyTransposed ? _viewportBodyHeight : _viewportBodyWidth;
-        return GridFieldWidthService.ResolveWeightedFillFieldWidth(
+        return FieldWidthService.ResolveWeightedFillFieldWidth(
             fillWeight,
             totalFillWeight,
             nonFillWidth,
@@ -82,7 +82,7 @@ public sealed partial class Griddo
     private double GetFieldBaseWidth(int fieldIndex)
     {
         var field = Fields[fieldIndex];
-        return GridFieldWidthService.ResolveFieldBaseWidth(
+        return FieldWidthService.ResolveFieldBaseWidth(
             field.Width,
             _fieldWidthOverrides.TryGetValue(field, out var o),
             o,

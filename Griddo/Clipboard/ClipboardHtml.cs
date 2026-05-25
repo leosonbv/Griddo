@@ -5,7 +5,7 @@ using System.Text;
 namespace Griddo.Clipboard;
 
 /// <summary>Windows CF_HTML clipboard wrapper for rich paste into Word, Excel, browsers.</summary>
-internal static class GriddoClipboardHtml
+internal static class ClipboardHtml
 {
     /// <summary>UTF-8 CF_HTML with fragment markers (offsets are byte indices from start of the returned string when encoded as UTF-8).</summary>
     public static string EncodeHtmlFragment(string utf8InnerHtml)

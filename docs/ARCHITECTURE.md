@@ -8,6 +8,7 @@ This repository now uses a layered, multi-project structure to support integrati
 - `Griddo.Core`: grid core services and non-UI orchestration logic.
 - `Griddo`: WPF control implementation.
 - `Griddo.Hosting`: host adapters and fluent integration helpers.
+  - `Griddo.Hosting.Contracts`: signal provider and series contracts (was Abstractions; internal rename for clarity).
 - `GriddoUi`: configurator and UI tooling.
 - `Plotto.Abstractions`: chart domain contracts.
 - `Plotto.Core`: chart policies and reusable interaction logic.
@@ -24,3 +25,11 @@ This repository now uses a layered, multi-project structure to support integrati
 - `Griddo.Hosting.Fluent.GriddoBuilder`
 - `Griddo.Hosting.Fluent.HostedFieldBuilder`
 - `Plotto.Fluent.PlottoChartBuilder`
+
+## Internal SOLID & Clarity Improvements (applied)
+
+- ISP split on `IPlotFieldLayoutTarget` (segregated `IPlotLayoutTarget` + plot-type specifics + aggregate for compat; public surface unchanged).
+- Hosting/Abstractions folder+namespace renamed to Contracts.
+- Redundant file prefixes dropped across Griddo (e.g. partials, internals) and GriddoUi.FieldEdit.Support (shorter names).
+- Light SRP extracts (e.g. NumericFormatClassifier collaborator).
+- All changes verified with full Debug + Release builds (0 new errors).

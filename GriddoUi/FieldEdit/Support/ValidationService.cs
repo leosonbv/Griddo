@@ -1,6 +1,6 @@
 namespace GriddoUi.FieldEdit.Support;
 
-public static class GeneralSettingsValidationService
+public static class ValidationService
 {
     public static bool TryValidateFrozenFields(int value, int fieldCount, out int committed, out string? error)
     {

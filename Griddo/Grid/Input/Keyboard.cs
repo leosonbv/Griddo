@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using Griddo.Abstractions.Editing;
 using Griddo.Abstractions.Fields;
 using Griddo.Primitives;
 
@@ -82,6 +83,7 @@ public sealed partial class Griddo
             || TryHandleIncrementalDown(e, isCtrlPressed, isHostedEditing)
             || TryHandleExportToExcel(e, isCtrlPressed, isShiftPressed)
             || TryHandleEnterWhileEditingOrHosted(e, isShiftPressed, isHostedEditing)
+            || TryHandleOpenOptionsMenuWhileEditing(e)
             || TryHandleEscapeWhileEditingOrHosted(e, isHostedEditing)
             || TryHandleTabWhileEditingOrHosted(e, isShiftPressed, isHostedEditing)
             || TryHandleTextEditCaretKeys(e, isCtrlPressed, isShiftPressed)
@@ -402,6 +404,26 @@ public sealed partial class Griddo
         }
 
         return false;
+    }
+
+    private bool TryHandleOpenOptionsMenuWhileEditing(KeyEventArgs e)
+    {
+        if (!_isEditing || !TryGetCurrentField(out var field) || field.Editor is not IGriddoOptionsCellEditor optionsEditor)
+        {
+            return false;
+        }
+
+        var modifiers = Keyboard.Modifiers;
+        var openWithAltDown = e.Key == Key.Down && modifiers == ModifierKeys.Alt;
+        var openWithF4 = e.Key == Key.F4 && modifiers == ModifierKeys.None;
+        if (!openWithAltDown && !openWithF4)
+        {
+            return false;
+        }
+
+        OpenEditOptionsMenu(optionsEditor);
+        e.Handled = true;
+        return true;
     }
 
     private bool TryHandleEscapeWhileEditingOrHosted(KeyEventArgs e, bool isHostedEditing)

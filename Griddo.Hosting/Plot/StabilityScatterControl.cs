@@ -18,7 +18,7 @@ public sealed class StabilityScatterControl : SkiaChartBaseControl
     private readonly SKPaint _meanPaint = new() { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.4f };
     private readonly SKPaint _sdPaint = new() { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.1f, PathEffect = SKPathEffect.CreateDash([6f, 4f], 0f) };
     private readonly SKPaint _rightAxisPaint = new() { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1f, Color = new SKColor(120, 120, 120, 200) };
-    private readonly SKPaint _rightAxisTextPaint = new() { IsAntialias = true, Style = SKPaintStyle.Fill, TextSize = 11f, Color = new SKColor(90, 90, 90, 220) };
+    private readonly SKPaint _rightAxisTextPaint = new() { IsAntialias = true, Style = SKPaintStyle.Fill, Color = new SKColor(90, 90, 90, 220) };
 
     private readonly List<SeriesData> _series = [];
     private bool _hasRightAxis;
@@ -439,8 +439,8 @@ public sealed class StabilityScatterControl : SkiaChartBaseControl
         _rightAxisTextPaint.Color = _rightAxisColor.WithAlpha(230);
         var x = dataRect.Right;
         canvas.DrawLine(x, dataRect.Top, x, dataRect.Bottom, _rightAxisPaint);
-        _rightAxisTextPaint.TextSize = Math.Max(9f, (float)(11f * PlotDeviceScale));
-        var tickLength = Math.Max(3f * PlotDeviceScale, _rightAxisTextPaint.TextSize * 0.35f);
+        var textSize = Math.Max(9f, (float)(11f * PlotDeviceScale));
+        var tickLength = Math.Max(3f * PlotDeviceScale, textSize * 0.35f);
         canvas.DrawLine(x, dataRect.Top, x + tickLength, dataRect.Top, _rightAxisPaint);
         canvas.DrawLine(x, dataRect.Bottom, x + tickLength, dataRect.Bottom, _rightAxisPaint);
         var labelX = Math.Min(fullPlotRect.Right - 2f, x + tickLength + Math.Max(2f * PlotDeviceScale, RightAxisGapDip * PlotDeviceScale));
@@ -448,6 +448,9 @@ public sealed class StabilityScatterControl : SkiaChartBaseControl
         var metrics = AxisFont.Metrics;
         var yMinGap = 3f * PlotDeviceScale;
         var lastLabelTop = float.PositiveInfinity;
+
+        using var typeface = SKTypeface.FromFamilyName(null);
+        using var font = new SKFont(typeface, textSize);
         foreach (var tick in ticks)
         {
             if (!NonNegativeAxisTickPolicy.AllowsLabel(tick))
@@ -470,7 +473,8 @@ public sealed class StabilityScatterControl : SkiaChartBaseControl
             {
                 continue;
             }
-            canvas.DrawText(label, labelX, baseline, _rightAxisTextPaint);
+
+            canvas.DrawText(label, labelX, baseline, SKTextAlign.Left, font, _rightAxisTextPaint);
             lastLabelTop = top;
         }
     }
