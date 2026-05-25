@@ -17,6 +17,7 @@ namespace Griddo.Grid;
 
 public sealed partial class Griddo : FrameworkElement
 {
+
     private static GriddoThemeKind _defaultTheme = GriddoThemeKind.Vs2013LightTheme;
     private static event Action<GriddoThemeKind>? DefaultThemeChanged;
     public static GriddoThemeKind DefaultTheme
