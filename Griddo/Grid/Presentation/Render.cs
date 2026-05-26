@@ -142,8 +142,26 @@ public sealed partial class Griddo
         headerText.MaxTextWidth = Math.Max(1, visibleRect.Width - 8);
         headerText.MaxTextHeight = Math.Max(1, visibleRect.Height - 4);
         headerText.Trimming = TextTrimming.CharacterEllipsis;
-        var headerY = visibleRect.Y + Math.Max(0, (visibleRect.Height - headerText.Height) / 2);
-        dc.DrawText(headerText, new Point(visibleRect.X + 4, headerY));
+        var headerRotation = Fields[col] is IGriddoFieldRotationView rotationView
+            ? GriddoValuePainter.NormalizeTextRotationDegrees(rotationView.TextRotationDegrees)
+            : 0;
+        if (headerRotation != 0)
+        {
+            dc.PushClip(new RectangleGeometry(visibleRect));
+            try
+            {
+                GriddoValuePainter.DrawRotatedFormattedText(dc, headerText, visibleRect, headerRotation);
+            }
+            finally
+            {
+                dc.Pop();
+            }
+        }
+        else
+        {
+            var headerY = visibleRect.Y + Math.Max(0, (visibleRect.Height - headerText.Height) / 2);
+            dc.DrawText(headerText, new Point(visibleRect.X + 4, headerY));
+        }
         DrawSortHeaderIndicator(dc, col, rect, typeface, isSelectedHeader);
 
         if (_fixedFieldCount > 0 && col == _fixedFieldCount - 1)
@@ -354,24 +372,70 @@ public sealed partial class Griddo
         var paintValue = (!isGraphic && !Fields[col].IsHtml)
             ? FormatCellValue(rawValue, col, cellView)
             : rawValue;
+        var textRotationDegrees = Fields[col] is IGriddoFieldRotationView rotationView
+            ? rotationView.TextRotationDegrees
+            : 0;
         // Intersect with viewport so HTML (and plain text) centers in the visible strip when the record is clipped vertically.
         var paintBounds = isGraphic ? mergedRenderRect : Rect.Intersect(mergedRenderRect, bodyViewport);
         if (!paintBounds.IsEmpty)
         {
-            GriddoValuePainter.Paint(
-                dc,
-                paintValue,
-                paintBounds,
-                fieldTypeface,
-                fieldFontSize,
-                foregroundBrush,
-                underline,
-                Fields[col].IsHtml,
-                true,
-                Fields[col].ContentAlignment,
-                isGraphic ? VerticalAlignment.Top : VerticalAlignment.Center,
-                noWrap,
-                renderHtmlBackground: !isSelectedVisual);
+            var htmlScrollOffset = 0.0;
+            var htmlPaintBounds = paintBounds;
+            if (Fields[col].IsHtml
+                && TryGetHtmlCellScrollMetrics(
+                    address,
+                    paintBounds,
+                    paintValue,
+                    fieldTypeface,
+                    fieldFontSize,
+                    noWrap,
+                    out htmlScrollOffset,
+                    out var htmlContentHeight,
+                    out var htmlViewportHeight,
+                    out _,
+                    out htmlPaintBounds,
+                    out var htmlScrollBarBounds))
+            {
+                GriddoValuePainter.Paint(
+                    dc,
+                    paintValue,
+                    htmlPaintBounds,
+                    fieldTypeface,
+                    fieldFontSize,
+                    foregroundBrush,
+                    underline,
+                    true,
+                    true,
+                    Fields[col].ContentAlignment,
+                    VerticalAlignment.Top,
+                    noWrap,
+                    renderHtmlBackground: !isSelectedVisual,
+                    htmlVerticalScrollOffset: htmlScrollOffset);
+                GriddoValuePainter.DrawHtmlVerticalScrollBar(
+                    dc,
+                    htmlScrollBarBounds,
+                    htmlContentHeight,
+                    htmlViewportHeight,
+                    htmlScrollOffset);
+            }
+            else
+            {
+                GriddoValuePainter.Paint(
+                    dc,
+                    paintValue,
+                    htmlPaintBounds,
+                    fieldTypeface,
+                    fieldFontSize,
+                    foregroundBrush,
+                    underline,
+                    Fields[col].IsHtml,
+                    true,
+                    Fields[col].ContentAlignment,
+                    Fields[col].IsHtml || isGraphic ? VerticalAlignment.Top : VerticalAlignment.Center,
+                    noWrap,
+                    renderHtmlBackground: !isSelectedVisual,
+                    textRotationDegrees: textRotationDegrees);
+            }
         }
     }
 
@@ -1392,12 +1456,18 @@ public sealed partial class Griddo
             caretBottom = caretBounds.Bottom;
         }
 
-        caretX = Math.Clamp((double)caretX, editContentRect.X + 2, editContentRect.Right - 2);
-        caretTop = Math.Clamp(caretTop, editContentRect.Y + 1, editContentRect.Bottom - 1);
-        caretBottom = Math.Clamp(caretBottom, caretTop + 1, editContentRect.Bottom - 1);
-        if (caretBottom > caretTop)
+        caretX = Math.Clamp((double)caretX, editContentRect.X + 2, Math.Max(editContentRect.X + 2, editContentRect.Right - 2));
+        var caretMinY = editContentRect.Y + 1;
+        var caretMaxY = Math.Max(caretMinY, editContentRect.Bottom - 1);
+        if (caretMaxY > caretMinY)
         {
-            dc.DrawLine(new Pen(BodyForeground, 1), new Point(caretX, caretTop), new Point(caretX, caretBottom));
+            caretTop = Math.Clamp(caretTop, caretMinY, caretMaxY);
+            var caretBottomMin = Math.Min(caretTop + 1, caretMaxY);
+            caretBottom = Math.Clamp(caretBottom, caretBottomMin, caretMaxY);
+            if (caretBottom > caretTop)
+            {
+                dc.DrawLine(new Pen(BodyForeground, 1), new Point(caretX, caretTop), new Point(caretX, caretBottom));
+            }
         }
 
         dc.Pop();

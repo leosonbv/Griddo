@@ -7,7 +7,7 @@ using Griddo.Editing;
 
 namespace Griddo.Fields;
 
-public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoDynamicFieldColorView, IGriddoCheckboxToggleFieldView, IGriddoFieldWrapView, IGriddoFieldAlignmentView, IGriddoFieldEditableHeaderView
+public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoDynamicFieldColorView, IGriddoCheckboxToggleFieldView, IGriddoFieldWrapView, IGriddoFieldAlignmentView, IGriddoFieldEditableHeaderView, IGriddoFieldRotationView
 {
     private readonly Func<object, object?> _valueGetter;
     private readonly Func<object, object?, bool> _valueSetter;
@@ -25,11 +25,13 @@ public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember
         string? sourceMemberName = null,
         string? sourceObjectName = null,
         IReadOnlyList<Type>? inferBooleanCheckboxFromMemberTypes = null,
-        bool? allowCellEdit = null)
+        bool? allowCellEdit = null,
+        int textRotationDegrees = 0)
     {
         Header = header;
         Width = width;
         FieldFill = fieldFill;
+        TextRotationDegrees = GriddoValuePainter.NormalizeTextRotationDegrees(textRotationDegrees);
         SourceMemberName = sourceMemberName ?? string.Empty;
         SourceObjectName = sourceObjectName ?? string.Empty;
         _valueGetter = valueGetter;
@@ -109,6 +111,7 @@ public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember
     public Func<object, string>? DynamicForegroundColorGetter { get; set; }
     public Func<object, string>? DynamicBackgroundColorGetter { get; set; }
     public bool NoWrap { get; set; } = true;
+    public int TextRotationDegrees { get; set; }
 
     /// <inheritdoc cref="IGriddoFieldSourceMember.SourceMemberName"/>
     /// <remarks>Empty when not specified at construction; field chooser may infer from record type.</remarks>
@@ -227,7 +230,7 @@ public sealed class GriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember
     }
 }
 
-public sealed class HtmlGriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoFieldWrapView, IGriddoFieldAlignmentView
+public sealed class HtmlGriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMember, IGriddoFieldSourceObject, IGriddoFieldDescriptionView, IGriddoFieldFormatView, IGriddoFieldFontView, IGriddoFieldColorView, IGriddoFieldWrapView, IGriddoFieldAlignmentView, IGriddoFieldEditableHeaderView, IGriddoFieldHtmlScrollView
 {
     private readonly Func<object, string> _valueGetter;
     private readonly Func<object, string, bool> _valueSetter;
@@ -241,7 +244,8 @@ public sealed class HtmlGriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMe
         TextAlignment contentAlignment = TextAlignment.Left,
         int fieldFill = 0,
         string? sourceMemberName = null,
-        string? sourceObjectName = null)
+        string? sourceObjectName = null,
+        bool allowCellEdit = false)
     {
         Header = header;
         Width = width;
@@ -252,6 +256,7 @@ public sealed class HtmlGriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMe
         _valueSetter = valueSetter;
         Editor = editor ?? GriddoCellEditors.Text;
         ContentAlignment = contentAlignment;
+        AllowCellEdit = allowCellEdit;
     }
 
     public string Header { get; set; }
@@ -263,6 +268,13 @@ public sealed class HtmlGriddoFieldView : IGriddoFieldView, IGriddoFieldSourceMe
     public string ForegroundColor { get; set; } = string.Empty;
     public string BackgroundColor { get; set; } = string.Empty;
     public bool NoWrap { get; set; } = true;
+    public bool AutoVerticalScrollBar { get; set; }
+
+    /// <inheritdoc cref="IGriddoFieldEditableHeaderView.UseBoldColumnHeader"/>
+    public bool UseBoldColumnHeader => AllowCellEdit;
+
+    /// <inheritdoc cref="IGriddoFieldEditableHeaderView.AllowCellEdit"/>
+    public bool AllowCellEdit { get; }
 
     public string SourceMemberName { get; }
     public string SourceObjectName { get; }

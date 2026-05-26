@@ -1766,6 +1766,10 @@ public sealed partial class Griddo
         {
             e.Handled = true;
         }
+        else if (TryHandleHtmlCellMouseWheel(e.GetPosition(this), e))
+        {
+            e.Handled = true;
+        }
 
         base.OnPreviewMouseWheel(e);
     }
@@ -1810,6 +1814,12 @@ public sealed partial class Griddo
     protected override void OnMouseWheel(MouseWheelEventArgs e)
     {
         if (e.Handled)
+        {
+            base.OnMouseWheel(e);
+            return;
+        }
+
+        if (TryHandleHtmlCellMouseWheel(e.GetPosition(this), e))
         {
             base.OnMouseWheel(e);
             return;

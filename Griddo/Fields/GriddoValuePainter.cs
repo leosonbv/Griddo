@@ -23,7 +23,9 @@ public static class GriddoValuePainter
         TextAlignment alignment = TextAlignment.Left,
         VerticalAlignment verticalAlignment = VerticalAlignment.Top,
         bool noWrap = false,
-        bool renderHtmlBackground = true)
+        bool renderHtmlBackground = true,
+        double htmlVerticalScrollOffset = 0,
+        int textRotationDegrees = 0)
     {
         if (value is IGriddoSizedImageValue sizedImageValue)
         {
@@ -59,7 +61,7 @@ public static class GriddoValuePainter
                 }
                 else
                 {
-                    DrawHtmlText(drawingContext, text, bounds, typeface, fontSize, foregroundBrush, alignment, verticalAlignment, noWrap, renderHtmlBackground);
+                    DrawHtmlText(drawingContext, text, bounds, typeface, fontSize, foregroundBrush, alignment, verticalAlignment, noWrap, renderHtmlBackground, htmlVerticalScrollOffset);
                 }
             }
             finally
@@ -86,6 +88,25 @@ public static class GriddoValuePainter
         formatted.TextAlignment = alignment;
         formatted.MaxTextWidth = Math.Max(1, bounds.Width - 8);
         formatted.MaxLineCount = noWrap ? 1 : int.MaxValue;
+
+        var rotation = NormalizeTextRotationDegrees(textRotationDegrees);
+        if (rotation != 0)
+        {
+            formatted.MaxTextWidth = Math.Max(1, Math.Max(bounds.Width, bounds.Height) - 8);
+            formatted.MaxLineCount = 1;
+            formatted.Trimming = TextTrimming.CharacterEllipsis;
+            drawingContext.PushClip(new RectangleGeometry(bounds));
+            try
+            {
+                DrawRotatedFormattedText(drawingContext, formatted, bounds, rotation);
+            }
+            finally
+            {
+                drawingContext.Pop();
+            }
+
+            return;
+        }
 
         // Measure height at width *before* MaxTextHeight. After the cap, FormattedText.Height is clipped,
         // so it can never exceed the inner box — the old "pin when taller than inner" check never fired.
@@ -119,6 +140,39 @@ public static class GriddoValuePainter
         {
             drawingContext.Pop();
         }
+    }
+
+    public static int NormalizeTextRotationDegrees(int degrees)
+    {
+        var normalized = ((degrees % 360) + 360) % 360;
+        return normalized switch
+        {
+            90 => 90,
+            180 => 180,
+            270 => 270,
+            _ => 0,
+        };
+    }
+
+    public static void DrawRotatedFormattedText(
+        DrawingContext drawingContext,
+        FormattedText formatted,
+        Rect bounds,
+        int rotationDegrees)
+    {
+        if (bounds.Width <= 0 || bounds.Height <= 0 || formatted.Text.Length == 0)
+        {
+            return;
+        }
+
+        var center = new Point(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2);
+        drawingContext.PushTransform(new TranslateTransform(center.X, center.Y));
+        drawingContext.PushTransform(new RotateTransform(rotationDegrees));
+        drawingContext.DrawText(
+            formatted,
+            new Point(-formatted.Width / 2, -formatted.Height / 2));
+        drawingContext.Pop();
+        drawingContext.Pop();
     }
 
     private static double PlainTextVerticalOrigin(
@@ -339,7 +393,72 @@ public static class GriddoValuePainter
         => value.Contains('<') && value.Contains('>');
 
     private static bool LooksLikeHtmlTable(string value)
-        => value.Contains("<table", StringComparison.OrdinalIgnoreCase);
+    {
+        if (!value.Contains("<table", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // Documentation-style HTML (paragraphs/headings plus a table) must flow as text, not table-only layout.
+        return !value.Contains("<h1", StringComparison.OrdinalIgnoreCase)
+            && !value.Contains("<h2", StringComparison.OrdinalIgnoreCase)
+            && !value.Contains("<h3", StringComparison.OrdinalIgnoreCase)
+            && !value.Contains("<p>", StringComparison.OrdinalIgnoreCase)
+            && !value.Contains("<p ", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static double MeasureHtmlRenderedHeight(
+        string html,
+        Typeface typeface,
+        double fontSize,
+        double maxTextWidth,
+        bool noWrap = false)
+    {
+        if (string.IsNullOrEmpty(html))
+        {
+            return 0;
+        }
+
+        var formatted = BuildHtmlFormattedText(html, typeface, fontSize, Brushes.Black);
+        formatted.MaxTextWidth = Math.Max(1, maxTextWidth);
+        formatted.MaxLineCount = noWrap ? 1 : int.MaxValue;
+        return formatted.Height;
+    }
+
+    public static void DrawHtmlVerticalScrollBar(
+        DrawingContext drawingContext,
+        Rect trackBounds,
+        double contentHeight,
+        double viewportHeight,
+        double scrollOffset)
+    {
+        if (trackBounds.Width <= 0 || trackBounds.Height <= 0 || contentHeight <= viewportHeight + 1)
+        {
+            return;
+        }
+
+        const double inset = 1.0;
+        var track = new Rect(
+            trackBounds.X + inset,
+            trackBounds.Y + inset,
+            Math.Max(1, trackBounds.Width - inset * 2),
+            Math.Max(1, trackBounds.Height - inset * 2));
+
+        drawingContext.DrawRectangle(
+            new SolidColorBrush(Color.FromArgb(32, 0, 0, 0)),
+            null,
+            track);
+
+        var maxScroll = Math.Max(1, contentHeight - viewportHeight);
+        var thumbHeight = Math.Max(12, track.Height * (viewportHeight / contentHeight));
+        var thumbTravel = Math.Max(1, track.Height - thumbHeight);
+        var thumbY = track.Y + scrollOffset / maxScroll * thumbTravel;
+        var thumb = new Rect(track.X, thumbY, track.Width, thumbHeight);
+        drawingContext.DrawRectangle(
+            new SolidColorBrush(Color.FromArgb(160, 96, 96, 96)),
+            null,
+            thumb);
+    }
 
     private static void DrawHtmlText(
         DrawingContext drawingContext,
@@ -351,10 +470,9 @@ public static class GriddoValuePainter
         TextAlignment alignment,
         VerticalAlignment verticalAlignment = VerticalAlignment.Center,
         bool noWrap = false,
-        bool renderBackground = true)
+        bool renderBackground = true,
+        double verticalScrollOffset = 0)
     {
-        const double layoutMinSide = 512d;
-
         var formatted = BuildHtmlFormattedText(html, typeface, fontSize, foregroundBrush);
         if (formatted.Text.Length == 0)
         {
@@ -394,10 +512,7 @@ public static class GriddoValuePainter
             return;
         }
 
-        // Layout as if width/height were generous so typography is not shrunk/ellipsized solely because the rendered cell clip is narrow.
-        var layoutW = Math.Max(bounds.Width, layoutMinSide);
-        var layoutInnerW = layoutW - padX * 2;
-        formatted.MaxTextWidth = Math.Max(1, layoutInnerW);
+        formatted.MaxTextWidth = Math.Max(1, bounds.Width - padX * 2);
         formatted.MaxLineCount = noWrap ? 1 : int.MaxValue;
 
         var pinTopForThinStrip =
@@ -424,7 +539,7 @@ public static class GriddoValuePainter
         else
         {
             // Overflow or clipped strip: preserve full intrinsic line layout; clipping shows top of content.
-            y = bounds.Y + padY;
+            y = bounds.Y + padY - Math.Max(0, verticalScrollOffset);
         }
 
         drawingContext.DrawText(formatted, new Point(bounds.X + padX, y));
@@ -469,6 +584,11 @@ public static class GriddoValuePainter
                 formatted.SetForegroundBrush(run.Foreground, offset, run.Text.Length);
             }
 
+            if (run.FontSizeScale > 1.001)
+            {
+                formatted.SetFontSize(fontSize * run.FontSizeScale, offset, run.Text.Length);
+            }
+
             offset += run.Text.Length;
         }
 
@@ -479,9 +599,11 @@ public static class GriddoValuePainter
     {
         var runs = new List<HtmlRun>();
         var styleStack = new Stack<HtmlStyle>();
-        styleStack.Push(new HtmlStyle(false, false, false, null));
+        styleStack.Push(new HtmlStyle(false, false, false, null, 1.0));
         var listStack = new Stack<ListState>();
         var lastOutputEndsWithNewline = true;
+        var tableCellIndex = 0;
+        var suppressTableRowOutput = false;
 
         var plain = new StringBuilder();
         var i = 0;
@@ -533,9 +655,56 @@ public static class GriddoValuePainter
                     continue;
                 }
 
-                if (styleStack.Count > 1)
+                if (IsParagraphTag(tag))
                 {
-                    styleStack.Pop();
+                    EnsureLineBreak();
+                    continue;
+                }
+
+                if (IsHeadingTag(tag))
+                {
+                    EnsureLineBreak();
+                    PopStyleIfNeeded();
+                    continue;
+                }
+
+                if (tag.StartsWith("tr"))
+                {
+                    DiscardPendingPlain();
+                    if (!suppressTableRowOutput)
+                    {
+                        EnsureLineBreak();
+                    }
+
+                    tableCellIndex = 0;
+                    suppressTableRowOutput = false;
+                    continue;
+                }
+
+                if (tag.StartsWith("td") || tag.StartsWith("th"))
+                {
+                    if (tag.StartsWith("td"))
+                    {
+                        suppressTableRowOutput = false;
+                    }
+
+                    if (tag.StartsWith("th"))
+                    {
+                        PopStyleIfNeeded();
+                    }
+
+                    continue;
+                }
+
+                if (tag.StartsWith("table") || tag.StartsWith("thead") || tag.StartsWith("tbody"))
+                {
+                    EnsureLineBreak();
+                    continue;
+                }
+
+                if (IsInlineStyleTag(tag))
+                {
+                    PopStyleIfNeeded();
                 }
 
                 continue;
@@ -568,6 +737,73 @@ public static class GriddoValuePainter
                 continue;
             }
 
+            if (IsParagraphTag(tag))
+            {
+                EnsureLineBreak();
+                continue;
+            }
+
+            if (IsHeadingTag(tag))
+            {
+                EnsureLineBreak();
+                var level = tag[1] - '0';
+                var scale = level switch
+                {
+                    1 => 1.35,
+                    2 => 1.15,
+                    _ => 1.05,
+                };
+                styleStack.Push(styleStack.Peek() with { Bold = true, FontSizeScale = scale });
+                continue;
+            }
+
+            if (tag.StartsWith("table") || tag.StartsWith("thead") || tag.StartsWith("tbody"))
+            {
+                EnsureLineBreak();
+                continue;
+            }
+
+            if (tag.StartsWith("tr"))
+            {
+                DiscardPendingPlain();
+                EnsureLineBreak();
+                tableCellIndex = 0;
+                suppressTableRowOutput = true;
+                continue;
+            }
+
+            if (tag.StartsWith("td") || tag.StartsWith("th"))
+            {
+                if (tag.StartsWith("td"))
+                {
+                    suppressTableRowOutput = false;
+                }
+
+                if (tableCellIndex > 0)
+                {
+                    plain.Append(" \u2014 ");
+                }
+
+                tableCellIndex++;
+                if (tag.StartsWith("th"))
+                {
+                    styleStack.Push(styleStack.Peek() with { Bold = true });
+                }
+
+                continue;
+            }
+
+            if (tag.StartsWith("img") || tag.StartsWith("a ") || tag == "a")
+            {
+                continue;
+            }
+
+            if (tag.StartsWith("blockquote"))
+            {
+                EnsureLineBreak();
+                continue;
+            }
+
             var current = styleStack.Peek();
             if (tag.StartsWith("b") || tag.StartsWith("strong"))
             {
@@ -590,6 +826,31 @@ public static class GriddoValuePainter
         FlushRun();
         return runs;
 
+        void PopStyleIfNeeded()
+        {
+            if (styleStack.Count > 1)
+            {
+                styleStack.Pop();
+            }
+        }
+
+        static bool IsHeadingTag(string tag) =>
+            tag.Length >= 2
+            && tag[0] == 'h'
+            && tag[1] is >= '1' and <= '6'
+            && (tag.Length == 2 || tag[2] == ' ' || tag[2] == '\t');
+
+        static bool IsParagraphTag(string tag) =>
+            tag.StartsWith("p") && !tag.StartsWith("pre");
+
+        static bool IsInlineStyleTag(string tag) =>
+            tag.StartsWith("b")
+            || tag.StartsWith("strong")
+            || tag.StartsWith("i")
+            || tag.StartsWith("em")
+            || tag.StartsWith("u")
+            || tag.StartsWith("font");
+
         void FlushRun()
         {
             if (plain.Length == 0)
@@ -597,10 +858,21 @@ public static class GriddoValuePainter
                 return;
             }
 
+            if (suppressTableRowOutput)
+            {
+                plain.Clear();
+                return;
+            }
+
             var s = styleStack.Peek();
             var text = DecodeHtmlEntities(plain.ToString());
-            runs.Add(new HtmlRun(text, s.Bold, s.Italic, s.Underline, s.Foreground));
+            runs.Add(new HtmlRun(text, s.Bold, s.Italic, s.Underline, s.Foreground, s.FontSizeScale));
             lastOutputEndsWithNewline = text.EndsWith('\n');
+            plain.Clear();
+        }
+
+        void DiscardPendingPlain()
+        {
             plain.Clear();
         }
 
@@ -971,6 +1243,6 @@ public static class GriddoValuePainter
         public int Counter { get; set; }
     }
 
-    private readonly record struct HtmlStyle(bool Bold, bool Italic, bool Underline, Brush? Foreground);
-    private readonly record struct HtmlRun(string Text, bool Bold, bool Italic, bool Underline, Brush? Foreground);
+    private readonly record struct HtmlStyle(bool Bold, bool Italic, bool Underline, Brush? Foreground, double FontSizeScale = 1.0);
+    private readonly record struct HtmlRun(string Text, bool Bold, bool Italic, bool Underline, Brush? Foreground, double FontSizeScale = 1.0);
 }

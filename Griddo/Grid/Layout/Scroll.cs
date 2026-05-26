@@ -607,12 +607,14 @@ public sealed partial class Griddo
             return;
         }
 
+        var oldOffset = _verticalOffset;
         _verticalOffset = clamped;
         if (Math.Abs(_verticalScrollBar.Value - clamped) > double.Epsilon)
         {
             _verticalScrollBar.Value = clamped;
         }
 
+        ResetHtmlCellScrollAfterVerticalScroll(oldOffset, clamped);
         InvalidateVisual();
     }
 
@@ -667,6 +669,7 @@ public sealed partial class Griddo
 
     private void OnVerticalScrollChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
+        var oldOffset = HarmonizeVerticalScrollOffset(e.OldValue);
         var harmonized = HarmonizeVerticalScrollOffset(e.NewValue);
         _verticalOffset = harmonized;
         if (Math.Abs(e.NewValue - harmonized) > double.Epsilon && Math.Abs(_verticalScrollBar.Value - harmonized) > double.Epsilon)
@@ -674,6 +677,7 @@ public sealed partial class Griddo
             _verticalScrollBar.Value = harmonized;
         }
 
+        ResetHtmlCellScrollAfterVerticalScroll(oldOffset, harmonized);
         InvalidateVisual();
     }
 }
