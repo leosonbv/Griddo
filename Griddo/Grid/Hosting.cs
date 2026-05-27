@@ -45,6 +45,8 @@ public sealed partial class Griddo
 
     private void SyncHostedCells()
     {
+        AlignVerticalOffsetToScrollBarForLayout();
+
         if (_viewportBodyWidth <= 0 || _viewportBodyHeight <= 0 || Records.Count == 0 || Fields.Count == 0)
         {
             ClearHostedCells();

@@ -149,6 +149,7 @@ public sealed partial class Griddo : FrameworkElement
     private double _resizePreserveOldRecordHeight;
     private double _resizePreserveOldVerticalOffset;
     private double _resizePreserveOldHorizontalOffset;
+    private int _resizeEffectiveFixedRecordCount = -1;
     private bool _isTrackingFieldMove;
     private bool _isMovingField;
     private bool _isMovingPointerInFieldHeader;

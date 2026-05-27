@@ -68,6 +68,7 @@ public sealed partial class Griddo
             ScheduleInitialSampleAutoSize();
         }
 
+        ReconcileVerticalScrollOffsetWithContent();
         UpdateRecordHeaderWidth();
         UpdateScrollBars();
         UpdateHostCanvasClips();

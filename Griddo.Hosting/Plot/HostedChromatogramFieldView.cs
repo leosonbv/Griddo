@@ -430,6 +430,9 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         chart.ShowYAxis = ShowYAxis;
         if (chart is ChromatogramControl chromatogram)
         {
+            chromatogram.ShowSeries = _signalProvider is ITicSignalVisibility ticVisibility
+                ? ticVisibility.ShowTicSignal
+                : true;
             chromatogram.ShowPeakRegionFill = ChromatogramShowPeaks;
             chromatogram.ShowPeakLabels = ShowCalibrationPointLabels
                                           || PlotHostedVisibility.HasEnabledSegments(CalibrationPointLabelSegments);

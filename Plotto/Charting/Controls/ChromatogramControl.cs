@@ -10,6 +10,11 @@ using Plotto.Charting.Rendering;
 
 namespace Plotto.Charting.Controls;
 
+public readonly record struct ChromatogramZoomOutFitOptions(
+    bool IncludeTicSignal,
+    bool IncludeCompounds,
+    bool IncludeLabels);
+
 public partial class ChromatogramControl : SkiaChartBaseControl
 {
     /// <summary>Multiplies committed manual-peak fill RGB (same alpha as normal peak fill); lower is darker.</summary>
@@ -27,6 +32,7 @@ public partial class ChromatogramControl : SkiaChartBaseControl
     private bool _pendingPeakLabelViewportExpand;
     private bool _deferPaintUntilPeakLabelViewportReady;
     private bool _peakLabelExpandScheduled;
+    private readonly ChartSkiaPeakLabels.TicOverlayPlacementCache _ticOverlayPlacementCache = new();
     private readonly SKPaint _integrationFillPaint = new()
     {
         IsAntialias = true,
@@ -227,7 +233,14 @@ public partial class ChromatogramControl : SkiaChartBaseControl
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
     {
         base.OnRenderSizeChanged(sizeInfo);
-        TryCompletePendingPeakLabelViewportExpand();
+        if (ShowPeakLabels && PeakLabels.Count > 0)
+        {
+            ExpandViewportForPeakLabels();
+        }
+        else
+        {
+            TryCompletePendingPeakLabelViewportExpand();
+        }
     }
 
     /// <summary>Fit Y headroom for peak labels before the first visible paint on a new row.</summary>
@@ -278,7 +291,8 @@ public partial class ChromatogramControl : SkiaChartBaseControl
                     ToPixelY,
                     PeakLabelRotate,
                     PeakLabelTicOverlayMode,
-                    out var remainingTop)
+                    out var remainingTop,
+                    _ticOverlayPlacementCache)
                 || remainingTop >= plotRect.Top + margin - 0.5f)
             {
                 _pendingPeakLabelViewportExpand = false;
@@ -287,7 +301,7 @@ public partial class ChromatogramControl : SkiaChartBaseControl
 
             if (pass == maxPasses - 1)
             {
-                _pendingPeakLabelViewportExpand = true;
+                _pendingPeakLabelViewportExpand = false;
             }
         }
 
@@ -301,10 +315,6 @@ public partial class ChromatogramControl : SkiaChartBaseControl
         if (Math.Abs(Viewport.YMax - previousYMax) > 1e-12)
         {
             NotifyViewportChanged();
-            InvalidateVisual();
-        }
-        else if (_pendingPeakLabelViewportExpand)
-        {
             InvalidateVisual();
         }
     }
@@ -322,48 +332,36 @@ public partial class ChromatogramControl : SkiaChartBaseControl
             return false;
         }
 
-        const int maxIterations = 10;
-        for (var iteration = 0; iteration < maxIterations; iteration++)
+        if (!ChartSkiaPeakLabels.TryGetMinVisibleLabelTopPixelY(
+                plotRect,
+                PeakLabels,
+                PlotDeviceScale,
+                PeakLabelFontSize,
+                ToPixelX,
+                ToPixelY,
+                PeakLabelRotate,
+                PeakLabelTicOverlayMode,
+                out var minTop,
+                _ticOverlayPlacementCache))
         {
-            EnsurePlotGeometrySync();
-            plotRect = GetDrawPlotRect();
-            if (plotRect.Width <= 1f || plotRect.Height <= 1f)
-            {
-                _pendingPeakLabelViewportExpand = true;
-                return false;
-            }
-
-            if (!ChartSkiaPeakLabels.TryGetMinVisibleLabelTopPixelY(
-                    plotRect,
-                    PeakLabels,
-                    PlotDeviceScale,
-                    PeakLabelFontSize,
-                    ToPixelX,
-                    ToPixelY,
-                    PeakLabelRotate,
-                    PeakLabelTicOverlayMode,
-                    out var minTop))
-            {
-                _pendingPeakLabelViewportExpand = false;
-                return false;
-            }
-
-            if (minTop >= plotRect.Top + margin)
-            {
-                return true;
-            }
-
-            var span = Viewport.YMax - Viewport.YMin;
-            if (!(span > 0))
-            {
-                return true;
-            }
-
-            var deficitPx = plotRect.Top + margin - minTop;
-            Viewport.YMax += deficitPx / plotRect.Height * span;
-            Viewport.EnsureMinimumSize();
+            _pendingPeakLabelViewportExpand = false;
+            return false;
         }
 
+        if (minTop >= plotRect.Top + margin)
+        {
+            return true;
+        }
+
+        var span = Viewport.YMax - Viewport.YMin;
+        if (!(span > 0))
+        {
+            return true;
+        }
+
+        var deficitPx = plotRect.Top + margin - minTop;
+        Viewport.YMax += deficitPx / plotRect.Height * span;
+        Viewport.EnsureMinimumSize();
         return true;
     }
 
@@ -396,13 +394,11 @@ public partial class ChromatogramControl : SkiaChartBaseControl
     {
         if (_deferPaintUntilPeakLabelViewportReady)
         {
-            TryCompletePendingPeakLabelViewportExpand();
+            _deferPaintUntilPeakLabelViewportReady = false;
             if (_pendingPeakLabelViewportExpand)
             {
-                return;
+                ExpandViewportForPeakLabels();
             }
-
-            _deferPaintUntilPeakLabelViewportReady = false;
         }
 
         base.OnPaintSurface(e);
@@ -448,6 +444,151 @@ public partial class ChromatogramControl : SkiaChartBaseControl
 
         base.ZoomOutCompletely();
         ExpandViewportForPeakLabels();
+    }
+
+    /// <summary>
+    /// Programmatic zoom-out for toolbar/grid sync. Does not require editor mode.
+    /// </summary>
+    public void FitZoomOutCompletely(ChromatogramZoomOutFitOptions options)
+    {
+        var points = Points;
+        if (!TryResolveZoomOutXInterval(points, out var xMin, out var xMax))
+        {
+            return;
+        }
+
+        if (TryComputeZoomOutYExtents(options, xMin, xMax, points, out var ymin, out var ymax))
+        {
+            FitViewportToXIntervalWithYExtents(xMin, xMax, ymin, ymax);
+        }
+        else if (options.IncludeTicSignal && points.Count > 0)
+        {
+            FitViewportToXInterval(xMin, xMax);
+        }
+        else
+        {
+            Viewport.XMin = xMin;
+            Viewport.XMax = xMax;
+            Viewport.YMin = 0d;
+            Viewport.YMax = 1d;
+            Viewport.EnsureMinimumSize();
+            ApplyViewportInteractionClamp();
+            NotifyViewportChanged();
+        }
+
+        if (options.IncludeLabels)
+        {
+            ExpandViewportForPeakLabels();
+        }
+        else
+        {
+            _pendingPeakLabelViewportExpand = false;
+            _deferPaintUntilPeakLabelViewportReady = false;
+        }
+
+        InvalidateVisual();
+    }
+
+    private bool TryResolveZoomOutXInterval(IReadOnlyList<ChartPoint> points, out double xMin, out double xMax)
+    {
+        if (DefaultFitXMin is { } defaultXMin
+            && DefaultFitXMax is { } defaultXMax
+            && defaultXMax > defaultXMin)
+        {
+            xMin = defaultXMin;
+            xMax = defaultXMax;
+            return true;
+        }
+
+        if (points.Count > 0)
+        {
+            ChartSeriesBounds.GetExtents(points, out xMin, out xMax, out _, out _);
+            return xMax > xMin;
+        }
+
+        xMin = 0d;
+        xMax = 1d;
+        return false;
+    }
+
+    private bool TryComputeZoomOutYExtents(
+        ChromatogramZoomOutFitOptions options,
+        double xMin,
+        double xMax,
+        IReadOnlyList<ChartPoint> points,
+        out double ymin,
+        out double ymax)
+    {
+        var minY = 0d;
+        var maxY = 0d;
+        var found = false;
+        const double eps = 1e-9;
+
+        if (options.IncludeTicSignal)
+        {
+            foreach (var point in points)
+            {
+                AccumulateZoomOutY(point.X, point.Y, xMin, xMax, eps, ref minY, ref maxY, ref found);
+            }
+        }
+
+        if (options.IncludeCompounds)
+        {
+            foreach (var colored in ColoredIntegrationRegions)
+            {
+                AccumulateZoomOutY(colored.Region.Start.X, colored.Region.Start.Y, xMin, xMax, eps, ref minY, ref maxY, ref found);
+                AccumulateZoomOutY(colored.Region.End.X, colored.Region.End.Y, xMin, xMax, eps, ref minY, ref maxY, ref found);
+                if (colored.ShapePoints is { Count: > 0 })
+                {
+                    foreach (var shapePoint in colored.ShapePoints)
+                    {
+                        AccumulateZoomOutY(shapePoint.X, shapePoint.Y, xMin, xMax, eps, ref minY, ref maxY, ref found);
+                    }
+                }
+            }
+
+            foreach (var region in IntegrationRegions)
+            {
+                AccumulateZoomOutY(region.Start.X, region.Start.Y, xMin, xMax, eps, ref minY, ref maxY, ref found);
+                AccumulateZoomOutY(region.End.X, region.End.Y, xMin, xMax, eps, ref minY, ref maxY, ref found);
+            }
+
+            foreach (var region in AlternativeIntegrationRegions)
+            {
+                AccumulateZoomOutY(region.Start.X, region.Start.Y, xMin, xMax, eps, ref minY, ref maxY, ref found);
+                AccumulateZoomOutY(region.End.X, region.End.Y, xMin, xMax, eps, ref minY, ref maxY, ref found);
+            }
+        }
+
+        ymin = minY;
+        ymax = maxY;
+        return found;
+    }
+
+    private static void AccumulateZoomOutY(
+        double x,
+        double y,
+        double xMin,
+        double xMax,
+        double eps,
+        ref double minY,
+        ref double maxY,
+        ref bool found)
+    {
+        if (!double.IsFinite(x) || !double.IsFinite(y) || x < xMin - eps || x > xMax + eps)
+        {
+            return;
+        }
+
+        if (!found)
+        {
+            minY = maxY = y;
+            found = true;
+            return;
+        }
+
+        minY = Math.Min(minY, y);
+        maxY = Math.Max(maxY, y);
     }
 
     /// <summary>
@@ -818,7 +959,8 @@ public partial class ChromatogramControl : SkiaChartBaseControl
                 PeakLabelTicOverlayMode ? null : _peakLabelConnectorPaint,
                 PeakLabelRotate,
                 PeakLabelTicOverlayMode,
-                ShowPeakLabelDebugRect);
+                ShowPeakLabelDebugRect,
+                _ticOverlayPlacementCache);
         }
 
         DrawVerticalMarkersInPlot(canvas, plotRect);
@@ -902,7 +1044,8 @@ public partial class ChromatogramControl : SkiaChartBaseControl
                 ToPixelX,
                 ToPixelY,
                 PeakLabelRotate,
-                markerXs);
+                markerXs,
+                _ticOverlayPlacementCache);
         }
 
         canvas.Save();

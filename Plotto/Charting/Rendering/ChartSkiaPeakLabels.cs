@@ -18,8 +18,131 @@ internal static class ChartSkiaPeakLabels
 
     private static readonly Dictionary<TicLabelLayoutCacheKey, TicLabelLayout> TicLabelLayoutCache = new();
     private static readonly Dictionary<int, FontLineMetrics> FontLineMetricsCache = new();
-    private static TicOverlayPlacementCacheKey _cachedDrawItemsKey;
-    private static List<TicOverlayDrawItem>? _cachedDrawItems;
+    private static readonly Dictionary<int, SKFont> TicOverlayFontCache = new();
+
+    /// <summary>Per-chart cache for TIC overlay placement; avoids thrashing a global cache across many grid rows.</summary>
+    internal sealed class TicOverlayPlacementCache
+    {
+        private TicOverlayPlacementCacheKey _drawKey;
+        private List<TicOverlayDrawItem>? _drawItems;
+        private List<TicLabelPlacement>? _placements;
+        private TicOverlayPlacementCacheKey _extentsKey;
+        private float _extentsMinTop;
+        private float _extentsMaxBottom;
+        private bool _hasExtents;
+
+        internal IReadOnlyList<TicOverlayDrawItem> GetOrBuildDrawItems(
+            SKRect plotRect,
+            IReadOnlyList<ChromatogramPeakLabel> labels,
+            double uiScale,
+            double fontSizeDip,
+            Func<double, SKRect, float> toPixelX,
+            Func<double, SKRect, float> toPixelY,
+            int peakLabelRotateDegrees)
+        {
+            var key = CreateTicOverlayPlacementCacheKey(
+                plotRect,
+                labels,
+                uiScale,
+                fontSizeDip,
+                peakLabelRotateDegrees);
+            if (_drawItems is not null && key.Equals(_drawKey))
+            {
+                return _drawItems;
+            }
+
+            _drawItems = BuildTicOverlayDrawItems(
+                plotRect,
+                labels,
+                uiScale,
+                fontSizeDip,
+                toPixelX,
+                toPixelY,
+                peakLabelRotateDegrees);
+            _drawKey = key;
+            if (_drawItems.Count == 0)
+            {
+                _placements = [];
+            }
+            else
+            {
+                _placements = new List<TicLabelPlacement>(_drawItems.Count);
+                foreach (var item in _drawItems)
+                {
+                    _placements.Add(item.Placement);
+                }
+            }
+
+            return _drawItems;
+        }
+
+        internal IReadOnlyList<TicLabelPlacement> GetPlacements(
+            SKRect plotRect,
+            IReadOnlyList<ChromatogramPeakLabel> labels,
+            double uiScale,
+            double fontSizeDip,
+            Func<double, SKRect, float> toPixelX,
+            Func<double, SKRect, float> toPixelY,
+            int peakLabelRotateDegrees)
+        {
+            _ = GetOrBuildDrawItems(
+                plotRect,
+                labels,
+                uiScale,
+                fontSizeDip,
+                toPixelX,
+                toPixelY,
+                peakLabelRotateDegrees);
+            return _placements ?? (IReadOnlyList<TicLabelPlacement>)Array.Empty<TicLabelPlacement>();
+        }
+
+        internal bool TryGetUncollidedExtents(
+            SKRect plotRect,
+            IReadOnlyList<ChromatogramPeakLabel> labels,
+            double uiScale,
+            double fontSizeDip,
+            Func<double, SKRect, float> toPixelX,
+            Func<double, SKRect, float> toPixelY,
+            int peakLabelRotateDegrees,
+            out float minTop,
+            out float maxBottom)
+        {
+            var key = CreateTicOverlayPlacementCacheKey(
+                plotRect,
+                labels,
+                uiScale,
+                fontSizeDip,
+                peakLabelRotateDegrees);
+            if (_hasExtents && key.Equals(_extentsKey))
+            {
+                minTop = _extentsMinTop;
+                maxBottom = _extentsMaxBottom;
+                return true;
+            }
+
+            if (!TryGetTicOverlayLabelPixelExtentsUncollided(
+                    plotRect,
+                    labels,
+                    uiScale,
+                    fontSizeDip,
+                    toPixelX,
+                    toPixelY,
+                    peakLabelRotateDegrees,
+                    out minTop,
+                    out maxBottom))
+            {
+                _hasExtents = false;
+                return false;
+            }
+
+            _extentsKey = key;
+            _extentsMinTop = minTop;
+            _extentsMaxBottom = maxBottom;
+            _hasExtents = true;
+            return true;
+        }
+    }
+
     public static void Draw(
         SKCanvas canvas,
         SKRect plotRect,
@@ -32,7 +155,8 @@ internal static class ChartSkiaPeakLabels
         SKPaint? connectorPaint = null,
         int peakLabelRotateDegrees = 0,
         bool ticOverlayMode = false,
-        bool showDebugRect = false)
+        bool showDebugRect = false,
+        TicOverlayPlacementCache? ticOverlayCache = null)
     {
         if (plotRect.Width <= 1f || plotRect.Height <= 1f || labels.Count == 0)
         {
@@ -51,7 +175,8 @@ internal static class ChartSkiaPeakLabels
                 toPixelY,
                 textPaint,
                 peakLabelRotateDegrees,
-                showDebugRect);
+                showDebugRect,
+                ticOverlayCache);
             return;
         }
 
@@ -77,15 +202,16 @@ internal static class ChartSkiaPeakLabels
         Func<double, SKRect, float> toPixelY,
         SKPaint textPaint,
         int peakLabelRotateDegrees,
-        bool showDebugRect)
+        bool showDebugRect,
+        TicOverlayPlacementCache? ticOverlayCache)
     {
-        var fontPx = (float)Math.Clamp(fontSizeDip, 6d, 24d) * (float)uiScale;
-        using var typeface = SKTypeface.FromFamilyName(null);
-        using var font = new SKFont(typeface, fontPx);
         if (plotRect.Width <= 1f || plotRect.Height <= 1f || labels.Count == 0)
         {
             return;
         }
+
+        var fontPx = (float)Math.Clamp(fontSizeDip, 6d, 24d) * (float)uiScale;
+        var font = GetTicOverlayFont(fontPx);
 
         using var missingPeakPaint = new SKPaint
         {
@@ -94,14 +220,22 @@ internal static class ChartSkiaPeakLabels
             Style = textPaint.Style
         };
 
-        var drawItems = GetOrBuildTicOverlayDrawItems(
+        var drawItems = ticOverlayCache?.GetOrBuildDrawItems(
             plotRect,
             labels,
             uiScale,
             fontSizeDip,
             toPixelX,
             toPixelY,
-            peakLabelRotateDegrees);
+            peakLabelRotateDegrees)
+            ?? BuildTicOverlayDrawItems(
+                plotRect,
+                labels,
+                uiScale,
+                fontSizeDip,
+                toPixelX,
+                toPixelY,
+                peakLabelRotateDegrees);
         foreach (var item in drawItems)
         {
             var placement = item.Placement;
@@ -128,7 +262,7 @@ internal static class ChartSkiaPeakLabels
         }
     }
 
-    private readonly record struct TicOverlayDrawItem(
+    internal readonly record struct TicOverlayDrawItem(
         ChromatogramPeakLabel Label,
         TicLabelLayout Layout,
         TicLabelPlacement Placement,
@@ -145,7 +279,7 @@ internal static class ChartSkiaPeakLabels
         int LabelCount,
         long LabelsHash);
 
-    private readonly record struct TicLabelPlacement(
+    internal readonly record struct TicLabelPlacement(
         float AnchorX,
         float AnchorY,
         float Width,
@@ -166,7 +300,7 @@ internal static class ChartSkiaPeakLabels
         SKPoint ScreenCorner2,
         SKPoint ScreenCorner3);
 
-    private readonly record struct TicLabelLayout(
+    internal readonly record struct TicLabelLayout(
         float Width,
         float TopLocalY,
         float BottomLocalY,
@@ -182,6 +316,19 @@ internal static class ChartSkiaPeakLabels
 
     private static string NormalizeTicLabelText(string text) =>
         text.Trim().Replace("\r\n", "\n", StringComparison.Ordinal);
+
+    private static SKFont GetTicOverlayFont(float fontPx)
+    {
+        var key = BitConverter.SingleToInt32Bits(fontPx);
+        if (!TicOverlayFontCache.TryGetValue(key, out var font))
+        {
+            var typeface = SKTypeface.FromFamilyName(null);
+            font = new SKFont(typeface, fontPx);
+            TicOverlayFontCache[key] = font;
+        }
+
+        return font;
+    }
 
     private static FontLineMetrics GetFontLineMetrics(SKFont font)
     {
@@ -878,7 +1025,8 @@ internal static class ChartSkiaPeakLabels
         Func<double, SKRect, float> toPixelY,
         int peakLabelRotateDegrees,
         bool ticOverlayMode,
-        out float minTop)
+        out float minTop,
+        TicOverlayPlacementCache? ticOverlayCache = null)
     {
         minTop = float.MaxValue;
         if (plotRect.Width <= 1f || plotRect.Height <= 1f || labels.Count == 0)
@@ -888,6 +1036,20 @@ internal static class ChartSkiaPeakLabels
 
         if (ticOverlayMode)
         {
+            if (ticOverlayCache is not null)
+            {
+                return ticOverlayCache.TryGetUncollidedExtents(
+                    plotRect,
+                    labels,
+                    uiScale,
+                    fontSizeDip,
+                    toPixelX,
+                    toPixelY,
+                    peakLabelRotateDegrees,
+                    out minTop,
+                    out _);
+            }
+
             return TryGetTicOverlayLabelPixelExtents(
                 plotRect,
                 labels,
@@ -1064,41 +1226,6 @@ internal static class ChartSkiaPeakLabels
         return topPixelY < plotRect.Bottom;
     }
 
-    /// <summary>
-    /// Builds the collision-resolved TIC overlay placements for <paramref name="labels"/> once.
-    /// </summary>
-    private static IReadOnlyList<TicOverlayDrawItem> GetOrBuildTicOverlayDrawItems(
-        SKRect plotRect,
-        IReadOnlyList<ChromatogramPeakLabel> labels,
-        double uiScale,
-        double fontSizeDip,
-        Func<double, SKRect, float> toPixelX,
-        Func<double, SKRect, float> toPixelY,
-        int peakLabelRotateDegrees)
-    {
-        var key = CreateTicOverlayPlacementCacheKey(
-            plotRect,
-            labels,
-            uiScale,
-            fontSizeDip,
-            peakLabelRotateDegrees);
-        if (_cachedDrawItems is not null && key.Equals(_cachedDrawItemsKey))
-        {
-            return _cachedDrawItems;
-        }
-
-        _cachedDrawItems = BuildTicOverlayDrawItems(
-            plotRect,
-            labels,
-            uiScale,
-            fontSizeDip,
-            toPixelX,
-            toPixelY,
-            peakLabelRotateDegrees);
-        _cachedDrawItemsKey = key;
-        return _cachedDrawItems;
-    }
-
     private static TicOverlayPlacementCacheKey CreateTicOverlayPlacementCacheKey(
         SKRect plotRect,
         IReadOnlyList<ChromatogramPeakLabel> labels,
@@ -1139,8 +1266,7 @@ internal static class ChartSkiaPeakLabels
     {
         var result = new List<TicOverlayDrawItem>();
         var fontPx = (float)Math.Clamp(fontSizeDip, 6d, 24d) * (float)uiScale;
-        using var typeface = SKTypeface.FromFamilyName(null);
-        using var font = new SKFont(typeface, fontPx);
+        var font = GetTicOverlayFont(fontPx);
         var pad = 2f * (float)uiScale;
         var margin = 6f * (float)uiScale;
         var bounds = SKRect.Create(
@@ -1158,13 +1284,7 @@ internal static class ChartSkiaPeakLabels
         var sin = MathF.Sin(rad);
         var collisionPad = 2f * (float)uiScale;
         var occupied = new List<TicLabelPlacement>();
-        var ordered = labels
-            .Where(static l => !string.IsNullOrWhiteSpace(l.LabelPlainText)
-                               && double.IsFinite(l.X)
-                               && double.IsFinite(l.Y))
-            .OrderByDescending(static l => l.Y)
-            .ThenByDescending(static l => l.X)
-            .ToList();
+        var ordered = CollectValidTicOverlayLabels(labels);
 
         foreach (var label in ordered)
         {
@@ -1197,6 +1317,29 @@ internal static class ChartSkiaPeakLabels
         return result;
     }
 
+    private static List<ChromatogramPeakLabel> CollectValidTicOverlayLabels(IReadOnlyList<ChromatogramPeakLabel> labels)
+    {
+        var valid = new List<ChromatogramPeakLabel>(labels.Count);
+        foreach (var label in labels)
+        {
+            if (string.IsNullOrWhiteSpace(label.LabelPlainText)
+                || !double.IsFinite(label.X)
+                || !double.IsFinite(label.Y))
+            {
+                continue;
+            }
+
+            valid.Add(label);
+        }
+
+        valid.Sort(static (left, right) =>
+        {
+            var compare = right.Y.CompareTo(left.Y);
+            return compare != 0 ? compare : right.X.CompareTo(left.X);
+        });
+        return valid;
+    }
+
     private static IReadOnlyList<TicLabelPlacement> GetTicOverlayPlacements(
         SKRect plotRect,
         IReadOnlyList<ChromatogramPeakLabel> labels,
@@ -1204,28 +1347,29 @@ internal static class ChartSkiaPeakLabels
         double fontSizeDip,
         Func<double, SKRect, float> toPixelX,
         Func<double, SKRect, float> toPixelY,
-        int peakLabelRotateDegrees)
+        int peakLabelRotateDegrees,
+        TicOverlayPlacementCache? ticOverlayCache)
     {
-        var drawItems = GetOrBuildTicOverlayDrawItems(
+        if (ticOverlayCache is not null)
+        {
+            return ticOverlayCache.GetPlacements(
+                plotRect,
+                labels,
+                uiScale,
+                fontSizeDip,
+                toPixelX,
+                toPixelY,
+                peakLabelRotateDegrees);
+        }
+
+        return BuildTicOverlayDrawItems(
             plotRect,
             labels,
             uiScale,
             fontSizeDip,
             toPixelX,
             toPixelY,
-            peakLabelRotateDegrees);
-        if (drawItems.Count == 0)
-        {
-            return Array.Empty<TicLabelPlacement>();
-        }
-
-        var placements = new TicLabelPlacement[drawItems.Count];
-        for (var i = 0; i < drawItems.Count; i++)
-        {
-            placements[i] = drawItems[i].Placement;
-        }
-
-        return placements;
+            peakLabelRotateDegrees).ConvertAll(static item => item.Placement);
     }
 
     /// <summary>
@@ -1240,7 +1384,8 @@ internal static class ChartSkiaPeakLabels
         Func<double, SKRect, float> toPixelX,
         Func<double, SKRect, float> toPixelY,
         int peakLabelRotateDegrees,
-        IReadOnlyList<float> markerPixelXs)
+        IReadOnlyList<float> markerPixelXs,
+        TicOverlayPlacementCache? ticOverlayCache = null)
     {
         var gaps = new VerticalMarkerLabelGap[markerPixelXs.Count];
         for (var i = 0; i < gaps.Length; i++)
@@ -1255,7 +1400,14 @@ internal static class ChartSkiaPeakLabels
 
         var pad = 4f * (float)uiScale;
         var placements = GetTicOverlayPlacements(
-            plotRect, labels, uiScale, fontSizeDip, toPixelX, toPixelY, peakLabelRotateDegrees);
+            plotRect,
+            labels,
+            uiScale,
+            fontSizeDip,
+            toPixelX,
+            toPixelY,
+            peakLabelRotateDegrees,
+            ticOverlayCache);
 
         foreach (var placement in placements)
         {
@@ -1287,22 +1439,77 @@ internal static class ChartSkiaPeakLabels
         out float minTop,
         out float maxBottom)
     {
+        return TryGetTicOverlayLabelPixelExtentsUncollided(
+            plotRect,
+            labels,
+            uiScale,
+            fontSizeDip,
+            toPixelX,
+            toPixelY,
+            peakLabelRotateDegrees,
+            out minTop,
+            out maxBottom);
+    }
+
+    /// <summary>
+    /// O(n) headroom estimate: each label at its anchor without collision resolution.
+    /// Safe for viewport expansion (may reserve slightly more Y than strictly necessary).
+    /// </summary>
+    private static bool TryGetTicOverlayLabelPixelExtentsUncollided(
+        SKRect plotRect,
+        IReadOnlyList<ChromatogramPeakLabel> labels,
+        double uiScale,
+        double fontSizeDip,
+        Func<double, SKRect, float> toPixelX,
+        Func<double, SKRect, float> toPixelY,
+        int peakLabelRotateDegrees,
+        out float minTop,
+        out float maxBottom)
+    {
         minTop = float.MaxValue;
         maxBottom = float.MinValue;
-        var placements = GetTicOverlayPlacements(
-            plotRect, labels, uiScale, fontSizeDip, toPixelX, toPixelY, peakLabelRotateDegrees);
-        if (placements.Count == 0)
+        if (plotRect.Width <= 1f || plotRect.Height <= 1f || labels.Count == 0)
         {
             return false;
         }
 
-        foreach (var placement in placements)
+        var fontPx = (float)Math.Clamp(fontSizeDip, 6d, 24d) * (float)uiScale;
+        var font = GetTicOverlayFont(fontPx);
+        var pad = 2f * (float)uiScale;
+        var uiScaleF = (float)uiScale;
+        var found = false;
+
+        foreach (var label in labels)
         {
+            if (string.IsNullOrWhiteSpace(label.LabelPlainText)
+                || !double.IsFinite(label.X)
+                || !double.IsFinite(label.Y))
+            {
+                continue;
+            }
+
+            var normalizedText = NormalizeTicLabelText(label.LabelPlainText);
+            var layout = MeasureTicLabelLayout(font, normalizedText, pad);
+            if (!TryCreateTicOverlayPlacement(
+                    label,
+                    layout,
+                    0,
+                    plotRect,
+                    toPixelX,
+                    toPixelY,
+                    peakLabelRotateDegrees,
+                    uiScaleF,
+                    out var placement))
+            {
+                continue;
+            }
+
             minTop = Math.Min(minTop, placement.ScreenTop);
             maxBottom = Math.Max(maxBottom, placement.ScreenBottom);
+            found = true;
         }
 
-        return true;
+        return found;
     }
 
     private static bool TryGetTicOverlayMarkerTopAt(
@@ -1351,7 +1558,7 @@ internal static class ChartSkiaPeakLabels
     {
         gap = VerticalMarkerLabelGap.None;
         var placements = GetTicOverlayPlacements(
-            plotRect, labels, uiScale, fontSizeDip, toPixelX, toPixelY, peakLabelRotateDegrees);
+            plotRect, labels, uiScale, fontSizeDip, toPixelX, toPixelY, peakLabelRotateDegrees, null);
         if (placements.Count == 0)
         {
             return false;

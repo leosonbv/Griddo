@@ -91,7 +91,7 @@ public abstract partial class SkiaChartBaseControl
             canvas.DrawRect(plotRect, plotBackgroundPaint);
         }
 
-        if (Points.Count > 0)
+        if (ShowSeries && Points.Count > 0)
         {
             DrawSeries(canvas, Points, plotRect);
         }

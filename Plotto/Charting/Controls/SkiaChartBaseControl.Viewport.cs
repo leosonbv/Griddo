@@ -23,6 +23,14 @@ public abstract partial class SkiaChartBaseControl
         NotifyViewportChanged();
     }
 
+    protected void FitViewportToXIntervalWithYExtents(double xMin, double xMax, double ymin, double ymax)
+    {
+        var points = Points;
+        _viewportWheelClamp.FitViewportToXIntervalWithYExtents(Viewport, points, xMin, xMax, ymin, ymax);
+        ApplyViewportInteractionClamp();
+        NotifyViewportChanged();
+    }
+
     protected void NotifyViewportChanged() => ViewportChanged?.Invoke(this, EventArgs.Empty);
 
     private void UpdateViewportFromData()

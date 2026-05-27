@@ -97,6 +97,49 @@ public sealed class SeriesViewportInteractionClamp
     }
 
     /// <summary>
+    /// Fits X to <paramref name="xMin"/>..<paramref name="xMax"/> and Y to the supplied data extents.
+    /// </summary>
+    public void FitViewportToXIntervalWithYExtents(
+        ChartViewport viewport,
+        IReadOnlyList<ChartPoint> points,
+        double xMin,
+        double xMax,
+        double ymin,
+        double ymax)
+    {
+        if (!double.IsFinite(xMin) || !double.IsFinite(xMax) || !(xMax > xMin)
+            || !double.IsFinite(ymin) || !double.IsFinite(ymax))
+        {
+            return;
+        }
+
+        var dx = xMax - xMin;
+        if (points.Count > 0)
+        {
+            SyncZoomClampBoundsForPlotExtents(xMin, xMax, dx);
+        }
+        else
+        {
+            _zoomClampXMin = xMin;
+            _zoomClampXMax = xMax;
+        }
+
+        viewport.XMin = xMin;
+        viewport.XMax = xMax;
+
+        var dy = ymax - ymin;
+        var yMargin = Math.Max(1e-6, dy * 0.05);
+        viewport.YMin = ymin - yMargin;
+        viewport.YMax = ymax + yMargin;
+        if (ymin >= -1e-12)
+        {
+            viewport.YMin = Math.Max(0d, viewport.YMin);
+        }
+
+        viewport.EnsureMinimumSize();
+    }
+
+    /// <summary>
     /// X: viewport inside plot xmin/xmax ± 5% of horizontal data span.
     /// Y: optional rule — lowest trace Y (min in visible X, else global min) stays at least 5% of the visible Y span above <see cref="ChartViewport.YMin"/>.
     /// </summary>

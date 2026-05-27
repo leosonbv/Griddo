@@ -1046,7 +1046,6 @@ public sealed partial class Griddo
 
         var bodyViewport = new Rect(_recordHeaderWidth, ScaledFieldHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
         var typeface = new Typeface("Segoe UI");
-        var recordHeight = GetRecordHeight(0);
         var fixedW = GetFixedFieldsWidth();
         var scrollLeft = _recordHeaderWidth + fixedW;
 
@@ -1061,6 +1060,7 @@ public sealed partial class Griddo
                 ForEachVisibleRecord(record =>
                 {
                     var y = ScaledFieldHeaderHeight + GetRecordBodyTopRel(record);
+                    var recordHeight = GetRecordHeight(record);
                     var recordData = Records[record];
                     var x = startX;
                     for (var col = sCol; col <= eCol; col++)
@@ -1082,6 +1082,7 @@ public sealed partial class Griddo
             ForEachVisibleRecord(record =>
             {
                 var y = ScaledFieldHeaderHeight + GetRecordBodyTopRel(record);
+                var recordHeight = GetRecordHeight(record);
                 var recordData = Records[record];
                 var x = _recordHeaderWidth;
                 for (var col = 0; col < _fixedFieldCount; col++)

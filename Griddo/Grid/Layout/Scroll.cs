@@ -90,6 +90,27 @@ public sealed partial class Griddo
         return Math.Max(0, Math.Floor((currentOffsetPx - 1e-9) / recordHeightPx) * recordHeightPx);
     }
 
+    private static double GetNextVerticalScrollRecordStep(double currentOffsetPx, double rawMax, double recordHeightPx)
+    {
+        if (recordHeightPx < 1e-9)
+        {
+            return Math.Min(rawMax, currentOffsetPx);
+        }
+
+        var step = Math.Ceiling((currentOffsetPx + 1e-9) / recordHeightPx) * recordHeightPx;
+        return Math.Min(rawMax, step);
+    }
+
+    private static double GetPreviousVerticalScrollRecordStep(double currentOffsetPx, double recordHeightPx)
+    {
+        if (recordHeightPx < 1e-9)
+        {
+            return 0;
+        }
+
+        return Math.Max(0, Math.Floor((currentOffsetPx - 1e-9) / recordHeightPx) * recordHeightPx);
+    }
+
     private double GetTransposedRawMaxHorizontalScroll()
     {
         var fixedRecordsW = GetTransposeFixedRecordsWidth();
@@ -112,6 +133,11 @@ public sealed partial class Griddo
 
         return Math.Max(0, scrollColsContent - scrollColsViewport);
     }
+
+    private double GetRawMaxVerticalScroll() =>
+        IsBodyTransposed
+            ? GetTransposedRawMaxVerticalScroll()
+            : Math.Max(0, GetScrollableRecordsContentHeight() - GetScrollRecordsViewportHeight());
 
     /// <summary>Snap scroll extent to whole-record offsets so the thumb maps to aligned rows.</summary>
     private double GetAlignedMaxVerticalScrollForSlider(double rawMaxVertical)
@@ -423,8 +449,18 @@ public sealed partial class Griddo
             return Math.Clamp(offsetPx, 0, _verticalScrollBar.Maximum);
         }
 
-        var rawMaxVertical = Math.Max((double)0, GetScrollableRecordsContentHeight() - GetScrollRecordsViewportHeight());
+        var rawMaxVertical = GetRawMaxVerticalScroll();
+        if (rawMaxVertical <= 1e-6)
+        {
+            return 0;
+        }
+
         var clampedVertical = Math.Clamp(offsetPx, 0, rawMaxVertical);
+        if (_isResizingRecord)
+        {
+            return clampedVertical;
+        }
+
         if (!ShouldSnapVerticalScrollToRecordBorder(offsetPx))
         {
             return clampedVertical;
@@ -434,6 +470,77 @@ public sealed partial class Griddo
             ? rawMaxVertical
             : FloorToRecordStep(clampedVertical, h);
         return Math.Clamp(snappedVertical, 0, rawMaxVertical);
+    }
+
+    /// <summary>
+    /// When all rows fit vertically, clear stale offsets that would clip the first row.
+    /// </summary>
+    private void ReconcileVerticalScrollOffsetWithContent()
+    {
+        if (IsBodyTransposed || Records.Count == 0 || _viewportBodyHeight <= 1e-6)
+        {
+            return;
+        }
+
+        var rawMax = GetRawMaxVerticalScroll();
+        if (rawMax <= 1e-6)
+        {
+            _verticalOffset = 0;
+            return;
+        }
+
+        _verticalOffset = Math.Clamp(_verticalOffset, 0, rawMax);
+    }
+
+    /// <summary>
+    /// WPF can coerce <see cref="ScrollBar.Value"/> when <see cref="ScrollBar.Maximum"/> changes
+    /// without updating <see cref="_verticalOffset"/>, leaving the thumb at the top while rows stay shifted.
+    /// </summary>
+    private void SyncVerticalScrollStateWithScrollBar()
+    {
+        if (IsBodyTransposed || Records.Count == 0 || _viewportBodyHeight <= 1e-6)
+        {
+            return;
+        }
+
+        var rawMax = GetRawMaxVerticalScroll();
+        if (rawMax <= 1e-6)
+        {
+            if (Math.Abs(_verticalOffset) > 1e-6)
+            {
+                SetVerticalOffset(0);
+            }
+
+            return;
+        }
+
+        if (Math.Abs(_verticalScrollBar.Value - _verticalOffset) <= 1e-3)
+        {
+            return;
+        }
+
+        SetVerticalOffset(_verticalScrollBar.Value);
+    }
+
+    /// <summary>Apply scrollbar value to <see cref="_verticalOffset"/> during render without invalidating again.</summary>
+    private void AlignVerticalOffsetToScrollBarForLayout()
+    {
+        if (IsBodyTransposed || Records.Count == 0 || _viewportBodyHeight <= 1e-6)
+        {
+            return;
+        }
+
+        var rawMax = GetRawMaxVerticalScroll();
+        if (rawMax <= 1e-6)
+        {
+            _verticalOffset = 0;
+            return;
+        }
+
+        if (Math.Abs(_verticalScrollBar.Value - _verticalOffset) > 1e-3)
+        {
+            _verticalOffset = HarmonizeVerticalScrollOffset(_verticalScrollBar.Value);
+        }
     }
 
     /// <summary>
@@ -457,7 +564,7 @@ public sealed partial class Griddo
 
             var rawMax = GetTransposedRawMaxHorizontalScroll();
             var clamped = Math.Clamp(offsetPx, 0, rawMax);
-            if (!ShouldSnapHorizontalScrollToRecordBorder(offsetPx))
+            if (_isResizingRecord || !ShouldSnapHorizontalScrollToRecordBorder(offsetPx))
             {
                 return clamped;
             }
@@ -517,13 +624,15 @@ public sealed partial class Griddo
         }
         else
         {
+            ReconcileVerticalScrollOffsetWithContent();
+
             var scrollViewport = GetScrollViewportWidth();
             var scrollContent = GetScrollableContentWidth();
             var scrollRecordsViewport = GetScrollRecordsViewportHeight();
             var scrollRecordsContent = GetScrollableRecordsContentHeight();
             var rawMaxHorizontal = Math.Max(0, scrollContent - scrollViewport);
             maxHorizontal = GetAlignedMaxHorizontalScrollForSlider(rawMaxHorizontal);
-            var rawMaxVertical = Math.Max((double)0, scrollRecordsContent - scrollRecordsViewport);
+            var rawMaxVertical = GetRawMaxVerticalScroll();
             maxVertical = GetAlignedMaxVerticalScrollForSlider(rawMaxVertical);
             horizontalLargeChange = Math.Max((double)1, _viewportBodyWidth);
             verticalLargeChange = Math.Max((double)1, scrollRecordsViewport);
@@ -538,10 +647,11 @@ public sealed partial class Griddo
 
         _verticalScrollBar.LargeChange = verticalLargeChange;
         _verticalScrollBar.SmallChange = verticalSmallChange;
-        _verticalScrollBar.Maximum = maxVertical;
         _verticalScrollBar.ViewportSize = Math.Max(1, verticalLargeChange);
+        _verticalScrollBar.Maximum = maxVertical;
         _verticalScrollBar.Visibility = ShowVerticalScrollBar ? Visibility.Visible : Visibility.Collapsed;
 
+        SyncVerticalScrollStateWithScrollBar();
         SetHorizontalOffset(_horizontalOffset);
         SetVerticalOffset(_verticalOffset);
         SnapScrollOffsetsToRuler();
@@ -669,8 +779,29 @@ public sealed partial class Griddo
 
     private void OnVerticalScrollChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
+        var target = e.NewValue;
+        var delta = e.NewValue - e.OldValue;
+        var sc = _verticalScrollBar.SmallChange;
+        if (sc > 1e-9 && Math.Abs(Math.Abs(delta) - sc) < 1e-6)
+        {
+            if (!IsBodyTransposed && Records.Count > 0 && _viewportBodyHeight > 1e-9)
+            {
+                var h = GetRecordHeight(0);
+                var rawMax = GetRawMaxVerticalScroll();
+                var hOld = HarmonizeVerticalScrollOffset(e.OldValue);
+                if (delta > 0)
+                {
+                    target = GetNextVerticalScrollRecordStep(hOld, rawMax, h);
+                }
+                else if (delta < 0)
+                {
+                    target = GetPreviousVerticalScrollRecordStep(hOld, h);
+                }
+            }
+        }
+
         var oldOffset = HarmonizeVerticalScrollOffset(e.OldValue);
-        var harmonized = HarmonizeVerticalScrollOffset(e.NewValue);
+        var harmonized = HarmonizeVerticalScrollOffset(target);
         _verticalOffset = harmonized;
         if (Math.Abs(e.NewValue - harmonized) > double.Epsilon && Math.Abs(_verticalScrollBar.Value - harmonized) > double.Epsilon)
         {

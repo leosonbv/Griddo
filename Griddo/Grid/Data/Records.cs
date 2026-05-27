@@ -20,25 +20,120 @@ public sealed partial class Griddo
         }
 
         var maxFit = (int)(_viewportBodyHeight / h);
+        if (_isResizingRecord && _resizeEffectiveFixedRecordCount >= 0)
+        {
+            return Math.Clamp(_resizeEffectiveFixedRecordCount, 0, Records.Count);
+        }
+
         return Math.Min(Math.Min((int)_fixedRecordCount, (int)Records.Count), maxFit);
     }
 
-    private double GetFixedRecordsHeight() => GetEffectiveFixedRecordCount() * GetRecordHeight(0);
+    /// <summary>
+    /// How many row bands the viewport height is split into in fill-records mode.
+    /// Fewer records than the fill count share the full viewport; more records use the fill count and scroll.
+    /// </summary>
+    private int GetFillViewportSlotCount()
+    {
+        if (_visibleRecordCount <= 0)
+        {
+            return 0;
+        }
+
+        if (Records.Count <= 0)
+        {
+            return _visibleRecordCount;
+        }
+
+        if (Records.Count > _visibleRecordCount)
+        {
+            return (int)_visibleRecordCount;
+        }
+
+        return Math.Min((int)_visibleRecordCount, Records.Count);
+    }
+
+    private bool IsFillRecordMode() =>
+        _visibleRecordCount > 0 && _viewportBodyHeight > 0 && Records.Count > 0;
+
+    private void GetFillRecordHeightParts(out int slots, out double baseHeight, out int extraRows)
+    {
+        slots = GetFillViewportSlotCount();
+        if (slots <= 0 || _viewportBodyHeight <= 0)
+        {
+            baseHeight = 0;
+            extraRows = 0;
+            return;
+        }
+
+        baseHeight = Math.Floor(_viewportBodyHeight / slots);
+        extraRows = (int)Math.Round(_viewportBodyHeight - (baseHeight * slots), MidpointRounding.AwayFromZero);
+        extraRows = Math.Clamp(extraRows, 0, slots);
+    }
+
+    private int GetFillSlotForRecord(int recordIndex)
+    {
+        GetFillRecordHeightParts(out var slots, out _, out _);
+        var idx = Math.Clamp(recordIndex, 0, Records.Count - 1);
+        if (Records.Count <= (int)_visibleRecordCount)
+        {
+            return idx;
+        }
+
+        return idx % slots;
+    }
+
+    private double SumFillDistributedHeightsBefore(int recordIndex)
+    {
+        var end = Math.Clamp(recordIndex, 0, Records.Count);
+        var sum = 0.0;
+        for (var r = 0; r < end; r++)
+        {
+            sum += GetRecordHeight(r);
+        }
+
+        return sum;
+    }
+
+    private double GetFixedRecordsHeight()
+    {
+        if (IsFillRecordMode())
+        {
+            return SumFillDistributedHeightsBefore(GetEffectiveFixedRecordCount());
+        }
+
+        return GetEffectiveFixedRecordCount() * GetRecordHeight(0);
+    }
 
     private double GetScrollRecordsViewportHeight() => Math.Max(0, _viewportBodyHeight - GetFixedRecordsHeight());
 
     private double GetScrollableRecordsContentHeight()
     {
-        var h = GetRecordHeight(0);
         var f = GetEffectiveFixedRecordCount();
+        if (IsFillRecordMode())
+        {
+            return Math.Max(0, SumFillDistributedHeightsBefore(Records.Count) - SumFillDistributedHeightsBefore(f));
+        }
+
+        var h = GetRecordHeight(0);
         return Math.Max(0, Records.Count - f) * h;
     }
 
     /// <summary>Top edge of a body record relative to the top of the body strip (below field headers).</summary>
     private double GetRecordBodyTopRel(int recordIndex)
     {
-        var h = GetRecordHeight(0);
         var f = GetEffectiveFixedRecordCount();
+        if (IsFillRecordMode())
+        {
+            var top = SumFillDistributedHeightsBefore(recordIndex);
+            if (recordIndex >= f)
+            {
+                top -= _verticalOffset;
+            }
+
+            return top;
+        }
+
+        var h = GetRecordHeight(0);
         if (recordIndex < f)
         {
             return recordIndex * h;
@@ -54,28 +149,59 @@ public sealed partial class Griddo
             return;
         }
 
-        var h = GetRecordHeight(0);
-        var f = GetEffectiveFixedRecordCount();
-        var bodyH = _viewportBodyHeight;
-        for (var r = 0; r < f && r < Records.Count; r++)
+        if (IsFillRecordMode())
         {
-            if (r * h < bodyH)
+            var f = GetEffectiveFixedRecordCount();
+            var bodyH = _viewportBodyHeight;
+            var scrollBandTop = SumFillDistributedHeightsBefore(f);
+            var scrollViewport = Math.Max(0, bodyH - scrollBandTop);
+            for (var r = 0; r < Records.Count; r++)
+            {
+                var top = SumFillDistributedHeightsBefore(r);
+                var bottom = top + GetRecordHeight(r);
+                if (r < f)
+                {
+                    if (top < bodyH)
+                    {
+                        onRecord(r);
+                    }
+
+                    continue;
+                }
+
+                var relTop = top - scrollBandTop - _verticalOffset;
+                var relBottom = bottom - scrollBandTop - _verticalOffset;
+                if (relBottom > 0 && relTop < scrollViewport)
+                {
+                    onRecord(r);
+                }
+            }
+
+            return;
+        }
+
+        var h = GetRecordHeight(0);
+        var fixedCount = GetEffectiveFixedRecordCount();
+        var bodyHeight = _viewportBodyHeight;
+        for (var r = 0; r < fixedCount && r < Records.Count; r++)
+        {
+            if (r * h < bodyHeight)
             {
                 onRecord(r);
             }
         }
 
-        var scrollTop = f * h;
-        var vh = bodyH - scrollTop;
-        if (vh <= 0 || f >= Records.Count)
+        var scrollTop = fixedCount * h;
+        var viewportH = bodyHeight - scrollTop;
+        if (viewportH <= 0 || fixedCount >= Records.Count)
         {
             return;
         }
 
-        var first = f + (int)Math.Floor(_verticalOffset / h);
-        var last = f + (int)Math.Ceiling((_verticalOffset + vh) / h) - 1;
-        first = Math.Clamp(first, f, Records.Count - 1);
-        last = Math.Clamp(last, f, Records.Count - 1);
+        var first = fixedCount + (int)Math.Floor(_verticalOffset / h);
+        var last = fixedCount + (int)Math.Ceiling((_verticalOffset + viewportH) / h) - 1;
+        first = Math.Clamp(first, fixedCount, Records.Count - 1);
+        last = Math.Clamp(last, fixedCount, Records.Count - 1);
         for (var r = first; r <= last; r++)
         {
             onRecord(r);
@@ -84,16 +210,52 @@ public sealed partial class Griddo
 
     private double GetRecordHeight(int recordIndex)
     {
-        _ = recordIndex;
-        if (_visibleRecordCount > 0 && _viewportBodyHeight > 0)
+        if (IsFillRecordMode())
         {
-            var slots = Records.Count > 0
-                ? Math.Min((int)_visibleRecordCount, (int)Records.Count)
-                : _visibleRecordCount;
-            return _viewportBodyHeight / Math.Max(1, slots);
+            GetFillRecordHeightParts(out _, out var baseHeight, out var extraRows);
+            var slot = GetFillSlotForRecord(recordIndex);
+            return baseHeight + (slot < extraRows ? 1 : 0);
         }
 
+        _ = recordIndex;
         return Math.Max(GetMinimumRecordThickness(), _uniformRecordHeight) * ContentScale;
+    }
+
+    private int ResolveRecordIndexFromBodyY(double bodyY)
+    {
+        if (Records.Count == 0 || bodyY < 0)
+        {
+            return -1;
+        }
+
+        if (IsFillRecordMode())
+        {
+            for (var r = 0; r < Records.Count; r++)
+            {
+                var top = GetRecordBodyTopRel(r);
+                var bottom = top + GetRecordHeight(r);
+                if (bodyY >= top && bodyY < bottom)
+                {
+                    return r;
+                }
+            }
+
+            return Records.Count - 1;
+        }
+
+        var h = GetRecordHeight(0);
+        var f = GetEffectiveFixedRecordCount();
+        var fixedH = f * h;
+        if (bodyY < fixedH)
+        {
+            var record = (int)(bodyY / h);
+            return record >= 0 && record < Records.Count ? record : -1;
+        }
+
+        var scrollBodyY = bodyY - fixedH;
+        var scrollContentY = scrollBodyY + _verticalOffset;
+        var scrollRecord = f + (int)(scrollContentY / h);
+        return scrollRecord >= 0 && scrollRecord < Records.Count ? scrollRecord : -1;
     }
 
     private void SetUniformRecordHeightFromScreen(double screenPixelHeight)
@@ -255,6 +417,31 @@ public sealed partial class Griddo
         return Math.Max(GetMinimumRecordThickness() * ContentScale, hScreen);
     }
 
+    /// <summary>First record row/column band aligned with the top/left edge of the body viewport.</summary>
+    private int GetTopVisibleRecordInViewport()
+    {
+        if (Records.Count == 0)
+        {
+            return 0;
+        }
+
+        var f = GetEffectiveFixedRecordCount();
+        if (f > 0)
+        {
+            return 0;
+        }
+
+        var h = GetRecordHeight(0);
+        if (h <= 1e-6)
+        {
+            return 0;
+        }
+
+        var offset = IsBodyTransposed ? _horizontalOffset : _verticalOffset;
+        var first = (int)Math.Floor(offset / h + 1e-9);
+        return Math.Clamp(first, 0, Records.Count - 1);
+    }
+
     /// <summary>One-shot scroll adjustment after interactive record-height drag (see <see cref="SetRecordHeightKeepingRecordTop"/>).</summary>
     private void ApplyInteractiveRecordResizeScrollPreservation(int dividerRecordIndex, double recordHeightAtDragStart, double scrollOffsetAtDragStart)
     {
@@ -273,6 +460,7 @@ public sealed partial class Griddo
             var maxH = Math.Max(0, scrollRecordsContent - scrollRecordsViewport);
             if (maxH <= 1e-6)
             {
+                SetHorizontalOffset(0);
                 return;
             }
 
@@ -286,13 +474,29 @@ public sealed partial class Griddo
 
             var frRecords = Math.Min((int)_fixedRecordCount, (int)Records.Count);
             var offsetDeltaT = frRecords * deltaHt + Math.Max(0, clampedT - frRecords) * deltaHt;
-            SetHorizontalOffset(scrollOffsetAtDragStart + offsetDeltaT);
+            if (clampedT == GetTopVisibleRecordInViewport())
+            {
+                offsetDeltaT = 0;
+            }
+
+            var targetT = Math.Clamp(scrollOffsetAtDragStart + offsetDeltaT, 0, maxH);
+            if (newHt > 1e-6)
+            {
+                targetT = FloorToRecordStep(targetT, newHt);
+                if (ShouldSnapToTrailingEdge(targetT, maxH, newHt))
+                {
+                    targetT = maxH;
+                }
+            }
+
+            SetHorizontalOffset(targetT);
             return;
         }
 
         var maxV = Math.Max(0, GetScrollableRecordsContentHeight() - GetScrollRecordsViewportHeight());
         if (maxV <= 1e-6)
         {
+            SetVerticalOffset(0);
             return;
         }
 
@@ -306,7 +510,22 @@ public sealed partial class Griddo
 
         var fr = Math.Min((int)_fixedRecordCount, (int)Records.Count);
         var offsetDelta = fr * deltaH + Math.Max(0, clamped - fr) * deltaH;
-        SetVerticalOffset(scrollOffsetAtDragStart + offsetDelta);
+        if (clamped == GetTopVisibleRecordInViewport())
+        {
+            offsetDelta = 0;
+        }
+
+        var target = Math.Clamp(scrollOffsetAtDragStart + offsetDelta, 0, maxV);
+        if (newH > 1e-6)
+        {
+            target = FloorToRecordStep(target, newH);
+            if (ShouldSnapToTrailingEdge(target, maxV, newH))
+            {
+                target = maxV;
+            }
+        }
+
+        SetVerticalOffset(target);
     }
 
     private void AutoSizeRecord(int recordIndex)

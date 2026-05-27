@@ -618,6 +618,19 @@ public abstract partial class SkiaChartBaseControl : SKElement
             typeof(SkiaChartBaseControl),
             new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));
 
+    public bool ShowSeries
+    {
+        get => (bool)GetValue(ShowSeriesProperty);
+        set => SetValue(ShowSeriesProperty, value);
+    }
+
+    public static readonly DependencyProperty ShowSeriesProperty =
+        DependencyProperty.Register(
+            nameof(ShowSeries),
+            typeof(bool),
+            typeof(SkiaChartBaseControl),
+            new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));
+
     /// <summary>Multiplier from host grid zoom (Ctrl+wheel); scales strokes and axis typography.</summary>
     public double UiScale
     {

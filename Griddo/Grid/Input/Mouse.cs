@@ -832,6 +832,7 @@ public sealed partial class Griddo
         _isResizingRecord = true;
         _resizingRecordIndex = dividerRecord;
         ExitFillRecordsUsingCurrentDisplayedRecordHeight();
+        _resizeEffectiveFixedRecordCount = GetEffectiveFixedRecordCount();
         _resizePreserveOldRecordHeight = GetRecordHeight(dividerRecord);
         _resizePreserveOldVerticalOffset = _verticalOffset;
         _resizePreserveOldHorizontalOffset = _horizontalOffset;
@@ -1059,6 +1060,10 @@ public sealed partial class Griddo
             }
 
             SetRecordHeightKeepingRecordTop(_resizingRecordIndex, requestedHeight);
+            ApplyInteractiveRecordResizeScrollPreservation(
+                _resizingRecordIndex,
+                _resizePreserveOldRecordHeight,
+                IsBodyTransposed ? _resizePreserveOldHorizontalOffset : _resizePreserveOldVerticalOffset);
             InvalidateVisual();
             e.Handled = true;
             base.OnMouseMove(e);
@@ -1639,6 +1644,7 @@ public sealed partial class Griddo
             _isResizingRecord = false;
             var savedDivider = _resizingRecordIndex;
             _resizingRecordIndex = -1;
+            _resizeEffectiveFixedRecordCount = -1;
             if (savedDivider >= 0)
             {
                 ApplyInteractiveRecordResizeScrollPreservation(
@@ -1646,6 +1652,9 @@ public sealed partial class Griddo
                     _resizePreserveOldRecordHeight,
                     IsBodyTransposed ? _resizePreserveOldHorizontalOffset : _resizePreserveOldVerticalOffset);
             }
+
+            SnapScrollOffsetsToRuler();
+            InvalidateMeasure();
 
             if (!_isDraggingSelection && IsMouseCaptured)
             {
@@ -1840,7 +1849,7 @@ public sealed partial class Griddo
             return;
         }
 
-        if (_verticalScrollBar.Maximum <= 0)
+        if (_verticalScrollBar.Maximum <= 1e-6)
         {
             base.OnMouseWheel(e);
             return;

@@ -325,27 +325,7 @@ public sealed partial class Griddo
         return HitTestRecordFromBodyY(point.Y - ScaledFieldHeaderHeight);
     }
 
-    private int HitTestRecordFromBodyY(double bodyY)
-    {
-        if (Records.Count == 0 || bodyY < 0)
-        {
-            return -1;
-        }
-
-        var h = GetRecordHeight(0);
-        var f = GetEffectiveFixedRecordCount();
-        var fixedH = f * h;
-        if (bodyY < fixedH)
-        {
-            var r = (int)(bodyY / h);
-            return r >= 0 && r < Records.Count ? r : -1;
-        }
-
-        var scrollBodyY = bodyY - fixedH;
-        var scrollContentY = scrollBodyY + _verticalOffset;
-        var r2 = f + (int)(scrollContentY / h);
-        return r2 >= 0 && r2 < Records.Count ? r2 : -1;
-    }
+    private int HitTestRecordFromBodyY(double bodyY) => ResolveRecordIndexFromBodyY(bodyY);
 
     private void UpdateResizeCursor(Point point)
     {

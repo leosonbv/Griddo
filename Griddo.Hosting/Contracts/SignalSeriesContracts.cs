@@ -33,6 +33,11 @@ public interface ITicPeakOverlayOptions
     bool OverlayTargetPeaks { get; set; }
 }
 
+public interface ITicSignalVisibility
+{
+    bool ShowTicSignal { get; set; }
+}
+
 /// <summary>Controls optional dashed vertical markers (expected RT, limits, TIC selection overlays).</summary>
 public readonly record struct ChromatogramVerticalMarkerOptions(
     bool ShowExpectedRtLine,

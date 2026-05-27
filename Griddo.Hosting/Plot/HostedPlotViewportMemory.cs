@@ -17,7 +17,7 @@ internal static class HostedPlotViewportMemory
     private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, ChartViewport>> Store =
         new(StringComparer.OrdinalIgnoreCase);
 
-    internal static string PlotKey(string sourceMemberName, string header) =>
+    public static string PlotKey(string sourceMemberName, string header) =>
         !string.IsNullOrEmpty(sourceMemberName) ? sourceMemberName : header;
 
     internal static string ResolveRowKey(object? row, Func<object?, string?>? recordKeyFactory)
@@ -36,7 +36,7 @@ internal static class HostedPlotViewportMemory
         return "object:" + RuntimeHelpers.GetHashCode(row);
     }
 
-    internal static void Remember(object? row, string plotKey, ChartViewport viewport, Func<object?, string?>? recordKeyFactory)
+    public static void Remember(object? row, string plotKey, ChartViewport viewport, Func<object?, string?>? recordKeyFactory)
     {
         if (string.IsNullOrEmpty(plotKey) || !viewport.IsValid)
         {
