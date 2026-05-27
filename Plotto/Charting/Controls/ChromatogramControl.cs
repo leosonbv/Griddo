@@ -889,12 +889,12 @@ public partial class ChromatogramControl : SkiaChartBaseControl
             return;
         }
 
-        // Pre-compute label cap-Y for all markers in a single layout pass (avoids O(N) passes).
-        float[]? ticCapY = null;
+        // Pre-compute label gaps for all markers in a single layout pass (avoids O(N) passes).
+        VerticalMarkerLabelGap[]? ticLabelGaps = null;
         if (ShowPeakLabels && PeakLabelTicOverlayMode && PeakLabels.Count > 0)
         {
             var markerXs = markers.Select(m => ToPixelX(m.X, plotRect)).ToList();
-            ticCapY = ChartSkiaPeakLabels.GetTicOverlayVerticalMarkerCapYBatch(
+            ticLabelGaps = ChartSkiaPeakLabels.GetTicOverlayVerticalMarkerLabelGapsBatch(
                 plotRect,
                 PeakLabels,
                 PlotDeviceScale,
@@ -928,17 +928,14 @@ public partial class ChromatogramControl : SkiaChartBaseControl
                 var yTop = plotRect.Top + Math.Min(t0, t1) * h;
                 var yBottom = plotRect.Top + Math.Max(t0, t1) * h;
 
+                var labelGap = VerticalMarkerLabelGap.None;
                 if (ShowPeakLabels)
                 {
-                    if (ticCapY is not null)
+                    if (ticLabelGaps is not null)
                     {
-                        var capY = ticCapY[mi];
-                        if (capY > float.NegativeInfinity && capY < plotRect.Bottom)
-                        {
-                            yTop = Math.Max(yTop, capY);
-                        }
+                        labelGap = ticLabelGaps[mi];
                     }
-                    else if (ChartSkiaPeakLabels.TryGetVerticalMarkerTopPixelYAt(
+                    else if (ChartSkiaPeakLabels.TryGetVerticalMarkerLabelGapYAt(
                         px,
                         plotRect,
                         PeakLabels,
@@ -948,24 +945,53 @@ public partial class ChromatogramControl : SkiaChartBaseControl
                         ToPixelY,
                         PeakLabelRotate,
                         PeakLabelTicOverlayMode,
-                        out var capY2))
+                        out var resolvedGap))
                     {
-                        yTop = Math.Max(yTop, capY2);
+                        labelGap = resolvedGap;
                     }
                 }
 
-                if (yTop >= yBottom - 0.5f)
+                if (!labelGap.HasGap && yTop >= yBottom - 0.5f)
                 {
                     continue;
                 }
 
                 var paint = m.LightStroke ? _verticalMarkerLightPaint : _verticalMarkerPaint;
-                canvas.DrawLine(px, yTop, px, yBottom, paint);
+                DrawVerticalMarkerWithLabelGap(canvas, px, yTop, yBottom, labelGap, paint);
             }
         }
         finally
         {
             canvas.Restore();
+        }
+    }
+
+    private static void DrawVerticalMarkerWithLabelGap(
+        SKCanvas canvas,
+        float px,
+        float yTop,
+        float yBottom,
+        VerticalMarkerLabelGap labelGap,
+        SKPaint paint)
+    {
+        if (!labelGap.HasGap)
+        {
+            if (yBottom - yTop > 0.5f)
+            {
+                canvas.DrawLine(px, yTop, px, yBottom, paint);
+            }
+
+            return;
+        }
+
+        if (labelGap.GapTopY > yTop + 0.5f)
+        {
+            canvas.DrawLine(px, yTop, px, Math.Min(labelGap.GapTopY, yBottom), paint);
+        }
+
+        if (labelGap.GapBottomY < yBottom - 0.5f)
+        {
+            canvas.DrawLine(px, Math.Max(labelGap.GapBottomY, yTop), px, yBottom, paint);
         }
     }
 

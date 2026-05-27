@@ -3,9 +3,23 @@ using SkiaSharp;
 
 namespace Plotto.Charting.Rendering;
 
+/// <summary>Pixel Y range to omit when drawing a vertical marker through TIC overlay labels.</summary>
+public readonly record struct VerticalMarkerLabelGap(float GapTopY, float GapBottomY)
+{
+    public static VerticalMarkerLabelGap None => new(float.PositiveInfinity, float.NegativeInfinity);
+
+    public bool HasGap => GapTopY < GapBottomY;
+}
+
 /// <summary>Draws plain-text peak labels near integration anchors with simple collision avoidance.</summary>
 internal static class ChartSkiaPeakLabels
 {
+    private const int MaxTicLabelLayoutCacheEntries = 512;
+
+    private static readonly Dictionary<TicLabelLayoutCacheKey, TicLabelLayout> TicLabelLayoutCache = new();
+    private static readonly Dictionary<int, FontLineMetrics> FontLineMetricsCache = new();
+    private static TicOverlayPlacementCacheKey _cachedDrawItemsKey;
+    private static List<TicOverlayDrawItem>? _cachedDrawItems;
     public static void Draw(
         SKCanvas canvas,
         SKRect plotRect,
@@ -68,14 +82,7 @@ internal static class ChartSkiaPeakLabels
         var fontPx = (float)Math.Clamp(fontSizeDip, 6d, 24d) * (float)uiScale;
         using var typeface = SKTypeface.FromFamilyName(null);
         using var font = new SKFont(typeface, fontPx);
-        var pad = 2f * (float)uiScale;
-        var margin = 6f * (float)uiScale;
-        var bounds = SKRect.Create(
-            plotRect.Left + margin,
-            plotRect.Top + margin,
-            Math.Max(0, plotRect.Width - 2f * margin),
-            Math.Max(0, plotRect.Height - 2f * margin));
-        if (bounds.Width <= 0 || bounds.Height <= 0)
+        if (plotRect.Width <= 1f || plotRect.Height <= 1f || labels.Count == 0)
         {
             return;
         }
@@ -87,40 +94,17 @@ internal static class ChartSkiaPeakLabels
             Style = textPaint.Style
         };
 
-        var occupied = new List<TicLabelPlacement>();
-        var ordered = labels
-            .Where(static l => !string.IsNullOrWhiteSpace(l.LabelPlainText)
-                               && double.IsFinite(l.X)
-                               && double.IsFinite(l.Y))
-            .OrderByDescending(static l => l.Y)
-            .ThenByDescending(static l => l.X)
-            .ToList();
-
-        foreach (var label in ordered)
+        var drawItems = GetOrBuildTicOverlayDrawItems(
+            plotRect,
+            labels,
+            uiScale,
+            fontSizeDip,
+            toPixelX,
+            toPixelY,
+            peakLabelRotateDegrees);
+        foreach (var item in drawItems)
         {
-            var text = label.LabelPlainText.Trim();
-            var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
-            var layout = MeasureTicLabelLayout(font, lines, pad);
-            if (!TryCreateTicOverlayPlacement(
-                    label,
-                    layout,
-                    lines.Length,
-                    plotRect,
-                    toPixelX,
-                    toPixelY,
-                    peakLabelRotateDegrees,
-                    (float)uiScale,
-                    out var placement))
-            {
-                continue;
-            }
-
-            if (IntersectsAnyRotated(placement, occupied, 2f))
-            {
-                continue;
-            }
-
-            occupied.Add(placement);
+            var placement = item.Placement;
             canvas.Save();
             canvas.Translate(placement.AnchorX, placement.AnchorY);
             canvas.RotateDegrees(peakLabelRotateDegrees);
@@ -131,18 +115,35 @@ internal static class ChartSkiaPeakLabels
                 DrawTicOverlayDebugRect(canvas, placement, (float)uiScale);
             }
 
-            var paint = label.PeakFound ? textPaint : missingPeakPaint;
-            var baseline = layout.FirstBaseline;
-            var centerX = layout.Width * 0.5f;
-            foreach (var line in lines)
+            var paint = item.Label.PeakFound ? textPaint : missingPeakPaint;
+            var baseline = item.Layout.FirstBaseline;
+            var centerX = item.Layout.Width * 0.5f;
+            foreach (var line in item.Lines)
             {
                 canvas.DrawText(line, centerX, baseline, SKTextAlign.Center, font, paint);
-                baseline += layout.LineStep;
+                baseline += item.Layout.LineStep;
             }
 
             canvas.Restore();
         }
     }
+
+    private readonly record struct TicOverlayDrawItem(
+        ChromatogramPeakLabel Label,
+        TicLabelLayout Layout,
+        TicLabelPlacement Placement,
+        string[] Lines);
+
+    private readonly record struct TicOverlayPlacementCacheKey(
+        int PlotLeftBits,
+        int PlotTopBits,
+        int PlotWidthBits,
+        int PlotHeightBits,
+        int UiScaleBits,
+        int FontSizeBits,
+        int RotateDegrees,
+        int LabelCount,
+        long LabelsHash);
 
     private readonly record struct TicLabelPlacement(
         float AnchorX,
@@ -151,7 +152,19 @@ internal static class ChartSkiaPeakLabels
         float TopLocalY,
         float BottomLocalY,
         float Degrees,
-        SKPoint AnchorLocal);
+        SKPoint AnchorLocal,
+        float ScreenLeft,
+        float ScreenTop,
+        float ScreenRight,
+        float ScreenBottom,
+        float ScreenCenterX,
+        float ScreenCenterY,
+        float HalfWidth,
+        float HalfHeight,
+        SKPoint ScreenCorner0,
+        SKPoint ScreenCorner1,
+        SKPoint ScreenCorner2,
+        SKPoint ScreenCorner3);
 
     private readonly record struct TicLabelLayout(
         float Width,
@@ -163,8 +176,21 @@ internal static class ChartSkiaPeakLabels
         float TextAscent = 0f,
         float TextDescent = 0f);
 
-    private static TicLabelLayout MeasureTicLabelLayout(SKFont font, string[] lines, float pad)
+    private readonly record struct FontLineMetrics(float Ascent, float Descent, float LineStep);
+
+    private readonly record struct TicLabelLayoutCacheKey(int FontSizeBits, int PadBits, string Text);
+
+    private static string NormalizeTicLabelText(string text) =>
+        text.Trim().Replace("\r\n", "\n", StringComparison.Ordinal);
+
+    private static FontLineMetrics GetFontLineMetrics(SKFont font)
     {
+        var sizeBits = BitConverter.SingleToInt32Bits(font.Size);
+        if (FontLineMetricsCache.TryGetValue(sizeBits, out var cached))
+        {
+            return cached;
+        }
+
         font.GetFontMetrics(out var metrics);
         var ascent = -metrics.Ascent;
         var descent = metrics.Descent;
@@ -173,6 +199,46 @@ internal static class ChartSkiaPeakLabels
         {
             lineStep = font.Size;
         }
+
+        cached = new FontLineMetrics(ascent, descent, lineStep);
+        FontLineMetricsCache[sizeBits] = cached;
+        return cached;
+    }
+
+    private static TicLabelLayout MeasureTicLabelLayout(SKFont font, string normalizedText, float pad)
+    {
+        var cacheKey = new TicLabelLayoutCacheKey(
+            BitConverter.SingleToInt32Bits(font.Size),
+            BitConverter.SingleToInt32Bits(pad),
+            normalizedText);
+        if (TicLabelLayoutCache.TryGetValue(cacheKey, out var cached))
+        {
+            return cached;
+        }
+
+        var layout = MeasureTicLabelLayoutUncached(font, normalizedText, pad);
+        if (TicLabelLayoutCache.Count >= MaxTicLabelLayoutCacheEntries)
+        {
+            TicLabelLayoutCache.Clear();
+        }
+
+        TicLabelLayoutCache[cacheKey] = layout;
+        return layout;
+    }
+
+    private static TicLabelLayout MeasureTicLabelLayoutUncached(SKFont font, string normalizedText, float pad)
+    {
+        var lines = normalizedText.Split('\n');
+        var lineCount = lines.Length;
+        if (lineCount == 0)
+        {
+            return default;
+        }
+
+        var metrics = GetFontLineMetrics(font);
+        var ascent = metrics.Ascent;
+        var descent = metrics.Descent;
+        var lineStep = metrics.LineStep;
 
         var padX = pad;
         var padY = pad * 0.85f;
@@ -184,17 +250,9 @@ internal static class ChartSkiaPeakLabels
         }
 
         var lastBaseline = -padY - descent;
-        var firstBaseline = lastBaseline - (lines.Length - 1) * lineStep;
-        var baseline = firstBaseline;
-        var blockTop = float.MaxValue;
-        var blockBottom = float.MinValue;
-        for (var i = 0; i < lines.Length; i++)
-        {
-            blockTop = Math.Min(blockTop, baseline - ascent);
-            blockBottom = Math.Max(blockBottom, baseline + descent);
-            baseline += lineStep;
-        }
-
+        var firstBaseline = lastBaseline - (lineCount - 1) * lineStep;
+        var blockTop = firstBaseline - ascent;
+        var blockBottom = lastBaseline + descent;
         var topLocalY = blockTop - padY;
         var bottomLocalY = blockBottom + padY;
         var wBox = blockW + 2f * padX;
@@ -313,49 +371,59 @@ internal static class ChartSkiaPeakLabels
         var tl_screenX = tl_relX * cosA - tl_relY * sinA;
         var tl_screenY = tl_relX * sinA + tl_relY * cosA;
 
+        ReadOnlySpan<(float Item1, float Item2)> corners =
+        [
+            (bl_screenX, bl_screenY),
+            (br_screenX, br_screenY),
+            (tr_screenX, tr_screenY),
+            (tl_screenX, tl_screenY),
+        ];
+
         // Find the 2 corners with highest screen Y (lowest on screen).
-        // After rotation, bottom-left and bottom-right are the original bottom corners.
-        var corners = new[] { (bl_screenX, bl_screenY), (br_screenX, br_screenY), (tr_screenX, tr_screenY), (tl_screenX, tl_screenY) };
-        System.Array.Sort(corners, (a, b) => b.Item2.CompareTo(a.Item2));
-
-        // Take exactly the 2 with highest Y values (the 2 lowest corners on screen).
-        var lowestY = corners[0].Item2;
-        var lowest = new List<(float screenX, float screenY)>();
-        for (var i = 0; i < corners.Length; i++)
+        var idx0 = 0;
+        var idx1 = 1;
+        var bestY0 = corners[0].Item2;
+        var bestY1 = corners[1].Item2;
+        if (bestY1 > bestY0)
         {
-            if (corners[i].Item2 >= lowestY - 0.05f)  // Allow small tolerance for floating point
+            (idx0, idx1) = (idx1, idx0);
+            (bestY0, bestY1) = (bestY1, bestY0);
+        }
+
+        for (var i = 2; i < corners.Length; i++)
+        {
+            var y = corners[i].Item2;
+            if (y > bestY0)
             {
-                lowest.Add(corners[i]);
+                bestY1 = bestY0;
+                idx1 = idx0;
+                bestY0 = y;
+                idx0 = i;
             }
-            if (lowest.Count >= 2)
+            else if (y > bestY1)
             {
-                break;
+                bestY1 = y;
+                idx1 = i;
             }
         }
 
-        if (lowest.Count < 2)
-        {
-            // Fallback: just take the first 2 sorted corners
-            lowest = new List<(float screenX, float screenY)> { corners[0], corners[1] };
-        }
-
-        // Average screen offset of the 2 lowest corners.
-        var sumScreenX = 0f;
-        var sumScreenY = 0f;
-        foreach (var c in lowest)
-        {
-            sumScreenX += c.screenX;
-            sumScreenY += c.screenY;
-        }
-
-        var avgScreenX = sumScreenX / lowest.Count;
-        var avgScreenY = sumScreenY / lowest.Count;
+        var avgScreenX = (corners[idx0].Item1 + corners[idx1].Item1) * 0.5f;
+        var avgScreenY = (corners[idx0].Item2 + corners[idx1].Item2) * 0.5f;
 
         // Position the anchor so that:
         // - The average X of the 2 lowest rotated corners is aligned with the apex X.
         // - The average Y of the 2 lowest rotated corners is at apexPixelY - gap.
         var anchorX = apexPixelX - avgScreenX;
         var anchorY = apexPixelY - gap - avgScreenY;
+
+        var screenCorner0 = new SKPoint(anchorX + bl_screenX, anchorY + bl_screenY);
+        var screenCorner1 = new SKPoint(anchorX + br_screenX, anchorY + br_screenY);
+        var screenCorner2 = new SKPoint(anchorX + tr_screenX, anchorY + tr_screenY);
+        var screenCorner3 = new SKPoint(anchorX + tl_screenX, anchorY + tl_screenY);
+        var screenLeft = MathF.Min(MathF.Min(screenCorner0.X, screenCorner1.X), MathF.Min(screenCorner2.X, screenCorner3.X));
+        var screenRight = MathF.Max(MathF.Max(screenCorner0.X, screenCorner1.X), MathF.Max(screenCorner2.X, screenCorner3.X));
+        var screenTop = MathF.Min(MathF.Min(screenCorner0.Y, screenCorner1.Y), MathF.Min(screenCorner2.Y, screenCorner3.Y));
+        var screenBottom = MathF.Max(MathF.Max(screenCorner0.Y, screenCorner1.Y), MathF.Max(screenCorner2.Y, screenCorner3.Y));
 
         placement = new TicLabelPlacement(
             anchorX,
@@ -364,7 +432,19 @@ internal static class ChartSkiaPeakLabels
             top,
             bot,
             peakLabelRotateDegrees,
-            new SKPoint(anchorLocalX, anchorLocalY));
+            new SKPoint(anchorLocalX, anchorLocalY),
+            screenLeft,
+            screenTop,
+            screenRight,
+            screenBottom,
+            (screenCorner0.X + screenCorner1.X + screenCorner2.X + screenCorner3.X) * 0.25f,
+            (screenCorner0.Y + screenCorner1.Y + screenCorner2.Y + screenCorner3.Y) * 0.25f,
+            w * 0.5f,
+            (bot - top) * 0.5f,
+            screenCorner0,
+            screenCorner1,
+            screenCorner2,
+            screenCorner3);
         return true;
     }
 
@@ -440,78 +520,70 @@ internal static class ChartSkiaPeakLabels
         return found;
     }
 
-    private static bool IntersectsAnyRotated(
-        TicLabelPlacement candidate,
-        IReadOnlyList<TicLabelPlacement> occupied,
-        float pad)
+    private static bool TryGetMinScreenYOnVerticalSlice(
+        TicLabelPlacement placement,
+        float markerPixelX,
+        float pad,
+        out float minScreenY)
     {
-        foreach (var other in occupied)
+        minScreenY = float.MaxValue;
+        Span<SKPoint> corners = stackalloc SKPoint[4];
+        GetScreenCorners(placement, corners);
+
+        var found = false;
+        for (var i = 0; i < corners.Length; i++)
         {
-            if (RotatedRectsOverlap(candidate, other, pad))
+            var p1 = corners[i];
+            var p2 = corners[(i + 1) % corners.Length];
+            if (Math.Abs(p1.X - markerPixelX) <= pad)
             {
-                return true;
+                minScreenY = MathF.Min(minScreenY, p1.Y);
+                found = true;
             }
-        }
 
-        return false;
-    }
+            if (Math.Abs(p2.X - markerPixelX) <= pad)
+            {
+                minScreenY = MathF.Min(minScreenY, p2.Y);
+                found = true;
+            }
 
-    private static bool RotatedRectsOverlap(TicLabelPlacement left, TicLabelPlacement right, float pad)
-    {
-        Span<SKPoint> leftCorners = stackalloc SKPoint[4];
-        Span<SKPoint> rightCorners = stackalloc SKPoint[4];
-        GetScreenCorners(left, leftCorners);
-        GetScreenCorners(right, rightCorners);
-        return PolygonsOverlap(leftCorners, rightCorners, pad);
-    }
-
-    private static void GetScreenCorners(TicLabelPlacement placement, Span<SKPoint> corners)
-    {
-        ReadOnlySpan<SKPoint> localCorners =
-        [
-            new(0f, placement.BottomLocalY),
-            new(placement.Width, placement.BottomLocalY),
-            new(placement.Width, placement.TopLocalY),
-            new(0f, placement.TopLocalY)
-        ];
-
-        var rad = placement.Degrees * MathF.PI / 180f;
-        var cos = MathF.Cos(rad);
-        var sin = MathF.Sin(rad);
-        for (var i = 0; i < localCorners.Length; i++)
-        {
-            var localX = localCorners[i].X - placement.AnchorLocal.X;
-            var localY = localCorners[i].Y - placement.AnchorLocal.Y;
-            corners[i] = new SKPoint(
-                placement.AnchorX + RotateX(localX, localY, cos, sin),
-                placement.AnchorY + RotateY(localX, localY, cos, sin));
-        }
-    }
-
-    private static bool PolygonsOverlap(ReadOnlySpan<SKPoint> left, ReadOnlySpan<SKPoint> right, float pad) =>
-        !HasSeparatingAxis(left, right, pad) && !HasSeparatingAxis(right, left, pad);
-
-    private static bool HasSeparatingAxis(ReadOnlySpan<SKPoint> from, ReadOnlySpan<SKPoint> other, float pad)
-    {
-        for (var i = 0; i < from.Length; i++)
-        {
-            var p1 = from[i];
-            var p2 = from[(i + 1) % from.Length];
-            var edgeX = p2.X - p1.X;
-            var edgeY = p2.Y - p1.Y;
-            var axisX = -edgeY;
-            var axisY = edgeX;
-            var length = MathF.Sqrt(axisX * axisX + axisY * axisY);
-            if (length < 1e-6f)
+            var minX = Math.Min(p1.X, p2.X) - pad;
+            var maxX = Math.Max(p1.X, p2.X) + pad;
+            if (markerPixelX < minX || markerPixelX > maxX)
             {
                 continue;
             }
 
-            axisX /= length;
-            axisY /= length;
-            ProjectOntoAxis(from, axisX, axisY, out var minFrom, out var maxFrom);
-            ProjectOntoAxis(other, axisX, axisY, out var minOther, out var maxOther);
-            if (maxFrom + pad < minOther - pad || maxOther + pad < minFrom - pad)
+            if (MathF.Abs(p2.X - p1.X) < 1e-5f)
+            {
+                minScreenY = MathF.Min(minScreenY, MathF.Min(p1.Y, p2.Y));
+                found = true;
+                continue;
+            }
+
+            var t = (markerPixelX - p1.X) / (p2.X - p1.X);
+            if (t < -0.001f || t > 1.001f)
+            {
+                continue;
+            }
+
+            minScreenY = MathF.Min(minScreenY, p1.Y + t * (p2.Y - p1.Y));
+            found = true;
+        }
+
+        return found;
+    }
+
+    private static bool IntersectsAnyRotated(
+        TicLabelPlacement candidate,
+        IReadOnlyList<TicLabelPlacement> occupied,
+        float pad,
+        float cos,
+        float sin)
+    {
+        foreach (var other in occupied)
+        {
+            if (SameOrientationRectsOverlap(candidate, other, pad, cos, sin))
             {
                 return true;
             }
@@ -520,21 +592,35 @@ internal static class ChartSkiaPeakLabels
         return false;
     }
 
-    private static void ProjectOntoAxis(
-        ReadOnlySpan<SKPoint> points,
-        float axisX,
-        float axisY,
-        out float min,
-        out float max)
+    private static bool SameOrientationRectsOverlap(
+        in TicLabelPlacement left,
+        in TicLabelPlacement right,
+        float pad,
+        float cos,
+        float sin)
     {
-        min = float.MaxValue;
-        max = float.MinValue;
-        foreach (var point in points)
+        if (left.ScreenRight + pad < right.ScreenLeft - pad
+            || right.ScreenRight + pad < left.ScreenLeft - pad
+            || left.ScreenBottom + pad < right.ScreenTop - pad
+            || right.ScreenBottom + pad < left.ScreenTop - pad)
         {
-            var projection = point.X * axisX + point.Y * axisY;
-            min = MathF.Min(min, projection);
-            max = MathF.Max(max, projection);
+            return false;
         }
+
+        var dx = right.ScreenCenterX - left.ScreenCenterX;
+        var dy = right.ScreenCenterY - left.ScreenCenterY;
+        var localDx = MathF.Abs(dx * cos + dy * sin);
+        var localDy = MathF.Abs(-dx * sin + dy * cos);
+        return localDx <= left.HalfWidth + right.HalfWidth + pad
+               && localDy <= left.HalfHeight + right.HalfHeight + pad;
+    }
+
+    private static void GetScreenCorners(TicLabelPlacement placement, Span<SKPoint> corners)
+    {
+        corners[0] = placement.ScreenCorner0;
+        corners[1] = placement.ScreenCorner1;
+        corners[2] = placement.ScreenCorner2;
+        corners[3] = placement.ScreenCorner3;
     }
 
     private static float RotateX(float x, float y, float cos, float sin) => x * cos - y * sin;
@@ -825,6 +911,56 @@ internal static class ChartSkiaPeakLabels
             out _);
     }
 
+    /// <summary>
+    /// Label pixel-Y range a vertical marker at <paramref name="markerPixelX"/> should omit.
+    /// Draw above <see cref="VerticalMarkerLabelGap.GapTopY"/> and below <see cref="VerticalMarkerLabelGap.GapBottomY"/>.
+    /// </summary>
+    public static bool TryGetVerticalMarkerLabelGapYAt(
+        float markerPixelX,
+        SKRect plotRect,
+        IReadOnlyList<ChromatogramPeakLabel> labels,
+        double uiScale,
+        double fontSizeDip,
+        Func<double, SKRect, float> toPixelX,
+        Func<double, SKRect, float> toPixelY,
+        int peakLabelRotateDegrees,
+        bool ticOverlayMode,
+        out VerticalMarkerLabelGap gap)
+    {
+        gap = VerticalMarkerLabelGap.None;
+        if (plotRect.Width <= 1f || plotRect.Height <= 1f || labels.Count == 0)
+        {
+            return false;
+        }
+
+        var pad = 4f * (float)uiScale;
+        if (ticOverlayMode)
+        {
+            return TryGetTicOverlayMarkerLabelGapAt(
+                markerPixelX,
+                plotRect,
+                labels,
+                uiScale,
+                fontSizeDip,
+                toPixelX,
+                toPixelY,
+                peakLabelRotateDegrees,
+                pad,
+                out gap);
+        }
+
+        return TryGetConnectorMarkerLabelGapAt(
+            markerPixelX,
+            plotRect,
+            labels,
+            uiScale,
+            fontSizeDip,
+            toPixelX,
+            toPixelY,
+            pad,
+            out gap);
+    }
+
     /// <summary>Lowest Y (largest pixel value) a vertical marker at <paramref name="markerPixelX"/> may reach without crossing a visible label.</summary>
     public static bool TryGetVerticalMarkerTopPixelYAt(
         float markerPixelX,
@@ -930,9 +1066,8 @@ internal static class ChartSkiaPeakLabels
 
     /// <summary>
     /// Builds the collision-resolved TIC overlay placements for <paramref name="labels"/> once.
-    /// Returns the list (possibly empty) and the shared font resources so callers can reuse them.
     /// </summary>
-    private static List<TicLabelPlacement> TryBuildTicOverlayPlacements(
+    private static IReadOnlyList<TicOverlayDrawItem> GetOrBuildTicOverlayDrawItems(
         SKRect plotRect,
         IReadOnlyList<ChromatogramPeakLabel> labels,
         double uiScale,
@@ -941,7 +1076,68 @@ internal static class ChartSkiaPeakLabels
         Func<double, SKRect, float> toPixelY,
         int peakLabelRotateDegrees)
     {
-        var result = new List<TicLabelPlacement>();
+        var key = CreateTicOverlayPlacementCacheKey(
+            plotRect,
+            labels,
+            uiScale,
+            fontSizeDip,
+            peakLabelRotateDegrees);
+        if (_cachedDrawItems is not null && key.Equals(_cachedDrawItemsKey))
+        {
+            return _cachedDrawItems;
+        }
+
+        _cachedDrawItems = BuildTicOverlayDrawItems(
+            plotRect,
+            labels,
+            uiScale,
+            fontSizeDip,
+            toPixelX,
+            toPixelY,
+            peakLabelRotateDegrees);
+        _cachedDrawItemsKey = key;
+        return _cachedDrawItems;
+    }
+
+    private static TicOverlayPlacementCacheKey CreateTicOverlayPlacementCacheKey(
+        SKRect plotRect,
+        IReadOnlyList<ChromatogramPeakLabel> labels,
+        double uiScale,
+        double fontSizeDip,
+        int peakLabelRotateDegrees)
+    {
+        var hash = new HashCode();
+        hash.Add(labels.Count);
+        foreach (var label in labels)
+        {
+            hash.Add(label.X);
+            hash.Add(label.Y);
+            hash.Add(label.LabelPlainText);
+            hash.Add(label.PeakFound);
+        }
+
+        return new TicOverlayPlacementCacheKey(
+            BitConverter.SingleToInt32Bits(plotRect.Left),
+            BitConverter.SingleToInt32Bits(plotRect.Top),
+            BitConverter.SingleToInt32Bits(plotRect.Width),
+            BitConverter.SingleToInt32Bits(plotRect.Height),
+            BitConverter.SingleToInt32Bits((float)uiScale),
+            BitConverter.SingleToInt32Bits((float)fontSizeDip),
+            peakLabelRotateDegrees,
+            labels.Count,
+            (long)hash.ToHashCode());
+    }
+
+    private static List<TicOverlayDrawItem> BuildTicOverlayDrawItems(
+        SKRect plotRect,
+        IReadOnlyList<ChromatogramPeakLabel> labels,
+        double uiScale,
+        double fontSizeDip,
+        Func<double, SKRect, float> toPixelX,
+        Func<double, SKRect, float> toPixelY,
+        int peakLabelRotateDegrees)
+    {
+        var result = new List<TicOverlayDrawItem>();
         var fontPx = (float)Math.Clamp(fontSizeDip, 6d, 24d) * (float)uiScale;
         using var typeface = SKTypeface.FromFamilyName(null);
         using var font = new SKFont(typeface, fontPx);
@@ -957,6 +1153,11 @@ internal static class ChartSkiaPeakLabels
             return result;
         }
 
+        var rad = peakLabelRotateDegrees * MathF.PI / 180f;
+        var cos = MathF.Cos(rad);
+        var sin = MathF.Sin(rad);
+        var collisionPad = 2f * (float)uiScale;
+        var occupied = new List<TicLabelPlacement>();
         var ordered = labels
             .Where(static l => !string.IsNullOrWhiteSpace(l.LabelPlainText)
                                && double.IsFinite(l.X)
@@ -967,9 +1168,9 @@ internal static class ChartSkiaPeakLabels
 
         foreach (var label in ordered)
         {
-            var text = label.LabelPlainText.Trim();
-            var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
-            var layout = MeasureTicLabelLayout(font, lines, pad);
+            var normalizedText = NormalizeTicLabelText(label.LabelPlainText);
+            var lines = normalizedText.Split('\n');
+            var layout = MeasureTicLabelLayout(font, normalizedText, pad);
             if (!TryCreateTicOverlayPlacement(
                     label,
                     layout,
@@ -984,24 +1185,54 @@ internal static class ChartSkiaPeakLabels
                 continue;
             }
 
-            if (IntersectsAnyRotated(placement, result, 2f))
+            if (IntersectsAnyRotated(placement, occupied, collisionPad, cos, sin))
             {
                 continue;
             }
 
-            result.Add(placement);
+            occupied.Add(placement);
+            result.Add(new TicOverlayDrawItem(label, layout, placement, lines));
         }
 
         return result;
     }
 
+    private static IReadOnlyList<TicLabelPlacement> GetTicOverlayPlacements(
+        SKRect plotRect,
+        IReadOnlyList<ChromatogramPeakLabel> labels,
+        double uiScale,
+        double fontSizeDip,
+        Func<double, SKRect, float> toPixelX,
+        Func<double, SKRect, float> toPixelY,
+        int peakLabelRotateDegrees)
+    {
+        var drawItems = GetOrBuildTicOverlayDrawItems(
+            plotRect,
+            labels,
+            uiScale,
+            fontSizeDip,
+            toPixelX,
+            toPixelY,
+            peakLabelRotateDegrees);
+        if (drawItems.Count == 0)
+        {
+            return Array.Empty<TicLabelPlacement>();
+        }
+
+        var placements = new TicLabelPlacement[drawItems.Count];
+        for (var i = 0; i < drawItems.Count; i++)
+        {
+            placements[i] = drawItems[i].Placement;
+        }
+
+        return placements;
+    }
+
     /// <summary>
-    /// Computes label placements once and returns the lowest label pixel-Y that each vertical
-    /// marker at <paramref name="markerPixelXs"/> would collide with.  Index in the output array
-    /// corresponds to index in <paramref name="markerPixelXs"/>; a value of
-    /// <see cref="float.NegativeInfinity"/> means no label covers that marker.
+    /// Computes label placements once and returns the pixel-Y gap each vertical marker at
+    /// <paramref name="markerPixelXs"/> should leave for overlay labels.
     /// </summary>
-    public static float[] GetTicOverlayVerticalMarkerCapYBatch(
+    public static VerticalMarkerLabelGap[] GetTicOverlayVerticalMarkerLabelGapsBatch(
         SKRect plotRect,
         IReadOnlyList<ChromatogramPeakLabel> labels,
         double uiScale,
@@ -1011,37 +1242,38 @@ internal static class ChartSkiaPeakLabels
         int peakLabelRotateDegrees,
         IReadOnlyList<float> markerPixelXs)
     {
-        var capY = new float[markerPixelXs.Count];
-        for (var i = 0; i < capY.Length; i++)
+        var gaps = new VerticalMarkerLabelGap[markerPixelXs.Count];
+        for (var i = 0; i < gaps.Length; i++)
         {
-            capY[i] = float.NegativeInfinity;
+            gaps[i] = VerticalMarkerLabelGap.None;
         }
 
         if (plotRect.Width <= 1f || plotRect.Height <= 1f || labels.Count == 0 || markerPixelXs.Count == 0)
         {
-            return capY;
+            return gaps;
         }
 
         var pad = 4f * (float)uiScale;
-        var placements = TryBuildTicOverlayPlacements(
+        var placements = GetTicOverlayPlacements(
             plotRect, labels, uiScale, fontSizeDip, toPixelX, toPixelY, peakLabelRotateDegrees);
 
         foreach (var placement in placements)
         {
             for (var i = 0; i < markerPixelXs.Count; i++)
             {
-                if (TryGetMaxScreenYOnVerticalSlice(placement, markerPixelXs[i], pad, out var sliceBottom))
+                if (!TryGetMinScreenYOnVerticalSlice(placement, markerPixelXs[i], pad, out var sliceTop)
+                    || !TryGetMaxScreenYOnVerticalSlice(placement, markerPixelXs[i], pad, out var sliceBottom))
                 {
-                    var candidate = sliceBottom + pad;
-                    if (candidate > capY[i])
-                    {
-                        capY[i] = candidate;
-                    }
+                    continue;
                 }
+
+                gaps[i] = MergeVerticalMarkerLabelGaps(
+                    gaps[i],
+                    new VerticalMarkerLabelGap(sliceTop - pad, sliceBottom + pad));
             }
         }
 
-        return capY;
+        return gaps;
     }
 
     private static bool TryGetTicOverlayLabelPixelExtents(
@@ -1057,7 +1289,7 @@ internal static class ChartSkiaPeakLabels
     {
         minTop = float.MaxValue;
         maxBottom = float.MinValue;
-        var placements = TryBuildTicOverlayPlacements(
+        var placements = GetTicOverlayPlacements(
             plotRect, labels, uiScale, fontSizeDip, toPixelX, toPixelY, peakLabelRotateDegrees);
         if (placements.Count == 0)
         {
@@ -1066,9 +1298,8 @@ internal static class ChartSkiaPeakLabels
 
         foreach (var placement in placements)
         {
-            GetScreenBounds(placement, out _, out var top, out _, out var bottom);
-            minTop = Math.Min(minTop, top);
-            maxBottom = Math.Max(maxBottom, bottom);
+            minTop = Math.Min(minTop, placement.ScreenTop);
+            maxBottom = Math.Max(maxBottom, placement.ScreenBottom);
         }
 
         return true;
@@ -1087,7 +1318,39 @@ internal static class ChartSkiaPeakLabels
         out float topPixelY)
     {
         topPixelY = plotRect.Top;
-        var placements = TryBuildTicOverlayPlacements(
+        if (!TryGetTicOverlayMarkerLabelGapAt(
+                markerPixelX,
+                plotRect,
+                labels,
+                uiScale,
+                fontSizeDip,
+                toPixelX,
+                toPixelY,
+                peakLabelRotateDegrees,
+                pad,
+                out var gap))
+        {
+            return false;
+        }
+
+        topPixelY = gap.GapBottomY;
+        return topPixelY < plotRect.Bottom;
+    }
+
+    private static bool TryGetTicOverlayMarkerLabelGapAt(
+        float markerPixelX,
+        SKRect plotRect,
+        IReadOnlyList<ChromatogramPeakLabel> labels,
+        double uiScale,
+        double fontSizeDip,
+        Func<double, SKRect, float> toPixelX,
+        Func<double, SKRect, float> toPixelY,
+        int peakLabelRotateDegrees,
+        float pad,
+        out VerticalMarkerLabelGap gap)
+    {
+        gap = VerticalMarkerLabelGap.None;
+        var placements = GetTicOverlayPlacements(
             plotRect, labels, uiScale, fontSizeDip, toPixelX, toPixelY, peakLabelRotateDegrees);
         if (placements.Count == 0)
         {
@@ -1097,16 +1360,19 @@ internal static class ChartSkiaPeakLabels
         var found = false;
         foreach (var placement in placements)
         {
-            if (!TryGetMaxScreenYOnVerticalSlice(placement, markerPixelX, pad, out var sliceBottom))
+            if (!TryGetMinScreenYOnVerticalSlice(placement, markerPixelX, pad, out var sliceTop)
+                || !TryGetMaxScreenYOnVerticalSlice(placement, markerPixelX, pad, out var sliceBottom))
             {
                 continue;
             }
 
-            topPixelY = Math.Max(topPixelY, sliceBottom + pad);
+            gap = MergeVerticalMarkerLabelGaps(
+                gap,
+                new VerticalMarkerLabelGap(sliceTop - pad, sliceBottom + pad));
             found = true;
         }
 
-        return found && topPixelY < plotRect.Bottom;
+        return found && gap.HasGap;
     }
 
     private static bool TryGetConnectorMarkerTopAt(
@@ -1121,6 +1387,36 @@ internal static class ChartSkiaPeakLabels
         out float topPixelY)
     {
         topPixelY = plotRect.Top;
+        if (!TryGetConnectorMarkerLabelGapAt(
+                markerPixelX,
+                plotRect,
+                labels,
+                uiScale,
+                fontSizeDip,
+                toPixelX,
+                toPixelY,
+                pad,
+                out var gap))
+        {
+            return false;
+        }
+
+        topPixelY = gap.GapBottomY;
+        return topPixelY < plotRect.Bottom;
+    }
+
+    private static bool TryGetConnectorMarkerLabelGapAt(
+        float markerPixelX,
+        SKRect plotRect,
+        IReadOnlyList<ChromatogramPeakLabel> labels,
+        double uiScale,
+        double fontSizeDip,
+        Func<double, SKRect, float> toPixelX,
+        Func<double, SKRect, float> toPixelY,
+        float pad,
+        out VerticalMarkerLabelGap gap)
+    {
+        gap = VerticalMarkerLabelGap.None;
         if (!TryGetConnectorLabelPixelExtents(
                 plotRect,
                 labels,
@@ -1185,11 +1481,32 @@ internal static class ChartSkiaPeakLabels
                 continue;
             }
 
-            topPixelY = Math.Max(topPixelY, rect.Bottom + pad);
+            gap = MergeVerticalMarkerLabelGaps(
+                gap,
+                new VerticalMarkerLabelGap(rect.Top - pad, rect.Bottom + pad));
             found = true;
         }
 
-        return found && topPixelY < plotRect.Bottom;
+        return found && gap.HasGap;
+    }
+
+    private static VerticalMarkerLabelGap MergeVerticalMarkerLabelGaps(
+        VerticalMarkerLabelGap existing,
+        VerticalMarkerLabelGap candidate)
+    {
+        if (!existing.HasGap)
+        {
+            return candidate;
+        }
+
+        if (!candidate.HasGap)
+        {
+            return existing;
+        }
+
+        return new VerticalMarkerLabelGap(
+            Math.Min(existing.GapTopY, candidate.GapTopY),
+            Math.Max(existing.GapBottomY, candidate.GapBottomY));
     }
 
     private static bool TryGetConnectorLabelPixelExtents(
@@ -1256,22 +1573,5 @@ internal static class ChartSkiaPeakLabels
         }
 
         return found;
-    }
-
-    private static void GetScreenBounds(TicLabelPlacement placement, out float left, out float top, out float right, out float bottom)
-    {
-        Span<SKPoint> corners = stackalloc SKPoint[4];
-        GetScreenCorners(placement, corners);
-        left = float.MaxValue;
-        top = float.MaxValue;
-        right = float.MinValue;
-        bottom = float.MinValue;
-        foreach (var corner in corners)
-        {
-            left = Math.Min(left, corner.X);
-            top = Math.Min(top, corner.Y);
-            right = Math.Max(right, corner.X);
-            bottom = Math.Max(bottom, corner.Y);
-        }
     }
 }
