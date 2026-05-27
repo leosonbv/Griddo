@@ -49,6 +49,7 @@ public sealed partial class Griddo
             _hasAutoSizedFields = false;
             _initialSampleAutoSizeScheduled = false;
             _suppressInitialAutoWidthFields.Clear();
+            _userFixedWidthFields.Clear();
         }
     }
 

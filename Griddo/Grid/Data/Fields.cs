@@ -130,17 +130,40 @@ public sealed partial class Griddo
     /// <summary>Clears per-field width overrides so layout uses each field view’s nominal <see cref="IGriddoFieldView.Width"/>.</summary>
     public void ClearFieldWidthOverrides()
     {
-        if (_fieldWidthOverrides.Count == 0)
+        if (_fieldWidthOverrides.Count == 0 && _userFixedWidthFields.Count == 0)
         {
             return;
         }
 
         _fieldWidthOverrides.Clear();
+        _userFixedWidthFields.Clear();
         InvalidateFieldFillWidthCache();
         UpdateScrollBars();
         InvalidateMeasure();
         InvalidateVisual();
     }
+
+    /// <summary>Marks a column width as user-chosen so automatic auto-width skips it until explicit auto-size.</summary>
+    public void MarkFieldWidthUserFixed(int fieldIndex)
+    {
+        if (fieldIndex >= 0 && fieldIndex < Fields.Count)
+        {
+            _userFixedWidthFields.Add(Fields[fieldIndex]);
+        }
+    }
+
+    private void ClearFieldWidthUserFixed(int fieldIndex)
+    {
+        if (fieldIndex >= 0 && fieldIndex < Fields.Count)
+        {
+            _userFixedWidthFields.Remove(Fields[fieldIndex]);
+        }
+    }
+
+    private bool IsFieldWidthUserFixed(int fieldIndex) =>
+        fieldIndex >= 0
+        && fieldIndex < Fields.Count
+        && _userFixedWidthFields.Contains(Fields[fieldIndex]);
 
     /// <summary>Clears <see cref="MarkInitialAutoWidthSuppressedForGridField"/> markers (e.g. before rebuilding fields).</summary>
     public void ClearInitialAutoWidthSuppressions() => _suppressInitialAutoWidthFields.Clear();
@@ -159,6 +182,8 @@ public sealed partial class Griddo
         {
             return;
         }
+
+        ClearFieldWidthUserFixed(fieldIndex);
         var sampledRecords = GetAutoSizeSampleRecords();
         var max = MeasureAutoWidthForField(fieldIndex, sampledRecords);
         SetFieldWidth(fieldIndex, max);
@@ -177,8 +202,42 @@ public sealed partial class Griddo
         var sampledRecords = GetAutoSizeSampleRecords();
         for (var fieldIndex = 0; fieldIndex < Fields.Count; fieldIndex++)
         {
+            ClearFieldWidthUserFixed(fieldIndex);
             var max = MeasureAutoWidthForField(fieldIndex, sampledRecords);
             SetFieldWidth(fieldIndex, max);
+        }
+
+        _hasAutoSizedFields = true;
+        InvalidateVisual();
+    }
+
+    /// <summary>
+    /// Auto-sizes only columns that have not been manually resized (divider drag) or restored from persisted layout.
+    /// </summary>
+    public void AutoSizeNonUserFixedFields()
+    {
+        if (Fields.Count == 0)
+        {
+            return;
+        }
+
+        var any = false;
+        var sampledRecords = GetAutoSizeSampleRecords();
+        for (var fieldIndex = 0; fieldIndex < Fields.Count; fieldIndex++)
+        {
+            if (IsFieldWidthUserFixed(fieldIndex))
+            {
+                continue;
+            }
+
+            var max = MeasureAutoWidthForField(fieldIndex, sampledRecords);
+            SetFieldWidth(fieldIndex, max);
+            any = true;
+        }
+
+        if (!any)
+        {
+            return;
         }
 
         _hasAutoSizedFields = true;
@@ -201,6 +260,7 @@ public sealed partial class Griddo
                 continue;
             }
 
+            ClearFieldWidthUserFixed(idx);
             var max = MeasureAutoWidthForField(idx, sampledRecords);
             SetFieldWidth(idx, max);
             any = true;
@@ -252,6 +312,11 @@ public sealed partial class Griddo
         }
 
         var field = Fields[fieldIndex];
+        if (_userFixedWidthFields.Contains(field))
+        {
+            return true;
+        }
+
         if (_suppressInitialAutoWidthFields.Contains(field))
         {
             return true;

@@ -1628,6 +1628,11 @@ public sealed partial class Griddo
 
         if (_isResizingField && e.ChangedButton == MouseButton.Left)
         {
+            if (_resizingFieldIndex >= 0)
+            {
+                MarkFieldWidthUserFixed(_resizingFieldIndex);
+            }
+
             _isResizingField = false;
             _resizingFieldIndex = -1;
             FieldWidthsChanged?.Invoke(this, EventArgs.Empty);

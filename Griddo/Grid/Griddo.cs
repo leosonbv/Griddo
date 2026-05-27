@@ -80,6 +80,8 @@ public sealed partial class Griddo : FrameworkElement
     private readonly HashSet<int> _recordHeaderRightClickOutline = [];
     private readonly HashSet<GriddoCellAddress> _selectionDragSnapshot = [];
     private readonly Dictionary<IGriddoFieldView, double> _fieldWidthOverrides = [];
+    /// <summary>Fields whose width was set by the user (divider drag or persisted layout) and must not be auto-sized again.</summary>
+    private readonly HashSet<IGriddoFieldView> _userFixedWidthFields = [];
     /// <summary>Grid field indices that should not receive initial sample auto-width (e.g. width restored from persistence).</summary>
     private readonly HashSet<IGriddoFieldView> _suppressInitialAutoWidthFields = [];
     private Pen? _cachedGridLinePen;

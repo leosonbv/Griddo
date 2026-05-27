@@ -104,6 +104,7 @@ public static class GridApplier
                     && persistedLayoutSourceFieldIndices.Contains(visible[i].SourceFieldIndex))
                 {
                     grid.MarkInitialAutoWidthSuppressedForGridField(i);
+                    grid.MarkFieldWidthUserFixed(i);
                 }
             }
 
