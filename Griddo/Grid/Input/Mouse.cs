@@ -1039,6 +1039,7 @@ public sealed partial class Griddo
         {
             var delta = IsBodyTransposed ? pointer.Y - _resizeStartPoint.Y : pointer.X - _resizeStartPoint.X;
             SetFieldWidth(_resizingFieldIndex, _resizeInitialSize + delta);
+            MarkFieldWidthUserFixed(_resizingFieldIndex);
             InvalidateVisual();
             e.Handled = true;
             base.OnMouseMove(e);

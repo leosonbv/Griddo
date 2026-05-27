@@ -46,10 +46,7 @@ public sealed partial class Griddo
         _fixedRecordCount = Math.Clamp((int)_fixedRecordCount, 0, Math.Max((int)0, (int)Records.Count));
         if (Records.Count == 0)
         {
-            _hasAutoSizedFields = false;
             _initialSampleAutoSizeScheduled = false;
-            _suppressInitialAutoWidthFields.Clear();
-            _userFixedWidthFields.Clear();
         }
     }
 
