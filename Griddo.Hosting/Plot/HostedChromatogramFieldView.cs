@@ -96,6 +96,21 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
     /// </summary>
     public Func<object?, string?>? ViewportZoomRecordKey { get; set; }
 
+    /// <summary>
+    /// TIC plot zoom checkbox state: whether to include TIC signal in initial zoom fit.
+    /// </summary>
+    public bool TicZoomIncludeTic { get; set; } = true;
+
+    /// <summary>
+    /// TIC plot zoom checkbox state: whether to include compound peaks in initial zoom fit.
+    /// </summary>
+    public bool TicZoomIncludeCompounds { get; set; } = true;
+
+    /// <summary>
+    /// TIC plot zoom checkbox state: whether to include peak labels in initial zoom fit.
+    /// </summary>
+    public bool TicZoomIncludeLabels { get; set; } = true;
+
     public string SourceObjectName { get; }
     public string SourceMemberName { get; }
     public IChromatogramSignalProvider ChromatogramSignalProvider => _signalProvider;
@@ -783,18 +798,24 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         chart.FitViewportToCurrentPoints();
     }
 
+    /// <summary>
+    /// Updates all three TIC zoom checkbox states at once.
+    /// </summary>
+    public void UpdateTicZoomSettings(bool includeTic, bool includeCompounds, bool includeLabels)
+    {
+        TicZoomIncludeTic = includeTic;
+        TicZoomIncludeCompounds = includeCompounds;
+        TicZoomIncludeLabels = includeLabels;
+    }
+
     private ChromatogramZoomOutFitOptions CreateSampleTicZoomOutFitOptions(ChromatogramControl chart)
     {
-        var includeTic = _signalProvider is ITicSignalVisibility ticVisibility && ticVisibility.ShowTicSignal;
-        var includeCompounds = OverlayTargetPeaks || OverlaySurrogatePeaks || OverlayIstdPeaks;
-        if (_signalProvider is ITicPeakOverlayOptions ticOverlay)
-        {
-            includeCompounds = ticOverlay.OverlayTargetPeaks
-                             || ticOverlay.OverlaySurrogatePeaks
-                             || ticOverlay.OverlayIstdPeaks;
-        }
+        // Use the zoom checkbox settings stored in the field view rather than inferring from chart state.
+        // This ensures initial render respects user's zoom preferences from the toolbar.
+        var includeTic = TicZoomIncludeTic;
+        var includeCompounds = TicZoomIncludeCompounds;
+        var includeLabels = TicZoomIncludeLabels;
 
-        var includeLabels = chart.ShowPeakLabels && chart.PeakLabels.Count > 0;
         return new ChromatogramZoomOutFitOptions(includeTic, includeCompounds, includeLabels);
     }
 
