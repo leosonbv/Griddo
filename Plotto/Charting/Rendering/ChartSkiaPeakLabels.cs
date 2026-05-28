@@ -11,6 +11,9 @@ public readonly record struct VerticalMarkerLabelGap(float GapTopY, float GapBot
     public bool HasGap => GapTopY < GapBottomY;
 }
 
+/// <summary>Viewport bounds used to invalidate TIC overlay label placement when zoom/pan changes.</summary>
+internal readonly record struct TicOverlayViewportBounds(double XMin, double XMax, double YMin, double YMax);
+
 /// <summary>Draws plain-text peak labels near integration anchors with simple collision avoidance.</summary>
 internal static class ChartSkiaPeakLabels
 {
@@ -38,14 +41,16 @@ internal static class ChartSkiaPeakLabels
             double fontSizeDip,
             Func<double, SKRect, float> toPixelX,
             Func<double, SKRect, float> toPixelY,
-            int peakLabelRotateDegrees)
+            int peakLabelRotateDegrees,
+            TicOverlayViewportBounds viewportBounds)
         {
             var key = CreateTicOverlayPlacementCacheKey(
                 plotRect,
                 labels,
                 uiScale,
                 fontSizeDip,
-                peakLabelRotateDegrees);
+                peakLabelRotateDegrees,
+                viewportBounds);
             if (_drawItems is not null && key.Equals(_drawKey))
             {
                 return _drawItems;
@@ -83,7 +88,8 @@ internal static class ChartSkiaPeakLabels
             double fontSizeDip,
             Func<double, SKRect, float> toPixelX,
             Func<double, SKRect, float> toPixelY,
-            int peakLabelRotateDegrees)
+            int peakLabelRotateDegrees,
+            TicOverlayViewportBounds viewportBounds)
         {
             _ = GetOrBuildDrawItems(
                 plotRect,
@@ -92,7 +98,8 @@ internal static class ChartSkiaPeakLabels
                 fontSizeDip,
                 toPixelX,
                 toPixelY,
-                peakLabelRotateDegrees);
+                peakLabelRotateDegrees,
+                viewportBounds);
             return _placements ?? (IReadOnlyList<TicLabelPlacement>)Array.Empty<TicLabelPlacement>();
         }
 
@@ -104,6 +111,7 @@ internal static class ChartSkiaPeakLabels
             Func<double, SKRect, float> toPixelX,
             Func<double, SKRect, float> toPixelY,
             int peakLabelRotateDegrees,
+            TicOverlayViewportBounds viewportBounds,
             out float minTop,
             out float maxBottom)
         {
@@ -112,7 +120,8 @@ internal static class ChartSkiaPeakLabels
                 labels,
                 uiScale,
                 fontSizeDip,
-                peakLabelRotateDegrees);
+                peakLabelRotateDegrees,
+                viewportBounds);
             if (_hasExtents && key.Equals(_extentsKey))
             {
                 minTop = _extentsMinTop;
@@ -156,7 +165,8 @@ internal static class ChartSkiaPeakLabels
         int peakLabelRotateDegrees = 0,
         bool ticOverlayMode = false,
         bool showDebugRect = false,
-        TicOverlayPlacementCache? ticOverlayCache = null)
+        TicOverlayPlacementCache? ticOverlayCache = null,
+        TicOverlayViewportBounds viewportBounds = default)
     {
         if (plotRect.Width <= 1f || plotRect.Height <= 1f || labels.Count == 0)
         {
@@ -176,7 +186,8 @@ internal static class ChartSkiaPeakLabels
                 textPaint,
                 peakLabelRotateDegrees,
                 showDebugRect,
-                ticOverlayCache);
+                ticOverlayCache,
+                viewportBounds);
             return;
         }
 
@@ -203,7 +214,8 @@ internal static class ChartSkiaPeakLabels
         SKPaint textPaint,
         int peakLabelRotateDegrees,
         bool showDebugRect,
-        TicOverlayPlacementCache? ticOverlayCache)
+        TicOverlayPlacementCache? ticOverlayCache,
+        TicOverlayViewportBounds viewportBounds)
     {
         if (plotRect.Width <= 1f || plotRect.Height <= 1f || labels.Count == 0)
         {
@@ -227,7 +239,8 @@ internal static class ChartSkiaPeakLabels
             fontSizeDip,
             toPixelX,
             toPixelY,
-            peakLabelRotateDegrees)
+            peakLabelRotateDegrees,
+            viewportBounds)
             ?? BuildTicOverlayDrawItems(
                 plotRect,
                 labels,
@@ -277,7 +290,11 @@ internal static class ChartSkiaPeakLabels
         int FontSizeBits,
         int RotateDegrees,
         int LabelCount,
-        long LabelsHash);
+        long LabelsHash,
+        long ViewportXMinBits,
+        long ViewportXMaxBits,
+        long ViewportYMinBits,
+        long ViewportYMaxBits);
 
     internal readonly record struct TicLabelPlacement(
         float AnchorX,
@@ -1026,7 +1043,8 @@ internal static class ChartSkiaPeakLabels
         int peakLabelRotateDegrees,
         bool ticOverlayMode,
         out float minTop,
-        TicOverlayPlacementCache? ticOverlayCache = null)
+        TicOverlayPlacementCache? ticOverlayCache = null,
+        TicOverlayViewportBounds viewportBounds = default)
     {
         minTop = float.MaxValue;
         if (plotRect.Width <= 1f || plotRect.Height <= 1f || labels.Count == 0)
@@ -1046,6 +1064,7 @@ internal static class ChartSkiaPeakLabels
                     toPixelX,
                     toPixelY,
                     peakLabelRotateDegrees,
+                    viewportBounds,
                     out minTop,
                     out _);
             }
@@ -1231,7 +1250,8 @@ internal static class ChartSkiaPeakLabels
         IReadOnlyList<ChromatogramPeakLabel> labels,
         double uiScale,
         double fontSizeDip,
-        int peakLabelRotateDegrees)
+        int peakLabelRotateDegrees,
+        TicOverlayViewportBounds viewportBounds)
     {
         var hash = new HashCode();
         hash.Add(labels.Count);
@@ -1252,7 +1272,11 @@ internal static class ChartSkiaPeakLabels
             BitConverter.SingleToInt32Bits((float)fontSizeDip),
             peakLabelRotateDegrees,
             labels.Count,
-            (long)hash.ToHashCode());
+            (long)hash.ToHashCode(),
+            BitConverter.DoubleToInt64Bits(viewportBounds.XMin),
+            BitConverter.DoubleToInt64Bits(viewportBounds.XMax),
+            BitConverter.DoubleToInt64Bits(viewportBounds.YMin),
+            BitConverter.DoubleToInt64Bits(viewportBounds.YMax));
     }
 
     private static List<TicOverlayDrawItem> BuildTicOverlayDrawItems(
@@ -1348,7 +1372,8 @@ internal static class ChartSkiaPeakLabels
         Func<double, SKRect, float> toPixelX,
         Func<double, SKRect, float> toPixelY,
         int peakLabelRotateDegrees,
-        TicOverlayPlacementCache? ticOverlayCache)
+        TicOverlayPlacementCache? ticOverlayCache,
+        TicOverlayViewportBounds viewportBounds)
     {
         if (ticOverlayCache is not null)
         {
@@ -1359,7 +1384,8 @@ internal static class ChartSkiaPeakLabels
                 fontSizeDip,
                 toPixelX,
                 toPixelY,
-                peakLabelRotateDegrees);
+                peakLabelRotateDegrees,
+                viewportBounds);
         }
 
         return BuildTicOverlayDrawItems(
@@ -1385,7 +1411,8 @@ internal static class ChartSkiaPeakLabels
         Func<double, SKRect, float> toPixelY,
         int peakLabelRotateDegrees,
         IReadOnlyList<float> markerPixelXs,
-        TicOverlayPlacementCache? ticOverlayCache = null)
+        TicOverlayPlacementCache? ticOverlayCache = null,
+        TicOverlayViewportBounds viewportBounds = default)
     {
         var gaps = new VerticalMarkerLabelGap[markerPixelXs.Count];
         for (var i = 0; i < gaps.Length; i++)
@@ -1407,7 +1434,8 @@ internal static class ChartSkiaPeakLabels
             toPixelX,
             toPixelY,
             peakLabelRotateDegrees,
-            ticOverlayCache);
+            ticOverlayCache,
+            viewportBounds);
 
         foreach (var placement in placements)
         {
@@ -1558,7 +1586,7 @@ internal static class ChartSkiaPeakLabels
     {
         gap = VerticalMarkerLabelGap.None;
         var placements = GetTicOverlayPlacements(
-            plotRect, labels, uiScale, fontSizeDip, toPixelX, toPixelY, peakLabelRotateDegrees, null);
+            plotRect, labels, uiScale, fontSizeDip, toPixelX, toPixelY, peakLabelRotateDegrees, null, default);
         if (placements.Count == 0)
         {
             return false;

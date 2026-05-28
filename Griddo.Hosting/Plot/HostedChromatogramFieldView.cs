@@ -601,10 +601,14 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         var primaryPeakLabelsOnly = _signalProvider is IFixedPeakLabelAnchorProvider
                                     && _signalProvider is IFixedPeakLabelRecordProvider
                                     && _signalProvider is not ITicPeakOverlayLabelProvider;
+        var ticOverlayLabelsOnly = _signalProvider is ITicPeakOverlayLabelProvider;
 
-        foreach (var region in chart.IntegrationRegions)
+        if (!ticOverlayLabelsOnly)
         {
-            TryAdd(region, null);
+            foreach (var region in chart.IntegrationRegions)
+            {
+                TryAdd(region, null);
+            }
         }
 
         if (primaryPeakLabelsOnly)
@@ -612,9 +616,12 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
             return labels;
         }
 
-        foreach (var region in chart.AlternativeIntegrationRegions)
+        if (!ticOverlayLabelsOnly)
         {
-            TryAdd(region, null);
+            foreach (var region in chart.AlternativeIntegrationRegions)
+            {
+                TryAdd(region, null);
+            }
         }
 
         foreach (var colored in chart.ColoredIntegrationRegions)
@@ -759,6 +766,12 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
 
     private void FitChromatogramViewport(ChromatogramControl chart, object recordSource)
     {
+        if (IsSampleTicPlot(SourceMemberName))
+        {
+            chart.FitZoomOutCompletely(CreateSampleTicZoomOutFitOptions(chart));
+            return;
+        }
+
         if (chart.DefaultFitXMin is { } xMin
             && chart.DefaultFitXMax is { } xMax
             && xMax > xMin)
@@ -768,6 +781,21 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         }
 
         chart.FitViewportToCurrentPoints();
+    }
+
+    private ChromatogramZoomOutFitOptions CreateSampleTicZoomOutFitOptions(ChromatogramControl chart)
+    {
+        var includeTic = _signalProvider is ITicSignalVisibility ticVisibility && ticVisibility.ShowTicSignal;
+        var includeCompounds = OverlayTargetPeaks || OverlaySurrogatePeaks || OverlayIstdPeaks;
+        if (_signalProvider is ITicPeakOverlayOptions ticOverlay)
+        {
+            includeCompounds = ticOverlay.OverlayTargetPeaks
+                             || ticOverlay.OverlaySurrogatePeaks
+                             || ticOverlay.OverlayIstdPeaks;
+        }
+
+        var includeLabels = chart.ShowPeakLabels && chart.PeakLabels.Count > 0;
+        return new ChromatogramZoomOutFitOptions(includeTic, includeCompounds, includeLabels);
     }
 
     private static object BuildRuntimePointsValue(IReadOnlyList<SignalPoint> points)

@@ -33,6 +33,8 @@ public partial class ChromatogramControl : SkiaChartBaseControl
     private bool _deferPaintUntilPeakLabelViewportReady;
     private bool _peakLabelExpandScheduled;
     private readonly ChartSkiaPeakLabels.TicOverlayPlacementCache _ticOverlayPlacementCache = new();
+    private TicOverlayViewportBounds TicOverlayViewportBounds =>
+        new(Viewport.XMin, Viewport.XMax, Viewport.YMin, Viewport.YMax);
     private readonly SKPaint _integrationFillPaint = new()
     {
         IsAntialias = true,
@@ -292,7 +294,8 @@ public partial class ChromatogramControl : SkiaChartBaseControl
                     PeakLabelRotate,
                     PeakLabelTicOverlayMode,
                     out var remainingTop,
-                    _ticOverlayPlacementCache)
+                    _ticOverlayPlacementCache,
+                    TicOverlayViewportBounds)
                 || remainingTop >= plotRect.Top + margin - 0.5f)
             {
                 _pendingPeakLabelViewportExpand = false;
@@ -342,7 +345,8 @@ public partial class ChromatogramControl : SkiaChartBaseControl
                 PeakLabelRotate,
                 PeakLabelTicOverlayMode,
                 out var minTop,
-                _ticOverlayPlacementCache))
+                _ticOverlayPlacementCache,
+                TicOverlayViewportBounds))
         {
             _pendingPeakLabelViewportExpand = false;
             return false;
@@ -960,7 +964,8 @@ public partial class ChromatogramControl : SkiaChartBaseControl
                 PeakLabelRotate,
                 PeakLabelTicOverlayMode,
                 ShowPeakLabelDebugRect,
-                _ticOverlayPlacementCache);
+                _ticOverlayPlacementCache,
+                TicOverlayViewportBounds);
         }
 
         DrawVerticalMarkersInPlot(canvas, plotRect);
@@ -1045,7 +1050,8 @@ public partial class ChromatogramControl : SkiaChartBaseControl
                 ToPixelY,
                 PeakLabelRotate,
                 markerXs,
-                _ticOverlayPlacementCache);
+                _ticOverlayPlacementCache,
+                TicOverlayViewportBounds);
         }
 
         canvas.Save();
