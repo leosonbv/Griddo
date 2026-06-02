@@ -261,7 +261,19 @@ public partial class ChromatogramControl : SkiaChartBaseControl
         }
 
         _deferPaintUntilPeakLabelViewportReady = true;
-        UpdateLayout();
+        // IMPORTANT: Do not call UpdateLayout() (or any method that forces a global
+        // ContextLayoutManager pass on the window root). When ChromatogramControl is
+        // instantiated inside render-to-PNG delegates (for Q.V* visual cells in
+        // GcSpreadSheet / report views, or for PDF report baking), a call to UpdateLayout
+        // here executes while the parent GcSpreadSheet is mid-Measure (SelectionLayer /
+        // Viewport / panes). This re-enters layout and GrapeCity's SelectionLayer.CreateControl
+        // throws NullReferenceException because internal fields (owner spreadsheet view,
+        // adorner, etc.) are not initialized for the nested pass.
+        //
+        // Callers that need label expansion (grids via post-arrange Dispatcher, png prepare
+        // paths that have already done explicit Measure+Arrange) must ensure the control has
+        // valid post-layout state (Actual size + viewport) before calling Finalize/Expand.
+        // ExpandViewportForPeakLabels + the InvalidateVisual/Notify it performs are sufficient.
         ExpandViewportForPeakLabels();
         if (!_pendingPeakLabelViewportExpand)
         {

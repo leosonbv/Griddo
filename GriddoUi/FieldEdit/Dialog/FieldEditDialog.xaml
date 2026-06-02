@@ -3,7 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:grid="clr-namespace:Griddo.Grid;assembly=Griddo"
-    Title="Grid configurator"
+    Title="Grid settings"
     Width="960"
     Height="620"
     WindowStartupLocation="CenterOwner"
@@ -50,20 +50,20 @@
                 </StackPanel>
             </DockPanel>
         </Border>
-        <TabControl Margin="8">
-            <TabItem Header="Fields">
-                <grid:Griddo
-                    x:Name="FieldGrid"
-                    Margin="8,6"
-                    ShowFieldHeaderSelectionColoring="False"
-                    ShowRecordHeaderSelectionColoring="False"
-                    UniformRecordHeight="26" />
-            </TabItem>
-            <TabItem Header="General settings">
+        <TabControl x:Name="MainTabs" Margin="8" SelectionChanged="MainTabs_SelectionChanged">
+            <TabItem Header="Settings">
                 <grid:Griddo
                     x:Name="GeneralPropertyGrid"
                     Margin="8,6"
                     MinHeight="220"
+                    ShowFieldHeaderSelectionColoring="False"
+                    ShowRecordHeaderSelectionColoring="False"
+                    UniformRecordHeight="26" />
+            </TabItem>
+            <TabItem Header="Fields">
+                <grid:Griddo
+                    x:Name="FieldGrid"
+                    Margin="8,6"
                     ShowFieldHeaderSelectionColoring="False"
                     ShowRecordHeaderSelectionColoring="False"
                     UniformRecordHeight="26" />

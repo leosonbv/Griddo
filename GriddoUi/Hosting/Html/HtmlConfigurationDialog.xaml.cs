@@ -79,9 +79,9 @@ public partial class HtmlConfigurationDialog : Window
 
     private void UpdateMoveButtonsVisibility()
     {
-        // On initial open SelectedIndex can be -1 before tab selection settles;
-        // keep move buttons visible by default in that startup state.
-        var show = MainTabs.SelectedIndex <= 0;
+        // Move buttons only make sense for the Fields tab (reordering segments).
+        // Settings tab is now first (to look more like the other dialog).
+        var show = MainTabs.SelectedIndex == 1; // 0=Settings, 1=Fields
         var visibility = show ? Visibility.Visible : Visibility.Collapsed;
         MoveUpButton.Visibility = visibility;
         MoveDownButton.Visibility = visibility;

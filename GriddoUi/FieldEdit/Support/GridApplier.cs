@@ -46,8 +46,13 @@ public static class GridApplier
                 ApplyFieldRecordToView(snap[r.SourceFieldIndex], r);
             }
 
-            var visible = orderedRecords.Where(static r => r.Visible).ToList();
-            if (visible.Count == 0)
+            // Determine the used/checked fields and their column order exclusively from OrderNumber (>0).
+            var used = orderedRecords
+                .Where(r => r.OrderNumber > 0)
+                .OrderBy(r => r.OrderNumber)
+                .ThenBy(r => r.SourceFieldIndex >= 0 ? r.SourceFieldIndex : int.MaxValue)
+                .ToList();
+            if (used.Count == 0)
             {
                 grid.ReplaceCellEditSuppressionLayout(Array.Empty<bool>());
                 grid.SetSortDescriptors([]);
@@ -55,7 +60,7 @@ public static class GridApplier
                 return;
             }
 
-            var canReorder = visible.All(r => r.SourceFieldIndex >= 0 && r.SourceFieldIndex < snapCount);
+            var canReorder = used.All(r => r.SourceFieldIndex >= 0 && r.SourceFieldIndex < snapCount);
             if (!canReorder)
             {
                 grid.ReplaceCellEditSuppressionLayout(Array.Empty<bool>());
@@ -70,7 +75,7 @@ public static class GridApplier
             grid.Fields.Clear();
             var sourceToGridIndex = new Dictionary<int, int>();
             var cellEditSuppress = new List<bool>();
-            foreach (var r in visible)
+            foreach (var r in used)
             {
                 if (r.SourceFieldIndex < 0 || r.SourceFieldIndex >= snap.Count)
                 {
@@ -97,11 +102,11 @@ public static class GridApplier
             }
 
             grid.ReplaceCellEditSuppressionLayout(cellEditSuppress);
-            for (var i = 0; i < grid.Fields.Count && i < visible.Count; i++)
+            for (var i = 0; i < grid.Fields.Count && i < used.Count; i++)
             {
-                grid.SetLogicalFieldWidth(i, visible[i].Width);
+                grid.SetLogicalFieldWidth(i, used[i].Width);
                 if (persistedLayoutSourceFieldIndices is not null
-                    && persistedLayoutSourceFieldIndices.Contains(visible[i].SourceFieldIndex))
+                    && persistedLayoutSourceFieldIndices.Contains(used[i].SourceFieldIndex))
                 {
                     grid.MarkInitialAutoWidthSuppressedForGridField(i);
                     grid.MarkFieldWidthUserFixed(i);

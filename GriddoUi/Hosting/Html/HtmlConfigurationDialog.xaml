@@ -39,19 +39,19 @@
             </DockPanel>
         </Border>
         <TabControl x:Name="MainTabs" Margin="8" SelectionChanged="MainTabs_SelectionChanged">
-            <TabItem Header="Fields">
-                <grid:Griddo
-                    x:Name="SegmentsGrid"
-                    Margin="8,6"
-                    ShowFieldHeaderSelectionColoring="False"
-                    ShowRecordHeaderSelectionColoring="False"
-                    UniformRecordHeight="26" />
-            </TabItem>
-            <TabItem Header="General settings">
+            <TabItem Header="Settings">
                 <grid:Griddo
                     x:Name="GeneralGrid"
                     Margin="8,6"
                     MinHeight="220"
+                    ShowFieldHeaderSelectionColoring="False"
+                    ShowRecordHeaderSelectionColoring="False"
+                    UniformRecordHeight="26" />
+            </TabItem>
+            <TabItem Header="Fields">
+                <grid:Griddo
+                    x:Name="SegmentsGrid"
+                    Margin="8,6"
                     ShowFieldHeaderSelectionColoring="False"
                     ShowRecordHeaderSelectionColoring="False"
                     UniformRecordHeight="26" />

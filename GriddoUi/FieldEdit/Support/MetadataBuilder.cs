@@ -31,8 +31,8 @@ public static class MetadataBuilder
 
     /// <summary>
     /// One record per entry in <paramref name="fullFieldOrder"/> (e.g. all registered fields). Hidden fields
-    /// (not in <paramref name="grid"/>.Fields) appear with <see cref="FieldEditRecord.Visible"/> false.
-    /// <see cref="FieldEditRecord.SourceFieldIndex"/> is the index into <paramref name="fullFieldOrder"/>.
+    /// (not in <paramref name="grid"/>.Fields) appear with <see cref="FieldEditRecord.OrderNumber"/> = 0.
+    /// <see cref="FieldEditRecord.SourceFieldIndex"/> is the index into <paramref name="fullFieldOrder"/>. OrderNumber is set from grid column position for visible ones.
     /// </summary>
     /// <param name="previewSampleRecord">When set, used for value previews instead of <see cref="Griddo.Grid.Griddo.Grid.Griddo.Records"/>[0].</param>
     public static List<FieldEditRecord> BuildRecordsFromGrid(
@@ -136,7 +136,7 @@ public static class MetadataBuilder
             IsEnumProperty = IsEnumValueType(sampleRaw),
             IsFlagsEnumProperty = IsFlagsEnumValueType(sampleRaw),
             Description = col is IGriddoFieldDescriptionView descView ? descView.Description : string.Empty,
-            Visible = visible,
+            OrderNumber = visible && gridFieldIndexForLiveWidth.HasValue ? gridFieldIndexForLiveWidth.Value + 1 : (visible ? 1 : 0),
             FieldFill = col.FieldFill,
             Width = gridFieldIndexForLiveWidth is int gfi ? grid.GetLogicalFieldWidth(gfi) : col.Width,
             SortPriority = sortMap.TryGetValue(sourceFieldIndex, out var sd) ? sd.Priority : 0,
@@ -350,7 +350,7 @@ public static class MetadataBuilder
                 IsDateTimeProperty = IsDateTimeType(p.PropertyType),
                 IsEnumProperty = IsEnumType(p.PropertyType),
                 IsFlagsEnumProperty = IsFlagsEnumType(p.PropertyType),
-                Visible = true,
+                OrderNumber = records.Count + 1,
                 FieldFill = 0,
                 Width = 140,
                 ContentAlignment = IsNumericType(p.PropertyType) ? TextAlignment.Right : TextAlignment.Left,

@@ -221,11 +221,10 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
                 FitChromatogramViewport(chart, recordSource);
             }
 
-            if (chart is ChromatogramControl chromViewport)
-            {
-                chromViewport.FinalizeViewportForInitialDisplay();
-            }
-
+            // Defer the label viewport finalization (and any restore side effects) until after
+            // the current layout/render pass. This avoids sync layout forcing (UpdateLayout etc.)
+            // right after data bind, which can re-enter containing controls (e.g. when these
+            // hosted charts are used inside GcSpreadSheet visual cells for Q.V* plots).
             HostedPlotViewportMemory.ScheduleDeferredViewportFinalize(
                 host,
                 recordSource,

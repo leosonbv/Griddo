@@ -71,6 +71,7 @@ public partial class FieldConfigurator : Window
         }
 
         BuildFields();
+        ResortRecordsByOrderNumber();
         var options = initialOptions ?? new FieldChooserGeneralOptions();
         BuildGeneralPropertyGrid(options, initialFrozenFields, initialFrozenRecords);
         FieldGrid.CellPropertyViewResolver = ResolveCellPropertyViewForConfigurator;
@@ -81,7 +82,11 @@ public partial class FieldConfigurator : Window
             FieldGrid.FieldHeaderRightClick -= FieldGrid_FieldHeaderRightClick;
             GeneralPropertyGrid.FieldHeaderRightClick -= GeneralPropertyGrid_FieldHeaderRightClick;
         };
-        Loaded += (_, _) => ApplyInitialSourceFieldSelection();
+        Loaded += (_, _) =>
+        {
+            ApplyInitialSourceFieldSelection();
+            UpdateMoveButtonsVisibility();
+        };
     }
 
     public void SetInitialSourceFieldSelection(IReadOnlyList<int> selectedSourceFieldIndices, int centerSourceFieldIndex)
@@ -128,6 +133,23 @@ public partial class FieldConfigurator : Window
             : selectedRecordIndices[0];
         FieldGrid.SelectEntireRecord(centerRecordIndex, additive: true);
         FieldGrid.CenterCellInViewport(new GriddoCellAddress(centerRecordIndex, 0));
+    }
+
+    private void MainTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        UpdateMoveButtonsVisibility();
+    }
+
+    private void UpdateMoveButtonsVisibility()
+    {
+        // Move buttons only make sense for the Fields tab (reordering the field list).
+        // Settings tab is now first (the Fields tab looks more like detailed "field settings").
+        var show = MainTabs.SelectedIndex == 1; // 0=Settings, 1=Fields
+        var visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        MoveUpButton.Visibility = visibility;
+        MoveDownButton.Visibility = visibility;
     }
 
     private void BuildGeneralPropertyGrid(FieldChooserGeneralOptions options, int frozenFields, int frozenRecords)
@@ -225,9 +247,9 @@ public partial class FieldConfigurator : Window
         }
 
         AddField(new GriddoBoolFieldView(
-            "Vis",
+            "Use",
             44,
-            r => ((FieldEditRecord)r).Visible,
+            r => ((FieldEditRecord)r).OrderNumber > 0,
             (r, v) =>
             {
                 if (v is not bool b)
@@ -235,9 +257,31 @@ public partial class FieldConfigurator : Window
                     return false;
                 }
 
-                ((FieldEditRecord)r).Visible = b;
+                var rec = (FieldEditRecord)r;
+                if (b)
+                {
+                    if (rec.OrderNumber <= 0)
+                    {
+                        // Assign next positive number (append to end of used sequence); grid will resort.
+                        var max = FieldGrid.Records
+                            .OfType<FieldEditRecord>()
+                            .Select(rr => rr.OrderNumber)
+                            .DefaultIfEmpty(0)
+                            .Max();
+                        rec.OrderNumber = max + 1;
+                    }
+                }
+                else
+                {
+                    rec.OrderNumber = 0;
+                }
+
+                ResortRecordsByOrderNumber();
                 return true;
-            }));
+            })
+        {
+            Description = "Use (checked = included in grid; order number determines column sequence)"
+        });
         AddField(new GriddoBoolFieldView(
             "Lock",
             44,
@@ -483,6 +527,7 @@ public partial class FieldConfigurator : Window
         }
 
         _ = FieldGrid.TryMoveSelectedRecordsStep(-1);
+        RenumberUsedFromCurrentListAndResort();
     }
 
     private void MoveDownButton_Click(object sender, RoutedEventArgs e)
@@ -495,6 +540,7 @@ public partial class FieldConfigurator : Window
         }
 
         _ = FieldGrid.TryMoveSelectedRecordsStep(1);
+        RenumberUsedFromCurrentListAndResort();
     }
 
     private void ApplyButton_Click(object sender, RoutedEventArgs e)
@@ -546,6 +592,65 @@ public partial class FieldConfigurator : Window
         _ = sender;
         _ = e;
         DialogResult = false;
+    }
+
+    /// <summary>
+    /// Ensures the configurator's field grid records are always sorted by OrderNumber (used >0 ascending first, then 0s).
+    /// Called after checkbox toggles (which assign numbers) and after move up/down (which trigger renumber).
+    /// This fulfills "the field grid ... should always sort based on the order number".
+    /// </summary>
+    private void ResortRecordsByOrderNumber()
+    {
+        FieldGrid.CommitPendingCellEdit();
+        var all = FieldGrid.Records.OfType<FieldEditRecord>().ToList();
+        var sorted = all
+            .OrderBy(r => r.OrderNumber > 0 ? r.OrderNumber : int.MaxValue)
+            .ThenBy(r => r.SourceObjectName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(r => r.PropertyName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        // Only rebuild if order actually differs to avoid unnecessary grid churn.
+        bool differs = all.Count != sorted.Count;
+        if (!differs)
+        {
+            for (int i = 0; i < all.Count; i++)
+            {
+                if (!ReferenceEquals(all[i], sorted[i]))
+                {
+                    differs = true;
+                    break;
+                }
+            }
+        }
+        if (differs)
+        {
+            FieldGrid.Records.Clear();
+            foreach (var r in sorted)
+            {
+                FieldGrid.Records.Add(r);
+            }
+            FieldGrid.InvalidateVisual();
+        }
+    }
+
+    /// <summary>
+    /// After a move up/down has physically reordered some records in the grid's list,
+    /// re-assign sequential OrderNumbers (1..k) to the records that currently have >0, based on their
+    /// new sequence in the list. Then resort (which will now match the numbering).
+    /// This keeps the numeric order as the source of truth, list position is derived.
+    /// </summary>
+    private void RenumberUsedFromCurrentListAndResort()
+    {
+        FieldGrid.CommitPendingCellEdit();
+        int next = 1;
+        foreach (var r in FieldGrid.Records.OfType<FieldEditRecord>())
+        {
+            if (r.OrderNumber > 0)
+            {
+                r.OrderNumber = next++;
+            }
+        }
+        ResortRecordsByOrderNumber();
     }
 
     private bool TryCommitFrozenFields(out int frozenFields)

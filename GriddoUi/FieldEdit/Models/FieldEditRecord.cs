@@ -21,7 +21,13 @@ public sealed class FieldEditRecord
 
     public string Description { get; set; } = string.Empty;
 
-    public bool Visible { get; set; } = true;
+    /// <summary>
+    /// Order/selection number. >0 means "used/checked" (checkbox shows checked); the value determines display order
+    /// in field grids (always sorted by this). 0 means not used. The Use checkbox in field editor/grid settings
+    /// is presentation only; toggling it sets this to 0 or next-positive.
+    /// This replaces prior separate index or list position based ordering for field columns.
+    /// </summary>
+    public int OrderNumber { get; set; }
 
     /// <summary>
     /// When true, scalar in-place edit, fill-series into cells, clipboard clear/paste, and checkbox toggles are disabled for this column.
@@ -60,7 +66,7 @@ public sealed class FieldEditRecord
         SourceObjectName = SourceObjectName,
         Title = Title,
         Description = Description,
-        Visible = Visible,
+        OrderNumber = OrderNumber,
         SuppressCellEdit = SuppressCellEdit,
         FieldFill = FieldFill,
         Width = Width,

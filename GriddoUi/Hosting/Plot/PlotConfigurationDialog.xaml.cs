@@ -247,6 +247,7 @@ public partial class PlotConfigurationDialog : Window
         var label = GetSpecificText(PlotSpecificSettingKind.Label);
         var titleSegments = TitleFieldsGrid.Records
             .OfType<PlotTitleFieldEditRecord>()
+            .Where(r => r.Enabled)  // only persist the "Use checked" ones; disabled are not part of the title config
             .Select(r =>
             {
                 var field = r.SourceFieldIndex >= 0 && r.SourceFieldIndex < _allFields.Count
@@ -269,6 +270,7 @@ public partial class PlotConfigurationDialog : Window
 
         var calibrationPointLabelSegments = PointLabelFieldsGrid.Records
             .OfType<PlotTitleFieldEditRecord>()
+            .Where(r => r.Enabled)  // only the checked/used for labels
             .Select(r =>
             {
                 var field = r.SourceFieldIndex >= 0 && r.SourceFieldIndex < _pointLabelFields.Count
