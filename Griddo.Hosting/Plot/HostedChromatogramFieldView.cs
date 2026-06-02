@@ -455,6 +455,8 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
             chromatogram.PeakLabelRotate = PlotPeakLabelRotation.Normalize(PeakLabelRotate);
             chromatogram.ShowPeakLabelDebugRect = ShowPeakLabelDebugRect;
             chromatogram.PeakLabelTicOverlayMode = UsesFixedPeakLabelOverlayDrawing(SourceMemberName);
+            chromatogram.AutoExpandViewportForPeakLabels =
+                !IsSampleTicPlot(SourceMemberName) || TicZoomIncludeLabels;
             chromatogram.SetPeakOverlayColors(
                 new SkiaSharp.SKColor(SelectedPeakOverlayColor.R, SelectedPeakOverlayColor.G, SelectedPeakOverlayColor.B, SelectedPeakOverlayColor.A),
                 new SkiaSharp.SKColor(AlternativePeakOverlayColor.R, AlternativePeakOverlayColor.G, AlternativePeakOverlayColor.B, AlternativePeakOverlayColor.A),

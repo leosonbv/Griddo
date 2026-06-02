@@ -232,10 +232,15 @@ public partial class ChromatogramControl : SkiaChartBaseControl
     /// <summary>When set with <see cref="DefaultFitXMin"/>, initial fit and zoom-out use this X range (method RT window).</summary>
     public double? DefaultFitXMax { get; set; }
 
+    /// <summary>
+    /// When false, auto-fit and layout passes do not grow Y for peak label headroom (TIC toolbar "Labels" zoom option).
+    /// </summary>
+    public bool AutoExpandViewportForPeakLabels { get; set; } = true;
+
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
     {
         base.OnRenderSizeChanged(sizeInfo);
-        if (ShowPeakLabels && PeakLabels.Count > 0)
+        if (AutoExpandViewportForPeakLabels && ShowPeakLabels && PeakLabels.Count > 0)
         {
             ExpandViewportForPeakLabels();
         }
@@ -248,7 +253,7 @@ public partial class ChromatogramControl : SkiaChartBaseControl
     /// <summary>Fit Y headroom for peak labels before the first visible paint on a new row.</summary>
     public void FinalizeViewportForInitialDisplay()
     {
-        if (!ShowPeakLabels || PeakLabels.Count == 0)
+        if (!AutoExpandViewportForPeakLabels || !ShowPeakLabels || PeakLabels.Count == 0)
         {
             _deferPaintUntilPeakLabelViewportReady = false;
             _pendingPeakLabelViewportExpand = false;
@@ -267,7 +272,7 @@ public partial class ChromatogramControl : SkiaChartBaseControl
     /// <summary>Reserves Y headroom above the trace so peak labels fit after zoom-out or auto-fit.</summary>
     public void ExpandViewportForPeakLabels()
     {
-        if (!ShowPeakLabels || PeakLabels.Count == 0)
+        if (!AutoExpandViewportForPeakLabels || !ShowPeakLabels || PeakLabels.Count == 0)
         {
             _pendingPeakLabelViewportExpand = false;
             return;
