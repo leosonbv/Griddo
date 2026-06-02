@@ -74,6 +74,8 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
     public bool ShowCalibrationPointLabels { get; set; } = true;
     public List<PlotTitleSegmentConfiguration> CalibrationPointLabelSegments { get; set; } = [];
     public int PeakLabelRotate { get; set; }
+    public double PeakLabelFontSize { get; set; } = PlotLabelFontSize.Default;
+    public double CalibrationPointLabelFontSize { get; set; } = PlotLabelFontSize.Default;
     public bool SpectrumNormalizeIntensity { get; set; }
 
     /// <summary>
@@ -293,7 +295,7 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
             FitMode = CalibrationFitMode.Linear,
             CalibrationPoints = [],
             ShowCalibrationPointLabels = true,
-            CalibrationPointLabelFontSize = 13.5d
+            CalibrationPointLabelFontSize = PlotLabelFontSize.Default
         };
 
     private void OnCalibrationPointToggled(object? sender, CalibrationPointEventArgs e)
@@ -518,7 +520,9 @@ public sealed class HostedCalibrationFieldView : IGriddoHostedFieldView, IGriddo
         if (chart is CalibrationCurveControl cal)
         {
             cal.ShowCalibrationPointLabels = ShowCalibrationPointLabels;
-            cal.CalibrationPointLabelFontSize = Math.Clamp(AxisFontSize * 0.85, 6d, 22d);
+            cal.CalibrationPointLabelFontSize = PlotLabelFontSize.ResolvePeakLabelFontSize(
+                CalibrationPointLabelFontSize,
+                AxisFontSize);
         }
     }
 }

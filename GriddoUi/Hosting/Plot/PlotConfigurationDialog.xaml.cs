@@ -296,6 +296,12 @@ public partial class PlotConfigurationDialog : Window
             TitleSegments: titleSegments,
             AxisFontSize: GetSpecificDouble(PlotSpecificSettingKind.AxisFontSize, _initial.AxisFontSize, 6d, 96d),
             TitleFontSize: GetSpecificDouble(PlotSpecificSettingKind.TitleFontSize, _initial.TitleFontSize, 6d, 120d),
+            PeakLabelFontSize: GetSpecificDouble(PlotSpecificSettingKind.PeakLabelFontSize, _initial.PeakLabelFontSize, 6d, 96d),
+            CalibrationPointLabelFontSize: GetSpecificDouble(
+                PlotSpecificSettingKind.CalibrationPointLabelFontSize,
+                _initial.CalibrationPointLabelFontSize,
+                6d,
+                96d),
             ShowXAxis: GetSpecificBool(PlotSpecificSettingKind.ShowXAxis),
             ShowYAxis: GetSpecificBool(PlotSpecificSettingKind.ShowYAxis),
             ShowXAxisTitle: GetSpecificBool(PlotSpecificSettingKind.ShowXAxisTitle),
@@ -389,6 +395,8 @@ public partial class PlotConfigurationDialog : Window
             PlotSpecificSettingKind.YAxisFormat => _initial.YAxisLabelFormat,
             PlotSpecificSettingKind.TitleFontSize => _initial.TitleFontSize.ToString("0.##", CultureInfo.InvariantCulture),
             PlotSpecificSettingKind.AxisFontSize => _initial.AxisFontSize.ToString("0.##", CultureInfo.InvariantCulture),
+            PlotSpecificSettingKind.PeakLabelFontSize => _initial.PeakLabelFontSize.ToString("0.##", CultureInfo.InvariantCulture),
+            PlotSpecificSettingKind.CalibrationPointLabelFontSize => _initial.CalibrationPointLabelFontSize.ToString("0.##", CultureInfo.InvariantCulture),
             PlotSpecificSettingKind.PeakLabelRotate => _initial.PeakLabelRotate.ToString(CultureInfo.InvariantCulture),
             _ => string.Empty,
         };
@@ -613,6 +621,11 @@ public partial class PlotConfigurationDialog : Window
                 "Show peak labels and connector lines",
                 boolValue: _initial.ShowCalibrationPointLabels));
             AddPlotSpecificSetting(new PlotSpecificSettingRecord(
+                PlotSpecificSettingKind.PeakLabelFontSize,
+                "Peak labels",
+                "Font size",
+                textValue: _initial.PeakLabelFontSize.ToString("0.##", CultureInfo.InvariantCulture)));
+            AddPlotSpecificSetting(new PlotSpecificSettingRecord(
                 PlotSpecificSettingKind.ChromatogramShowPeaks, "Type", "Show peak fill", boolValue: _initial.ChromatogramShowPeaks));
             AddPlotSpecificSetting(new PlotSpecificSettingRecord(
                 PlotSpecificSettingKind.ChromatogramShowExpectedRtLine, "Markers", "Show expected RT line (corrected)", boolValue: _initial.ChromatogramShowExpectedRtLine));
@@ -644,6 +657,11 @@ public partial class PlotConfigurationDialog : Window
                 "Labels",
                 "Show labels and connector lines",
                 boolValue: _initial.ShowCalibrationPointLabels));
+            SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
+                PlotSpecificSettingKind.CalibrationPointLabelFontSize,
+                "Labels",
+                "Font size",
+                textValue: _initial.CalibrationPointLabelFontSize.ToString("0.##", CultureInfo.InvariantCulture)));
             SpecificGrid.Records.Add(new PlotSpecificSettingRecord(
                 PlotSpecificSettingKind.CalibrationShowRegression, "Type", "Show regression details", boolValue: _initial.CalibrationShowRegression));
         }
@@ -695,6 +713,8 @@ public partial class PlotConfigurationDialog : Window
         YAxisFormat,
         AxisFontSize,
         TitleFontSize,
+        PeakLabelFontSize,
+        CalibrationPointLabelFontSize,
         PeakLabelRotate
     }
 
@@ -867,6 +887,8 @@ public sealed record PlotFieldDialogResult(
     List<PlotTitleSegmentConfiguration> TitleSegments,
     double AxisFontSize,
     double TitleFontSize,
+    double PeakLabelFontSize,
+    double CalibrationPointLabelFontSize,
     bool ShowXAxis,
     bool ShowYAxis,
     bool ShowXAxisTitle,

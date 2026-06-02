@@ -20,4 +20,7 @@ public interface IChromatogramPlotLayoutTarget
 
     /// <summary>Peak label rotation in degrees (0 = horizontal). Used by chromatogram plots with fixed overlay labels.</summary>
     int PeakLabelRotate { get; set; }
+
+    /// <summary>Peak/compound label font size; 0 = default (13).</summary>
+    double PeakLabelFontSize { get; set; }
 }

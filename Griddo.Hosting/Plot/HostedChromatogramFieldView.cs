@@ -82,6 +82,8 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
     public bool ShowCalibrationPointLabels { get; set; }
     public List<PlotTitleSegmentConfiguration> CalibrationPointLabelSegments { get; set; } = [];
     public int PeakLabelRotate { get; set; }
+    public double PeakLabelFontSize { get; set; } = PlotLabelFontSize.Default;
+    public double CalibrationPointLabelFontSize { get; set; } = PlotLabelFontSize.Default;
     public bool ShowPeakLabelDebugRect { get; set; }
     public bool SpectrumNormalizeIntensity { get; set; }
 
@@ -451,7 +453,7 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
             chromatogram.ShowPeakRegionFill = ChromatogramShowPeaks;
             chromatogram.ShowPeakLabels = ShowCalibrationPointLabels
                                           || PlotHostedVisibility.HasEnabledSegments(CalibrationPointLabelSegments);
-            chromatogram.PeakLabelFontSize = Math.Clamp(AxisFontSize * 0.85, 6d, 22d);
+            chromatogram.PeakLabelFontSize = PlotLabelFontSize.ResolvePeakLabelFontSize(PeakLabelFontSize, AxisFontSize);
             chromatogram.PeakLabelRotate = PlotPeakLabelRotation.Normalize(PeakLabelRotate);
             chromatogram.ShowPeakLabelDebugRect = ShowPeakLabelDebugRect;
             chromatogram.PeakLabelTicOverlayMode = UsesFixedPeakLabelOverlayDrawing(SourceMemberName);

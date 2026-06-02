@@ -69,6 +69,8 @@ public sealed class HostedSpectrumFieldView : IGriddoHostedFieldView, IGriddoFie
     public bool ShowCalibrationPointLabels { get; set; }
     public List<PlotTitleSegmentConfiguration> CalibrationPointLabelSegments { get; set; } = [];
     public int PeakLabelRotate { get; set; }
+    public double PeakLabelFontSize { get; set; } = PlotLabelFontSize.Default;
+    public double CalibrationPointLabelFontSize { get; set; } = PlotLabelFontSize.Default;
     public bool SpectrumNormalizeIntensity { get; set; }
 
     public Func<object?, string?>? ViewportZoomRecordKey { get; set; }
