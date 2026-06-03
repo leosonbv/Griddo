@@ -333,7 +333,13 @@ internal static class PlotTitleHtmlBuilder
         var header = segment.Header.Trim();
         if (string.IsNullOrWhiteSpace(header))
         {
-            cells.Add($"<td colspan=\"2\">{rendered}</td>");
+            // Always emit a consistent label+value pair (empty label td) so that same-line groups
+            // of mixed (header + no-header) segments produce rows with even # of tds (no colspan
+            // mixing). This allows e.g. "R2: 0.999 formula" on same title line without dropping
+            // the R2 value cell in the renderer. Solo no-header segments will appear under the
+            // value column (acceptable for appended formula text etc.).
+            cells.Add("<td></td>");
+            cells.Add($"<td>{rendered}</td>");
         }
         else
         {
