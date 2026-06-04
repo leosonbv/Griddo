@@ -10,6 +10,7 @@ using Griddo.Editing;
 using Griddo.Hosting.Configuration;
 using Griddo.Hosting.Html;
 using Griddo.Hosting.Plot;
+using GriddoUi.FieldEdit.Models;
 using GriddoUi.FieldEdit.Support;
 using WpfColorFontDialog;
 
@@ -21,14 +22,20 @@ public partial class HtmlConfigurationDialog : Window
     private readonly FontSummaryCellEditor _fontEditor = new();
     private int _generalValueFieldIndex = -1;
     private readonly IReadOnlyList<IGriddoFieldView> _allFields;
+    private readonly Func<IGriddoFieldView, FieldRegistrationDisplayInfo?>? _resolveRegistration;
+    private readonly Action<FieldRegistrationDisplayInfo>? _persistRegistration;
 
     public HtmlConfigurationDialog(
         IHtmlFieldLayoutTarget seed,
         IReadOnlyList<IGriddoFieldView> allFields,
-        Action<HtmlFieldConfiguration>? previewApply = null)
+        Action<HtmlFieldConfiguration>? previewApply = null,
+        Func<IGriddoFieldView, FieldRegistrationDisplayInfo?>? resolveRegistration = null,
+        Action<FieldRegistrationDisplayInfo>? persistRegistration = null)
     {
         InitializeComponent();
         _allFields = allFields;
+        _resolveRegistration = resolveRegistration;
+        _persistRegistration = persistRegistration;
         PreviewApply = previewApply;
         BuildSegmentGridFields();
         BuildGeneralGridFields();
@@ -160,25 +167,47 @@ public partial class HtmlConfigurationDialog : Window
                 .OfType<HtmlSegmentEditRecord>()
                 .Select(r =>
                 {
-                    var field = r.SourceFieldIndex >= 0 && r.SourceFieldIndex < _allFields.Count
-                        ? _allFields[r.SourceFieldIndex]
-                        : null;
-                    var sourceObjectName = field is IGriddoFieldSourceObject so ? so.SourceObjectName.Trim() : string.Empty;
-                    var propertyName = field is IGriddoFieldSourceMember sm ? sm.SourceMemberName.Trim() : string.Empty;
+                    PersistRegistrationFromRow(r);
                     return new HtmlFieldSegmentConfiguration
                     {
-                        SourceObjectName = sourceObjectName,
-                        PropertyName = propertyName,
+                        SourceObjectName = r.Source.Trim(),
+                        PropertyName = r.Property.Trim(),
                         SourceFieldIndex = r.SourceFieldIndex,
                         Enabled = r.Enabled,
-                        Header = r.Header,
                         AddLineBreakAfter = false,
-                        WordWrap = true,
-                        FormatString = r.FormatString ?? string.Empty
+                        WordWrap = true
                     };
                 })
                 .ToList()
         };
+    }
+
+    private void PersistRegistrationFromRow(HtmlSegmentEditRecord row)
+    {
+        if (_persistRegistration is null || string.IsNullOrWhiteSpace(row.Key))
+        {
+            return;
+        }
+
+        _persistRegistration(new FieldRegistrationDisplayInfo
+        {
+            Key = row.Key,
+            Source = row.Source,
+            Property = row.Property,
+            LongHeader = row.LongHeader,
+            ShortHeader = row.ShortHeader,
+            Format = row.Format,
+            Description = row.Description
+        });
+    }
+
+    private void PersistAllRegistrationRows()
+    {
+        SegmentsGrid.CommitPendingCellEdit();
+        foreach (var row in SegmentsGrid.Records.OfType<HtmlSegmentEditRecord>())
+        {
+            PersistRegistrationFromRow(row);
+        }
     }
 
     private void MoveUpButton_Click(object sender, RoutedEventArgs e)
@@ -199,6 +228,7 @@ public partial class HtmlConfigurationDialog : Window
     {
         _ = sender;
         _ = e;
+        PersistAllRegistrationRows();
         var result = BuildResult();
         Result = result;
         PreviewApply?.Invoke(result);
@@ -208,6 +238,7 @@ public partial class HtmlConfigurationDialog : Window
     {
         _ = sender;
         _ = e;
+        PersistAllRegistrationRows();
         Result = BuildResult();
         DialogResult = true;
     }
@@ -222,11 +253,15 @@ public partial class HtmlConfigurationDialog : Window
     private sealed class HtmlSegmentEditRecord
     {
         public int SourceFieldIndex { get; set; }
+        /// <summary>Per composed HTML field only (persisted in view layout, not the central repository).</summary>
         public bool Enabled { get; set; }
+        public string Key { get; set; } = string.Empty;
         public string Source { get; set; } = string.Empty;
         public string Property { get; set; } = string.Empty;
-        public string Header { get; set; } = string.Empty;
-        public string FormatString { get; set; } = string.Empty;
+        public string LongHeader { get; set; } = string.Empty;
+        public string ShortHeader { get; set; } = string.Empty;
+        public string Format { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
     }
 
     private static int ResolveEffectiveSourceFieldIndex(
@@ -258,71 +293,123 @@ public partial class HtmlConfigurationDialog : Window
                 return true;
             })
         {
-            Description = "Whether this field segment is included in the cell display"
+            Description = "Use: include this segment in this composed HTML field only (saved per grid view, not in the central field repository)"
+        });
+        SegmentsGrid.Fields.Add(new GriddoFieldView(
+            "Key",
+            220,
+            r => ((HtmlSegmentEditRecord)r).Key,
+            static (_, _) => false,
+            GriddoCellEditors.Text)
+        {
+            Description = "Unique registration key (Source.Property), same as the Field editor"
         });
         SegmentsGrid.Fields.Add(new GriddoFieldView(
             "Source",
-            140,
+            160,
             r => ((HtmlSegmentEditRecord)r).Source,
             static (_, _) => false,
             GriddoCellEditors.Text)
         {
-            Description = "Source object the segment value comes from"
+            Description = "Source object name from the central field registration"
         });
         SegmentsGrid.Fields.Add(new GriddoFieldView(
             "Property",
-            140,
+            120,
             r => ((HtmlSegmentEditRecord)r).Property,
             static (_, _) => false,
             GriddoCellEditors.Text)
         {
-            Description = "Property name of the segment value"
+            Description = "Property name from the central field registration"
         });
         SegmentsGrid.Fields.Add(new GriddoFieldView(
-            "Header",
-            180,
-            r => ((HtmlSegmentEditRecord)r).Header,
+            "Long Header",
+            140,
+            r => ((HtmlSegmentEditRecord)r).LongHeader,
             (r, v) =>
             {
-                ((HtmlSegmentEditRecord)r).Header = v?.ToString() ?? string.Empty;
+                var row = (HtmlSegmentEditRecord)r;
+                row.LongHeader = v?.ToString() ?? string.Empty;
+                PersistRegistrationFromRow(row);
                 return true;
             },
             GriddoCellEditors.Text)
         {
-            Description = "Label displayed before the segment value in the cell"
+            Description = "Long header for data grid column headers (central repository)"
+        });
+        SegmentsGrid.Fields.Add(new GriddoFieldView(
+            "Short Header",
+            100,
+            r => ((HtmlSegmentEditRecord)r).ShortHeader,
+            (r, v) =>
+            {
+                var row = (HtmlSegmentEditRecord)r;
+                row.ShortHeader = v?.ToString() ?? string.Empty;
+                PersistRegistrationFromRow(row);
+                return true;
+            },
+            GriddoCellEditors.Text)
+        {
+            Description = "Short header for HTML segment labels, plot titles, and summaries (central repository)"
         });
         SegmentsGrid.Fields.Add(new GriddoFieldView(
             "Format",
-            120,
-            r => ((HtmlSegmentEditRecord)r).FormatString,
+            80,
+            r => ((HtmlSegmentEditRecord)r).Format,
             (r, v) =>
             {
-                ((HtmlSegmentEditRecord)r).FormatString = v?.ToString() ?? string.Empty;
+                var row = (HtmlSegmentEditRecord)r;
+                row.Format = v?.ToString() ?? string.Empty;
+                PersistRegistrationFromRow(row);
                 return true;
             },
-            GriddoCellEditors.StandardNumericFormatStringOptions)
+            GriddoCellEditors.FormatStringOptions)
         {
-            Description = "Format string applied to numeric or date values"
+            Description = "Format reference: general format name or literal (central repository)"
+        });
+        SegmentsGrid.Fields.Add(new GriddoFieldView(
+            "Description",
+            260,
+            r => ((HtmlSegmentEditRecord)r).Description,
+            (r, v) =>
+            {
+                var row = (HtmlSegmentEditRecord)r;
+                row.Description = v?.ToString() ?? string.Empty;
+                PersistRegistrationFromRow(row);
+                return true;
+            },
+            GriddoCellEditors.Text)
+        {
+            Description = "Field description / tooltip (central repository)"
         });
     }
 
-    private static HtmlSegmentEditRecord CreateSegmentEditRecord(
+    private HtmlSegmentEditRecord CreateSegmentEditRecord(
         IGriddoFieldView field,
         int sourceFieldIndex,
         HtmlFieldSegmentConfiguration? saved)
     {
-        var header = !string.IsNullOrWhiteSpace(saved?.Header)
-            ? saved.Header
-            : field.Header ?? string.Empty;
-        return new HtmlSegmentEditRecord
+        var reg = _resolveRegistration?.Invoke(field);
+        var row = new HtmlSegmentEditRecord
         {
             SourceFieldIndex = sourceFieldIndex,
             Enabled = saved?.Enabled ?? false,
-            Source = field is IGriddoFieldSourceObject sourceObject ? sourceObject.SourceObjectName : string.Empty,
-            Property = field is IGriddoFieldSourceMember sourceMember ? sourceMember.SourceMemberName : string.Empty,
-            Header = header,
-            FormatString = saved?.FormatString ?? (field is IGriddoFieldFormatView fmt ? fmt.FormatString : null) ?? string.Empty
+            Key = reg?.Key ?? string.Empty,
+            Source = reg?.Source ?? (field is IGriddoFieldSourceObject so ? so.SourceObjectName : string.Empty),
+            Property = reg?.Property ?? (field is IGriddoFieldSourceMember sm ? sm.SourceMemberName : string.Empty),
+            LongHeader = reg?.LongHeader ?? string.Empty,
+            ShortHeader = reg?.ShortHeader ?? string.Empty,
+            Format = reg?.Format ?? string.Empty,
+            Description = reg?.Description ?? string.Empty
         };
+        if (string.IsNullOrWhiteSpace(row.Key)
+            && !string.IsNullOrWhiteSpace(row.Source)
+            && !string.IsNullOrWhiteSpace(row.Property))
+        {
+            row.Key = $"{row.Source}.{row.Property}";
+        }
+
+        return row;
     }
 
     private void BuildGeneralGridFields()

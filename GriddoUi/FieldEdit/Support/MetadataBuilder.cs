@@ -123,7 +123,7 @@ public static class MetadataBuilder
             SourceFieldIndex = sourceFieldIndex,
             PropertyName = propertyName,
             SourceObjectName = col is IGriddoFieldSourceObject sourceObject ? sourceObject.SourceObjectName : string.Empty,
-            Title = col.Header,
+            LongHeader = col.Header,
             FormatString = col is IGriddoFieldFormatView formatView ? formatView.FormatString : string.Empty,
             FontFamilyName = col is IGriddoFieldFontView fontView ? fontView.FontFamilyName : string.Empty,
             FontSize = col is IGriddoFieldFontView fontView2 ? fontView2.FontSize : 0,
@@ -344,7 +344,7 @@ public static class MetadataBuilder
             records.Add(new FieldEditRecord
             {
                 PropertyName = p.Name,
-                Title = title,
+                LongHeader = title,
                 Description = description,
                 IsNumericProperty = IsNumericType(p.PropertyType),
                 IsDateTimeProperty = IsDateTimeType(p.PropertyType),

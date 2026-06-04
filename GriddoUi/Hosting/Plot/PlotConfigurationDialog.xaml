@@ -66,7 +66,7 @@
                     Margin="8,6"
                     ShowFieldHeaderSelectionColoring="False"
                     ShowRecordHeaderSelectionColoring="False"
-                    UniformRecordHeight="26" />
+                    UniformRecordHeight="28" />
             </TabItem>
             <TabItem x:Name="LabelsTab" Header="Labels" Visibility="Collapsed">
                 <grid:Griddo
@@ -74,7 +74,7 @@
                     Margin="8,6"
                     ShowFieldHeaderSelectionColoring="False"
                     ShowRecordHeaderSelectionColoring="False"
-                    UniformRecordHeight="26" />
+                    UniformRecordHeight="28" />
             </TabItem>
         </TabControl>
     </DockPanel>

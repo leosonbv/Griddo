@@ -16,8 +16,17 @@ public sealed class FieldEditRecord
     public string PropertyName { get; init; } = string.Empty;
     public string SourceObjectName { get; init; } = string.Empty;
 
-    /// <summary>User-facing field header text applied to <see cref="IGriddoFieldView.Header"/>.</summary>
-    public string Title { get; set; } = string.Empty;
+    /// <summary>Central registration key (same as Field editor <c>Key</c> column).</summary>
+    public string RegistrationKey { get; set; } = string.Empty;
+
+    /// <summary>Long header from the central field repository (applied to grid column headers).</summary>
+    public string LongHeader { get; set; } = string.Empty;
+
+    /// <summary>Short header from the central field repository (summaries, plot titles).</summary>
+    public string ShortHeader { get; set; } = string.Empty;
+
+    /// <summary>Format reference from the central repository (general format name or literal).</summary>
+    public string FormatReference { get; set; } = string.Empty;
 
     public string Description { get; set; } = string.Empty;
 
@@ -64,7 +73,10 @@ public sealed class FieldEditRecord
         SourceFieldIndex = SourceFieldIndex,
         PropertyName = PropertyName,
         SourceObjectName = SourceObjectName,
-        Title = Title,
+        RegistrationKey = RegistrationKey,
+        LongHeader = LongHeader,
+        ShortHeader = ShortHeader,
+        FormatReference = FormatReference,
         Description = Description,
         OrderNumber = OrderNumber,
         SuppressCellEdit = SuppressCellEdit,

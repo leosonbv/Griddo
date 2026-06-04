@@ -144,14 +144,9 @@ public static class GridApplier
     private static void ApplyFieldRecordToView(IGriddoFieldView field, FieldEditRecord record)
     {
         field.FieldFill = NormalizeFieldFill(record.FieldFill);
-        if (!string.IsNullOrWhiteSpace(record.Title))
-        {
-            field.Header = record.Title.Trim();
-        }
-        else
-        {
-            field.Header = string.Empty;
-        }
+        field.Header = !string.IsNullOrWhiteSpace(record.LongHeader)
+            ? record.LongHeader.Trim()
+            : string.Empty;
 
         if (field is IGriddoFieldDescriptionView descriptionView)
         {
@@ -160,7 +155,10 @@ public static class GridApplier
 
         if (field is IGriddoFieldFormatView formatView)
         {
-            formatView.FormatString = record.FormatString?.Trim() ?? string.Empty;
+            var format = !string.IsNullOrWhiteSpace(record.FormatReference)
+                ? record.FormatReference.Trim()
+                : record.FormatString?.Trim() ?? string.Empty;
+            formatView.FormatString = format;
         }
 
         if (field is IGriddoFieldFontView fontView)

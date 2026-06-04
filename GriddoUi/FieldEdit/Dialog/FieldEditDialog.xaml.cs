@@ -19,6 +19,8 @@ public partial class FieldConfigurator : Window
     private readonly List<IGriddoFieldView> _fieldHeaderRegistry = [];
     private readonly List<IGriddoFieldView> _generalFieldHeaderRegistry = [];
     private readonly List<int> _initialSelectedSourceFieldIndices = [];
+    private readonly Func<IGriddoFieldView, FieldRegistrationDisplayInfo?>? _resolveRegistration;
+    private readonly Action<FieldRegistrationDisplayInfo>? _persistRegistration;
     private int _initialCenterSourceFieldIndex = -1;
     private int _fontFieldIndex = -1;
     private int _backColorFieldIndex = -1;
@@ -62,12 +64,18 @@ public partial class FieldConfigurator : Window
         IReadOnlyList<FieldEditRecord> templateRecords,
         int initialFrozenFields,
         int initialFrozenRecords,
-        FieldChooserGeneralOptions? initialOptions = null)
+        FieldChooserGeneralOptions? initialOptions = null,
+        Func<IGriddoFieldView, FieldRegistrationDisplayInfo?>? resolveRegistration = null,
+        Action<FieldRegistrationDisplayInfo>? persistRegistration = null)
     {
         InitializeComponent();
+        _resolveRegistration = resolveRegistration;
+        _persistRegistration = persistRegistration;
         foreach (var r in templateRecords)
         {
-            FieldGrid.Records.Add(r.Clone());
+            var clone = r.Clone();
+            EnrichRegistrationMetadata(clone);
+            FieldGrid.Records.Add(clone);
         }
 
         BuildFields();
@@ -301,29 +309,40 @@ public partial class FieldConfigurator : Window
                 ((FieldEditRecord)r).SuppressCellEdit = b;
                 return true;
             }));
-        AddField(new ReadonlyField("Source", 120, r => r.SourceObjectName));
-        AddField(new ReadonlyField("Property", 140, r => r.PropertyName));
+        AddField(new ReadonlyField("Key", 220, r => RegistrationDisplayKey((FieldEditRecord)r)));
+        AddField(new ReadonlyField("Source", 160, r => RegistrationDisplaySource((FieldEditRecord)r)));
+        AddField(new ReadonlyField("Property", 120, r => RegistrationDisplayProperty((FieldEditRecord)r)));
         AddField(new GriddoFieldView(
-            "Header",
-            150,
-            r => ((FieldEditRecord)r).Title,
+            "Long Header",
+            140,
+            r => ((FieldEditRecord)r).LongHeader,
             (r, v) =>
             {
-                ((FieldEditRecord)r).Title = v?.ToString() ?? string.Empty;
+                var rec = (FieldEditRecord)r;
+                rec.LongHeader = v?.ToString() ?? string.Empty;
+                PersistRegistrationFromRecord(rec);
+                return true;
+            }));
+        AddField(new GriddoFieldView(
+            "Short Header",
+            100,
+            r => ((FieldEditRecord)r).ShortHeader,
+            (r, v) =>
+            {
+                var rec = (FieldEditRecord)r;
+                rec.ShortHeader = v?.ToString() ?? string.Empty;
+                PersistRegistrationFromRecord(rec);
                 return true;
             }));
         AddField(new GriddoFieldView(
             "Format",
-            140,
-            r => ((FieldEditRecord)r).FormatString,
+            80,
+            r => ((FieldEditRecord)r).FormatReference,
             (r, v) =>
             {
-                if (!TryFormatValue(v?.ToString(), out var normalized))
-                {
-                    return false;
-                }
-
-                ((FieldEditRecord)r).FormatString = normalized;
+                var rec = (FieldEditRecord)r;
+                rec.FormatReference = v?.ToString()?.Trim() ?? string.Empty;
+                PersistRegistrationFromRecord(rec);
                 return true;
             },
             GriddoCellEditors.FormatStringOptions));
@@ -441,7 +460,9 @@ public partial class FieldConfigurator : Window
             r => ((FieldEditRecord)r).Description,
             (r, v) =>
             {
-                ((FieldEditRecord)r).Description = v?.ToString() ?? string.Empty;
+                var rec = (FieldEditRecord)r;
+                rec.Description = v?.ToString() ?? string.Empty;
+                PersistRegistrationFromRecord(rec);
                 return true;
             }));
         _fontFieldIndex = FieldGrid.Fields.Count;
@@ -543,12 +564,92 @@ public partial class FieldConfigurator : Window
         RenumberUsedFromCurrentListAndResort();
     }
 
+    private static string RegistrationDisplayKey(FieldEditRecord record) =>
+        !string.IsNullOrWhiteSpace(record.RegistrationKey)
+            ? record.RegistrationKey
+            : string.IsNullOrWhiteSpace(record.SourceObjectName)
+                ? record.PropertyName
+                : $"{record.SourceObjectName}.{record.PropertyName}";
+
+    private static string RegistrationDisplaySource(FieldEditRecord record)
+    {
+        var key = RegistrationDisplayKey(record);
+        var dot = key.LastIndexOf('.');
+        return dot > 0 ? key[..dot] : record.SourceObjectName;
+    }
+
+    private static string RegistrationDisplayProperty(FieldEditRecord record)
+    {
+        var key = RegistrationDisplayKey(record);
+        var dot = key.LastIndexOf('.');
+        return dot >= 0 && dot < key.Length - 1 ? key[(dot + 1)..] : record.PropertyName;
+    }
+
+    private void EnrichRegistrationMetadata(FieldEditRecord record)
+    {
+        if (record.SourceFieldView is null)
+        {
+            return;
+        }
+
+        var info = _resolveRegistration?.Invoke(record.SourceFieldView);
+        if (info is null)
+        {
+            if (string.IsNullOrWhiteSpace(record.RegistrationKey)
+                && !string.IsNullOrWhiteSpace(record.SourceObjectName)
+                && !string.IsNullOrWhiteSpace(record.PropertyName))
+            {
+                record.RegistrationKey = $"{record.SourceObjectName}.{record.PropertyName}";
+            }
+
+            return;
+        }
+
+        record.RegistrationKey = info.Key;
+        record.LongHeader = info.LongHeader;
+        record.ShortHeader = info.ShortHeader;
+        record.FormatReference = info.Format;
+        record.Description = info.Description;
+        if (!string.IsNullOrWhiteSpace(info.Format))
+        {
+            record.FormatString = info.Format;
+        }
+    }
+
+    private void PersistRegistrationFromRecord(FieldEditRecord record)
+    {
+        if (_persistRegistration is null || string.IsNullOrWhiteSpace(record.RegistrationKey))
+        {
+            return;
+        }
+
+        _persistRegistration(new FieldRegistrationDisplayInfo
+        {
+            Key = record.RegistrationKey,
+            Source = record.SourceObjectName,
+            Property = record.PropertyName,
+            LongHeader = record.LongHeader,
+            ShortHeader = record.ShortHeader,
+            Format = record.FormatReference,
+            Description = record.Description
+        });
+    }
+
+    private void PersistAllRegistrationRecords()
+    {
+        foreach (var record in FieldGrid.Records.OfType<FieldEditRecord>())
+        {
+            PersistRegistrationFromRecord(record);
+        }
+    }
+
     private void ApplyButton_Click(object sender, RoutedEventArgs e)
     {
         _ = sender;
         _ = e;
         FieldGrid.CommitPendingCellEdit();
         GeneralPropertyGrid.CommitPendingCellEdit();
+        PersistAllRegistrationRecords();
         if (!TryCommitFrozenFields(out var frozenFields)
             || !TryCommitFrozenRecords(out var frozenRecords)
             || !TryCommitRecordThickness(out _)
@@ -569,6 +670,7 @@ public partial class FieldConfigurator : Window
         _ = e;
         FieldGrid.CommitPendingCellEdit();
         GeneralPropertyGrid.CommitPendingCellEdit();
+        PersistAllRegistrationRecords();
         if (!TryCommitFrozenFields(out var frozenFields)
             || !TryCommitFrozenRecords(out var frozenRecords)
             || !TryCommitRecordThickness(out _)

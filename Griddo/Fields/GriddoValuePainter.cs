@@ -197,7 +197,15 @@ public static class GriddoValuePainter
             return;
         }
 
-        var side = Math.Clamp(fontSize * 0.9, 11.0, 18.0);
+        // Fit inside the paint bounds so partially visible rows (viewport clip) do not clip the box.
+        var preferredSide = Math.Clamp(fontSize * 0.9, 11.0, 18.0);
+        var maxSide = Math.Min(bounds.Width, bounds.Height);
+        var side = Math.Min(preferredSide, maxSide);
+        if (side < 4.0)
+        {
+            return;
+        }
+
         var x = bounds.X + Math.Max(0, (bounds.Width - side) / 2);
         var y = bounds.Y + Math.Max(0, (bounds.Height - side) / 2);
         var box = new Rect(x, y, side, side);

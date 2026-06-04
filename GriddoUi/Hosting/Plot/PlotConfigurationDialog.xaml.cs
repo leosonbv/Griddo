@@ -11,6 +11,7 @@ using Griddo.Editing;
 using Griddo.Hosting.Configuration;
 using Griddo.Hosting.Html;
 using Griddo.Hosting.Plot;
+using GriddoUi.FieldEdit.Models;
 
 namespace GriddoUi.Hosting.Plot;
 
@@ -19,8 +20,12 @@ public partial class PlotConfigurationDialog : Window
     private readonly IPlotFieldLayoutTarget _initial;
     private readonly IReadOnlyList<IGriddoFieldView> _allFields;
     private readonly IReadOnlyList<IGriddoFieldView> _pointLabelFields;
+    private readonly IReadOnlyList<PlotTitleSegmentConfiguration> _titleSegmentsForSeed;
+    private readonly IReadOnlyList<PlotTitleSegmentConfiguration> _pointLabelSegmentsForSeed;
     private readonly List<PlotTitleFieldEditRecord> _rows = [];
     private readonly Action<PlotFieldDialogResult>? _previewApply;
+    private readonly Func<IGriddoFieldView, FieldRegistrationDisplayInfo?>? _resolveRegistration;
+    private readonly Action<FieldRegistrationDisplayInfo>? _persistRegistration;
 
     public PlotFieldDialogResult? Result { get; private set; }
 
@@ -28,13 +33,21 @@ public partial class PlotConfigurationDialog : Window
         IPlotFieldLayoutTarget initial,
         IReadOnlyList<IGriddoFieldView> allFields,
         Action<PlotFieldDialogResult>? previewApply = null,
-        IReadOnlyList<IGriddoFieldView>? pointLabelFields = null)
+        IReadOnlyList<IGriddoFieldView>? pointLabelFields = null,
+        Func<IGriddoFieldView, FieldRegistrationDisplayInfo?>? resolveRegistration = null,
+        Action<FieldRegistrationDisplayInfo>? persistRegistration = null,
+        IReadOnlyList<PlotTitleSegmentConfiguration>? titleSegmentsForSeed = null,
+        IReadOnlyList<PlotTitleSegmentConfiguration>? pointLabelSegmentsForSeed = null)
     {
         InitializeComponent();
         _initial = initial;
         _allFields = allFields;
         _pointLabelFields = pointLabelFields ?? allFields;
+        _titleSegmentsForSeed = titleSegmentsForSeed ?? initial.TitleSegments ?? [];
+        _pointLabelSegmentsForSeed = pointLabelSegmentsForSeed ?? initial.CalibrationPointLabelSegments ?? [];
         _previewApply = previewApply;
+        _resolveRegistration = resolveRegistration;
+        _persistRegistration = persistRegistration;
         BuildTitleFieldGridFields();
         BuildPointLabelFieldGridFields();
         BuildSpecificGridFields();
@@ -83,7 +96,7 @@ public partial class PlotConfigurationDialog : Window
     {
         _rows.Clear();
         TitleFieldsGrid.Records.Clear();
-        var savedByIndex = _initial.TitleSegments
+        var savedByIndex = _titleSegmentsForSeed
             .Select(s => (segment: s, resolved: ResolveSourceFieldIndex(s)))
             .Where(x => x.resolved >= 0)
             .GroupBy(x => x.resolved)
@@ -98,7 +111,7 @@ public partial class PlotConfigurationDialog : Window
             }
         }
 
-        var configuredOrder = _initial.TitleSegments
+        var configuredOrder = _titleSegmentsForSeed
             .Select(ResolveSourceFieldIndex)
             .Where(i => i >= 0 && i < _allFields.Count && !excluded.Contains(i))
             .Distinct()
@@ -137,13 +150,13 @@ public partial class PlotConfigurationDialog : Window
             }
         }
 
-        var savedByIndex = _initial.CalibrationPointLabelSegments
+        var savedByIndex = _pointLabelSegmentsForSeed
             .Select(s => (segment: s, resolved: ResolvePointLabelFieldIndex(s)))
             .Where(x => x.resolved >= 0)
             .GroupBy(x => x.resolved)
             .ToDictionary(g => g.Key, g => g.First().segment);
 
-        var configuredOrder = _initial.CalibrationPointLabelSegments
+        var configuredOrder = _pointLabelSegmentsForSeed
             .Select(ResolvePointLabelFieldIndex)
             .Where(i => i >= 0 && i < _pointLabelFields.Count && !excluded.Contains(i))
             .Distinct()
@@ -218,6 +231,7 @@ public partial class PlotConfigurationDialog : Window
     {
         _ = sender;
         _ = e;
+        PersistAllRegistrationRows();
         if (!TryBuildResult(out var result))
         {
             return;
@@ -232,6 +246,7 @@ public partial class PlotConfigurationDialog : Window
     {
         _ = sender;
         _ = e;
+        PersistAllRegistrationRows();
         if (!TryBuildResult(out var result))
         {
             return;
@@ -241,53 +256,71 @@ public partial class PlotConfigurationDialog : Window
         _previewApply?.Invoke(result);
     }
 
+    private void PersistRegistrationFromRow(PlotTitleFieldEditRecord row)
+    {
+        if (_persistRegistration is null || string.IsNullOrWhiteSpace(row.Key))
+        {
+            return;
+        }
+
+        _persistRegistration(new FieldRegistrationDisplayInfo
+        {
+            Key = row.Key,
+            Source = row.Source,
+            Property = row.Property,
+            LongHeader = row.LongHeader,
+            ShortHeader = row.ShortHeader,
+            Format = row.Format,
+            Description = row.Description
+        });
+    }
+
+    private void PersistAllRegistrationRows()
+    {
+        TitleFieldsGrid.CommitPendingCellEdit();
+        PointLabelFieldsGrid.CommitPendingCellEdit();
+        foreach (var row in TitleFieldsGrid.Records.OfType<PlotTitleFieldEditRecord>())
+        {
+            PersistRegistrationFromRow(row);
+        }
+
+        foreach (var row in PointLabelFieldsGrid.Records.OfType<PlotTitleFieldEditRecord>())
+        {
+            PersistRegistrationFromRow(row);
+        }
+    }
+
+    private static PlotTitleSegmentConfiguration ToSegmentConfiguration(PlotTitleFieldEditRecord r) =>
+        new()
+        {
+            SourceObjectName = r.Source.Trim(),
+            PropertyName = r.Property.Trim(),
+            SourceFieldIndex = r.SourceFieldIndex,
+            Enabled = r.Enabled,
+            AddLineBreakAfter = r.AddLineBreakAfter
+        };
+
     private bool TryBuildResult(out PlotFieldDialogResult result)
     {
         result = default!;
         var label = GetSpecificText(PlotSpecificSettingKind.Label);
         var titleSegments = TitleFieldsGrid.Records
             .OfType<PlotTitleFieldEditRecord>()
-            .Where(r => r.Enabled)  // only persist the "Use checked" ones; disabled are not part of the title config
+            .Where(r => r.Enabled)
             .Select(r =>
             {
-                var field = r.SourceFieldIndex >= 0 && r.SourceFieldIndex < _allFields.Count
-                    ? _allFields[r.SourceFieldIndex]
-                    : null;
-                var sourceObjectName = field is IGriddoFieldSourceObject so ? so.SourceObjectName.Trim() : string.Empty;
-                var propertyName = field is IGriddoFieldSourceMember sm ? sm.SourceMemberName.Trim() : string.Empty;
-                return new PlotTitleSegmentConfiguration
-                {
-                    SourceObjectName = sourceObjectName,
-                    PropertyName = propertyName,
-                    SourceFieldIndex = r.SourceFieldIndex,
-                    Enabled = r.Enabled,
-                    Header = r.Header,
-                    AddLineBreakAfter = r.AddLineBreakAfter,
-                    FormatString = r.FormatString ?? string.Empty
-                };
+                PersistRegistrationFromRow(r);
+                return ToSegmentConfiguration(r);
             })
             .ToList();
 
         var calibrationPointLabelSegments = PointLabelFieldsGrid.Records
             .OfType<PlotTitleFieldEditRecord>()
-            .Where(r => r.Enabled)  // only the checked/used for labels
+            .Where(r => r.Enabled)
             .Select(r =>
             {
-                var field = r.SourceFieldIndex >= 0 && r.SourceFieldIndex < _pointLabelFields.Count
-                    ? _pointLabelFields[r.SourceFieldIndex]
-                    : null;
-                var sourceObjectName = field is IGriddoFieldSourceObject so ? so.SourceObjectName.Trim() : string.Empty;
-                var propertyName = field is IGriddoFieldSourceMember sm ? sm.SourceMemberName.Trim() : string.Empty;
-                return new PlotTitleSegmentConfiguration
-                {
-                    SourceObjectName = sourceObjectName,
-                    PropertyName = propertyName,
-                    SourceFieldIndex = r.SourceFieldIndex,
-                    Enabled = r.Enabled,
-                    Header = r.Header,
-                    AddLineBreakAfter = r.AddLineBreakAfter,
-                    FormatString = r.FormatString ?? string.Empty
-                };
+                PersistRegistrationFromRow(r);
+                return ToSegmentConfiguration(r);
             })
             .ToList();
 
@@ -446,7 +479,7 @@ public partial class PlotConfigurationDialog : Window
 
     private void BuildPointLabelFieldGridFields() => BuildSegmentGridFields(PointLabelFieldsGrid);
 
-    private static void BuildSegmentGridFields(global::Griddo.Grid.Griddo grid)
+    private void BuildSegmentGridFields(global::Griddo.Grid.Griddo grid)
     {
         grid.Fields.Clear();
         grid.Fields.Add(new GriddoBoolFieldView(
@@ -464,7 +497,7 @@ public partial class PlotConfigurationDialog : Window
                 return true;
             })
         {
-            Description = "Whether this field segment is included in the title or label"
+            Description = "Use: include this segment in this plot field only (saved per plot, not in the central field repository)"
         });
         grid.Fields.Add(new GriddoBoolFieldView(
             "Line break",
@@ -481,69 +514,124 @@ public partial class PlotConfigurationDialog : Window
                 return true;
             })
         {
-            Description = "Insert a line break after this segment"
+            Description = "Line break before this segment (saved per plot field only, not in the central repository)"
+        });
+        grid.Fields.Add(new GriddoFieldView(
+            "Key",
+            220,
+            r => ((PlotTitleFieldEditRecord)r).Key,
+            static (_, _) => false,
+            GriddoCellEditors.Text)
+        {
+            Description = "Unique registration key (Source.Property), same as the Field editor"
         });
         grid.Fields.Add(new GriddoFieldView(
             "Source",
-            140,
+            160,
             r => ((PlotTitleFieldEditRecord)r).Source,
             static (_, _) => false,
             GriddoCellEditors.Text)
         {
-            Description = "Source object the segment value comes from"
+            Description = "Source object name from the central field registration"
         });
         grid.Fields.Add(new GriddoFieldView(
             "Property",
-            140,
+            120,
             r => ((PlotTitleFieldEditRecord)r).Property,
             static (_, _) => false,
             GriddoCellEditors.Text)
         {
-            Description = "Property name of the segment value"
+            Description = "Property name from the central field registration"
         });
         grid.Fields.Add(new GriddoFieldView(
-            "Header",
-            180,
-            r => ((PlotTitleFieldEditRecord)r).Header,
+            "Long Header",
+            140,
+            r => ((PlotTitleFieldEditRecord)r).LongHeader,
             (r, v) =>
             {
-                ((PlotTitleFieldEditRecord)r).Header = v?.ToString() ?? string.Empty;
+                var row = (PlotTitleFieldEditRecord)r;
+                row.LongHeader = v?.ToString() ?? string.Empty;
+                PersistRegistrationFromRow(row);
                 return true;
             },
             GriddoCellEditors.Text)
         {
-            Description = "Label displayed before the segment value"
+            Description = "Long header for data grid column headers (central repository)"
+        });
+        grid.Fields.Add(new GriddoFieldView(
+            "Short Header",
+            100,
+            r => ((PlotTitleFieldEditRecord)r).ShortHeader,
+            (r, v) =>
+            {
+                var row = (PlotTitleFieldEditRecord)r;
+                row.ShortHeader = v?.ToString() ?? string.Empty;
+                PersistRegistrationFromRow(row);
+                return true;
+            },
+            GriddoCellEditors.Text)
+        {
+            Description = "Short header for plot title and label segments (central repository)"
         });
         grid.Fields.Add(new GriddoFieldView(
             "Format",
-            120,
-            r => ((PlotTitleFieldEditRecord)r).FormatString,
+            80,
+            r => ((PlotTitleFieldEditRecord)r).Format,
             (r, v) =>
             {
-                ((PlotTitleFieldEditRecord)r).FormatString = v?.ToString() ?? string.Empty;
+                var row = (PlotTitleFieldEditRecord)r;
+                row.Format = v?.ToString() ?? string.Empty;
+                PersistRegistrationFromRow(row);
                 return true;
             },
-            GriddoCellEditors.StandardNumericFormatStringOptions)
+            GriddoCellEditors.FormatStringOptions)
         {
-            Description = "Format string applied to numeric or date values"
+            Description = "Format reference: general format name or literal (central repository)"
+        });
+        grid.Fields.Add(new GriddoFieldView(
+            "Description",
+            260,
+            r => ((PlotTitleFieldEditRecord)r).Description,
+            (r, v) =>
+            {
+                var row = (PlotTitleFieldEditRecord)r;
+                row.Description = v?.ToString() ?? string.Empty;
+                PersistRegistrationFromRow(row);
+                return true;
+            },
+            GriddoCellEditors.Text)
+        {
+            Description = "Field description / tooltip (central repository)"
         });
     }
 
-    private static PlotTitleFieldEditRecord CreateSegmentEditRecord(
+    private PlotTitleFieldEditRecord CreateSegmentEditRecord(
         IGriddoFieldView field,
         int sourceFieldIndex,
         PlotTitleSegmentConfiguration? saved)
     {
-        return new PlotTitleFieldEditRecord
+        var reg = _resolveRegistration?.Invoke(field);
+        var row = new PlotTitleFieldEditRecord
         {
             SourceFieldIndex = sourceFieldIndex,
             Enabled = saved?.Enabled ?? false,
-            Source = field is IGriddoFieldSourceObject sourceObject ? sourceObject.SourceObjectName : string.Empty,
-            Property = field is IGriddoFieldSourceMember sourceMember ? sourceMember.SourceMemberName : string.Empty,
-            Header = saved?.Header ?? field.Header ?? string.Empty,
-            AddLineBreakAfter = saved?.AddLineBreakAfter ?? true,
-            FormatString = saved?.FormatString ?? (field is IGriddoFieldFormatView fmt ? fmt.FormatString : null) ?? string.Empty
+            Key = reg?.Key ?? string.Empty,
+            Source = reg?.Source ?? (field is IGriddoFieldSourceObject so ? so.SourceObjectName : string.Empty),
+            Property = reg?.Property ?? (field is IGriddoFieldSourceMember sm ? sm.SourceMemberName : string.Empty),
+            LongHeader = reg?.LongHeader ?? string.Empty,
+            ShortHeader = reg?.ShortHeader ?? string.Empty,
+            Format = reg?.Format ?? string.Empty,
+            Description = reg?.Description ?? string.Empty,
+            AddLineBreakAfter = saved?.AddLineBreakAfter ?? false
         };
+        if (string.IsNullOrWhiteSpace(row.Key)
+            && !string.IsNullOrWhiteSpace(row.Source)
+            && !string.IsNullOrWhiteSpace(row.Property))
+        {
+            row.Key = $"{row.Source}.{row.Property}";
+        }
+
+        return row;
     }
 
     private void BuildSpecificGridFields()
@@ -723,13 +811,17 @@ public partial class PlotConfigurationDialog : Window
     private sealed class PlotTitleFieldEditRecord
     {
         public int SourceFieldIndex { get; set; }
-
+        /// <summary>Per plot field only (title or labels tab layout, not the central repository).</summary>
         public bool Enabled { get; set; }
+        /// <summary>Per plot field only (line-break intent before this segment).</summary>
+        public bool AddLineBreakAfter { get; set; }
+        public string Key { get; set; } = string.Empty;
         public string Source { get; set; } = string.Empty;
         public string Property { get; set; } = string.Empty;
-        public string Header { get; set; } = string.Empty;
-        public bool AddLineBreakAfter { get; set; } = true;
-        public string FormatString { get; set; } = string.Empty;
+        public string LongHeader { get; set; } = string.Empty;
+        public string ShortHeader { get; set; } = string.Empty;
+        public string Format { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
     }
 
     private sealed class PlotSpecificSettingRecord

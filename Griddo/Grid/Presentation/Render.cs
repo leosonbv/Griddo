@@ -358,7 +358,7 @@ public sealed partial class Griddo
         {
             var rawBool = Fields[col].GetValue(recordData);
             var isChecked = rawBool is true;
-            var boolPaintBounds = Rect.Intersect(rect, bodyViewport);
+            var boolPaintBounds = Rect.Intersect(mergedRenderRect, bodyViewport);
             if (!boolPaintBounds.IsEmpty)
             {
                 GriddoValuePainter.DrawBoolCheckbox(dc, isChecked, boolPaintBounds, fieldFontSize);
