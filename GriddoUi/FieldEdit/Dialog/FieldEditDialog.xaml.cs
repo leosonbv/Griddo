@@ -610,10 +610,9 @@ public partial class FieldConfigurator : Window
         record.ShortHeader = info.ShortHeader;
         record.FormatReference = info.Format;
         record.Description = info.Description;
-        if (!string.IsNullOrWhiteSpace(info.Format))
-        {
-            record.FormatString = info.Format;
-        }
+        record.FormatString = !string.IsNullOrWhiteSpace(info.ResolvedFormat)
+            ? info.ResolvedFormat
+            : info.Format;
     }
 
     private void PersistRegistrationFromRecord(FieldEditRecord record)
@@ -1487,11 +1486,12 @@ public partial class FieldConfigurator : Window
                 return record.SampleDisplay;
             }
 
-            if (!string.IsNullOrWhiteSpace(record.FormatString) && record.SampleValue is IFormattable formattable)
+            var format = ResolveSampleFormatString(record);
+            if (!string.IsNullOrWhiteSpace(format) && record.SampleValue is IFormattable formattable)
             {
                 try
                 {
-                    return formattable.ToString(record.FormatString, CultureInfo.CurrentCulture);
+                    return formattable.ToString(format, CultureInfo.CurrentCulture);
                 }
                 catch (FormatException)
                 {
@@ -1505,6 +1505,66 @@ public partial class FieldConfigurator : Window
                 IFormattable fmt => fmt.ToString(null, CultureInfo.CurrentCulture),
                 _ => record.SampleValue.ToString() ?? string.Empty
             };
+        }
+
+        /// <summary>
+        /// Uses the resolved .NET specifier when the host supplies it; otherwise avoids treating general format
+        /// names (e.g. "DateTime") as custom format strings, which fail and show raw values.
+        /// </summary>
+        private static string? ResolveSampleFormatString(FieldEditRecord record)
+        {
+            var format = record.FormatString?.Trim();
+            var formatRef = record.FormatReference?.Trim();
+            if (string.IsNullOrWhiteSpace(format))
+            {
+                format = formatRef;
+            }
+
+            if (string.IsNullOrWhiteSpace(format))
+            {
+                return null;
+            }
+
+            if (record.SampleValue is DateTime)
+            {
+                if (LooksLikeGeneralFormatName(format))
+                {
+                    return "G";
+                }
+
+                if (!string.IsNullOrWhiteSpace(formatRef)
+                    && !string.Equals(format, formatRef, StringComparison.OrdinalIgnoreCase)
+                    && !LooksLikeGeneralFormatName(formatRef))
+                {
+                    return format;
+                }
+            }
+
+            return format;
+        }
+
+        private static bool LooksLikeGeneralFormatName(string format)
+        {
+            if (string.IsNullOrWhiteSpace(format))
+            {
+                return false;
+            }
+
+            foreach (var ch in format)
+            {
+                if (char.IsLetter(ch) && ch is not ('y' or 'M' or 'd' or 'H' or 'h' or 'm' or 's' or 't' or 'f' or 'g' or 'K' or 'z'))
+                {
+                    if (format.Length > 1 && char.IsLetter(ch))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return string.Equals(format, "DateTime", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(format, "RetentionTime", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(format, "Concentration", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(format, "CurveR2", StringComparison.OrdinalIgnoreCase);
         }
     }
 

@@ -155,9 +155,10 @@ public static class GridApplier
 
         if (field is IGriddoFieldFormatView formatView)
         {
-            var format = !string.IsNullOrWhiteSpace(record.FormatReference)
-                ? record.FormatReference.Trim()
-                : record.FormatString?.Trim() ?? string.Empty;
+            // FormatString holds the resolved .NET specifier; FormatReference is the general format name.
+            var format = !string.IsNullOrWhiteSpace(record.FormatString)
+                ? record.FormatString.Trim()
+                : record.FormatReference?.Trim() ?? string.Empty;
             formatView.FormatString = format;
         }
 

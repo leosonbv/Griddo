@@ -13,5 +13,9 @@ public sealed class FieldRegistrationDisplayInfo
     public string ShortHeader { get; set; } = string.Empty;
     /// <summary>General format name or literal format reference (not the resolved specifier).</summary>
     public string Format { get; set; } = string.Empty;
+
+    /// <summary>Resolved .NET format specifier (e.g. from the host general formats map).</summary>
+    public string ResolvedFormat { get; set; } = string.Empty;
+
     public string Description { get; set; } = string.Empty;
 }
