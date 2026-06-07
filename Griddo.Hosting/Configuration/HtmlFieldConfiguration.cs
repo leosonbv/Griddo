@@ -13,7 +13,8 @@ public sealed class HtmlFieldSegmentConfiguration
     public bool Enabled { get; set; } = true;
     /// <summary>User-editable segment header; empty hides the label in composed HTML.</summary>
     public string Header { get; set; } = string.Empty;
-    public bool AddLineBreakAfter { get; set; }
+    /// <summary>When true, this segment starts on a new line before its content.</summary>
+    public bool AddLineBreakBefore { get; set; }
     public bool WordWrap { get; set; } = true;
     /// <summary>When set, formats segment values independently of the source grid column format.</summary>
     public string FormatString { get; set; } = string.Empty;

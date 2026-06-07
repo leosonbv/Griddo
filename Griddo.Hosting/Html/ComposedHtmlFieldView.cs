@@ -124,7 +124,7 @@ public sealed class ComposedHtmlFieldView : IGriddoFieldView, IGriddoFieldDescri
                 continue;
             }
 
-            chunks.Add(pair.Segment.AddLineBreakAfter ? "<br/>" : " &middot; ");
+            chunks.Add(pairs[i + 1].Segment.AddLineBreakBefore ? "<br/>" : " &middot; ");
         }
 
         return $"<div style='{style}'>{string.Concat(chunks)}</div>";

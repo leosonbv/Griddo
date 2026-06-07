@@ -13,8 +13,8 @@ public sealed class PlotTitleSegmentConfiguration
     public bool Enabled { get; set; } = true;
     /// <summary>User-editable segment header; empty hides the label.</summary>
     public string Header { get; set; } = string.Empty;
-    /// <summary>When true, this segment starts on a new line (after closing the current line).</summary>
-    public bool AddLineBreakAfter { get; set; } = true;
+    /// <summary>When true, this segment starts on a new line before its content.</summary>
+    public bool AddLineBreakBefore { get; set; }
     /// <summary>When set, formats segment values independently of the hosting grid column format.</summary>
     public string FormatString { get; set; } = string.Empty;
 }

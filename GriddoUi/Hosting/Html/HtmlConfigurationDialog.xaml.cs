@@ -174,7 +174,7 @@ public partial class HtmlConfigurationDialog : Window
                         PropertyName = r.Property.Trim(),
                         SourceFieldIndex = r.SourceFieldIndex,
                         Enabled = r.Enabled,
-                        AddLineBreakAfter = false,
+                        AddLineBreakBefore = r.AddLineBreakBefore,
                         WordWrap = true
                     };
                 })
@@ -262,6 +262,7 @@ public partial class HtmlConfigurationDialog : Window
         public string ShortHeader { get; set; } = string.Empty;
         public string Format { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
+        public bool AddLineBreakBefore { get; set; }
     }
 
     private static int ResolveEffectiveSourceFieldIndex(
@@ -400,7 +401,8 @@ public partial class HtmlConfigurationDialog : Window
             LongHeader = reg?.LongHeader ?? string.Empty,
             ShortHeader = reg?.ShortHeader ?? string.Empty,
             Format = reg?.Format ?? string.Empty,
-            Description = reg?.Description ?? string.Empty
+            Description = reg?.Description ?? string.Empty,
+            AddLineBreakBefore = saved?.AddLineBreakBefore ?? false
         };
         if (string.IsNullOrWhiteSpace(row.Key)
             && !string.IsNullOrWhiteSpace(row.Source)

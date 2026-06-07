@@ -297,7 +297,7 @@ public partial class PlotConfigurationDialog : Window
             PropertyName = r.Property.Trim(),
             SourceFieldIndex = r.SourceFieldIndex,
             Enabled = r.Enabled,
-            AddLineBreakAfter = r.AddLineBreakAfter
+            AddLineBreakBefore = r.AddLineBreakBefore
         };
 
     /// <summary>
@@ -528,7 +528,7 @@ public partial class PlotConfigurationDialog : Window
         grid.Fields.Add(new GriddoBoolFieldView(
             "Line break",
             100,
-            r => ((PlotTitleFieldEditRecord)r).AddLineBreakAfter,
+            r => ((PlotTitleFieldEditRecord)r).AddLineBreakBefore,
             (r, v) =>
             {
                 if (v is not bool b)
@@ -536,7 +536,7 @@ public partial class PlotConfigurationDialog : Window
                     return false;
                 }
 
-                ((PlotTitleFieldEditRecord)r).AddLineBreakAfter = b;
+                ((PlotTitleFieldEditRecord)r).AddLineBreakBefore = b;
                 return true;
             })
         {
@@ -648,7 +648,7 @@ public partial class PlotConfigurationDialog : Window
             ShortHeader = reg?.ShortHeader ?? string.Empty,
             Format = reg?.Format ?? string.Empty,
             Description = reg?.Description ?? string.Empty,
-            AddLineBreakAfter = saved?.AddLineBreakAfter ?? false
+            AddLineBreakBefore = saved?.AddLineBreakBefore ?? false
         };
         if (string.IsNullOrWhiteSpace(row.Key)
             && !string.IsNullOrWhiteSpace(row.Source)
@@ -840,7 +840,7 @@ public partial class PlotConfigurationDialog : Window
         /// <summary>Per plot field only (title or labels tab layout, not the central repository).</summary>
         public bool Enabled { get; set; }
         /// <summary>Per plot field only (line-break intent before this segment).</summary>
-        public bool AddLineBreakAfter { get; set; }
+        public bool AddLineBreakBefore { get; set; }
         public string Key { get; set; } = string.Empty;
         public string Source { get; set; } = string.Empty;
         public string Property { get; set; } = string.Empty;

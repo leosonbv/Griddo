@@ -1053,7 +1053,7 @@ public partial class MainWindow : Window
                     SourceFieldIndex = x.index,
                     Enabled = x.index is 2 or 3,
                     Header = string.Empty,
-                    AddLineBreakAfter = true,
+                    AddLineBreakBefore = true,
                     WordWrap = true
                 })
                 .ToList();
@@ -1935,7 +1935,7 @@ public partial class MainWindow : Window
                     SourceFieldIndex = s.SourceFieldIndex,
                     Enabled = s.Enabled,
                     Header = s.Header ?? string.Empty,
-                    AddLineBreakAfter = s.AddLineBreakAfter,
+                    AddLineBreakBefore = s.AddLineBreakBefore,
                     FormatString = s.FormatString ?? string.Empty
                 })
                 .ToList();
@@ -1986,7 +1986,7 @@ public partial class MainWindow : Window
                     SourceFieldIndex = s.SourceFieldIndex,
                     Enabled = s.Enabled,
                     Header = s.Header ?? string.Empty,
-                    AddLineBreakAfter = s.AddLineBreakAfter,
+                    AddLineBreakBefore = s.AddLineBreakBefore,
                     WordWrap = s.WordWrap,
                     FormatString = s.FormatString ?? string.Empty
                 })
@@ -2115,7 +2115,7 @@ public partial class MainWindow : Window
                                 SourceFieldIndex = s.SourceFieldIndex,
                                 Enabled = s.Enabled,
                                 Header = s.Header ?? string.Empty,
-                                AddLineBreakAfter = s.AddLineBreakAfter,
+                                AddLineBreakBefore = s.AddLineBreakBefore,
                                 FormatString = s.FormatString ?? string.Empty
                             })
                             .ToList(),
@@ -2148,7 +2148,7 @@ public partial class MainWindow : Window
                                 SourceFieldIndex = s.SourceFieldIndex,
                                 Enabled = s.Enabled,
                                 Header = s.Header ?? string.Empty,
-                                AddLineBreakAfter = s.AddLineBreakAfter,
+                                AddLineBreakBefore = s.AddLineBreakBefore,
                                 FormatString = s.FormatString ?? string.Empty
                             })
                             .ToList(),
@@ -2176,7 +2176,7 @@ public partial class MainWindow : Window
                                 SourceFieldIndex = s.SourceFieldIndex,
                                 Enabled = s.Enabled,
                                 Header = s.Header ?? string.Empty,
-                                AddLineBreakAfter = s.AddLineBreakAfter,
+                                AddLineBreakBefore = s.AddLineBreakBefore,
                                 WordWrap = s.WordWrap,
                                 FormatString = s.FormatString ?? string.Empty
                             })
@@ -2577,7 +2577,7 @@ public partial class MainWindow : Window
             var renderedValue = sourceField.FormatValue(sourceField.GetValue(recordSource));
             var encodedLabel = WebUtility.HtmlEncode(label);
             var encodedValue = WebUtility.HtmlEncode(renderedValue);
-            var breakPrefix = segment.AddLineBreakAfter ? "<br/>" : string.Empty;
+            var breakPrefix = segment.AddLineBreakBefore ? "<br/>" : string.Empty;
             var pairSeparator = appendPairSeparator ? " \u00B7 " : string.Empty;
             const string labelNoWrapStyle = " style=\"white-space:nowrap;\"";
             var valueWrapStyle = segment.WordWrap ? string.Empty : " style=\"white-space:nowrap;\"";
@@ -2744,7 +2744,7 @@ public partial class MainWindow : Window
             var currentCells = new List<string>();
             foreach (var segment in enabledSegments)
             {
-                if (segment.AddLineBreakAfter && currentCells.Count > 0)
+                if (segment.AddLineBreakBefore && currentCells.Count > 0)
                 {
                     rows.Add($"<tr>{string.Concat(currentCells)}</tr>");
                     currentCells.Clear();
@@ -2875,7 +2875,7 @@ public partial class MainWindow : Window
                 SourceFieldIndex = s.SourceFieldIndex,
                 Enabled = s.Enabled,
                 Header = s.Header ?? string.Empty,
-                AddLineBreakAfter = s.AddLineBreakAfter,
+                AddLineBreakBefore = s.AddLineBreakBefore,
                 FormatString = s.FormatString ?? string.Empty
             })
             .ToList();
@@ -2906,7 +2906,7 @@ public partial class MainWindow : Window
                 SourceFieldIndex = s.SourceFieldIndex,
                 Enabled = s.Enabled,
                 Header = s.Header ?? string.Empty,
-                AddLineBreakAfter = s.AddLineBreakAfter,
+                AddLineBreakBefore = s.AddLineBreakBefore,
                 FormatString = s.FormatString ?? string.Empty
             })
             .ToList();
@@ -2929,7 +2929,7 @@ public partial class MainWindow : Window
                 SourceFieldIndex = s.SourceFieldIndex,
                 Enabled = s.Enabled,
                 Header = s.Header ?? string.Empty,
-                AddLineBreakAfter = s.AddLineBreakAfter,
+                AddLineBreakBefore = s.AddLineBreakBefore,
                 WordWrap = s.WordWrap,
                 FormatString = s.FormatString ?? string.Empty
             })
