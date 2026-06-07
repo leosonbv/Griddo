@@ -300,6 +300,32 @@ public partial class PlotConfigurationDialog : Window
             AddLineBreakAfter = r.AddLineBreakAfter
         };
 
+    /// <summary>
+    /// Point-label segments must keep the label field catalog source (e.g. <c>Compound.Peak</c>),
+    /// not the shorter registration source resolved via suffix lookup (e.g. <c>Peak</c>).
+    /// </summary>
+    private PlotTitleSegmentConfiguration ToPointLabelSegmentConfiguration(PlotTitleFieldEditRecord r)
+    {
+        var segment = ToSegmentConfiguration(r);
+        if (r.SourceFieldIndex < 0 || r.SourceFieldIndex >= _pointLabelFields.Count)
+        {
+            return segment;
+        }
+        var field = _pointLabelFields[r.SourceFieldIndex];
+        if (field is IGriddoFieldSourceObject sourceObject
+            && !string.IsNullOrWhiteSpace(sourceObject.SourceObjectName))
+        {
+            segment.SourceObjectName = sourceObject.SourceObjectName.Trim();
+        }
+        if (field is IGriddoFieldSourceMember sourceMember
+            && !string.IsNullOrWhiteSpace(sourceMember.SourceMemberName))
+        {
+            segment.PropertyName = sourceMember.SourceMemberName.Trim();
+        }
+        segment.SourceFieldIndex = r.SourceFieldIndex;
+        return segment;
+    }
+
     private bool TryBuildResult(out PlotFieldDialogResult result)
     {
         result = default!;
@@ -320,7 +346,7 @@ public partial class PlotConfigurationDialog : Window
             .Select(r =>
             {
                 PersistRegistrationFromRow(r);
-                return ToSegmentConfiguration(r);
+                return ToPointLabelSegmentConfiguration(r);
             })
             .ToList();
 
