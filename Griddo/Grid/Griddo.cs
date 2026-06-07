@@ -200,9 +200,6 @@ public sealed partial class Griddo : FrameworkElement
     private int _visibleRecordCount;
     private int _suspendGridCollectionChanged;
     private readonly ToolTip _fieldHeaderToolTip = new();
-    private bool _fieldHeaderToolTipNeedsReattach;
-    private bool _priorPointerOnDescribedFieldHeader;
-    private int _fieldHeaderToolTipClosedSuppress;
 
     /// <summary>Popup used to display the field-header description when the grid has no keyboard focus (WPF ToolTipService suppresses tooltips on inactive controls).</summary>
     private readonly Popup _headerInactivePopup = new();

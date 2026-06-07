@@ -1233,8 +1233,6 @@ public sealed partial class Griddo
         if (ReferenceEquals(ToolTip, _fieldHeaderToolTip) && !_fieldHeaderToolTip.IsOpen)
         {
             ClearFieldHeaderToolTipContent();
-            _fieldHeaderToolTipNeedsReattach = true;
-            _priorPointerOnDescribedFieldHeader = false;
         }
 
         base.OnMouseLeave(e);
@@ -1244,13 +1242,7 @@ public sealed partial class Griddo
     {
         _ = sender;
         _ = e;
-        if (_fieldHeaderToolTipClosedSuppress > 0)
-        {
-            return;
-        }
 
-        _fieldHeaderToolTipNeedsReattach = true;
-        _priorPointerOnDescribedFieldHeader = false;
         if (ReferenceEquals(ToolTip, _fieldHeaderToolTip))
         {
             _fieldHeaderToolTip.Content = null;
@@ -1312,7 +1304,6 @@ public sealed partial class Griddo
         }
 
         ClearFieldHeaderToolTipContent();
-        _fieldHeaderToolTipNeedsReattach = true;
     }
 
     private void HideHeaderInactivePopup()
