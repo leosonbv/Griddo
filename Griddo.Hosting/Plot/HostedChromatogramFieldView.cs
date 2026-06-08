@@ -446,9 +446,7 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         chart.ShowYAxis = ShowYAxis;
         if (chart is ChromatogramControl chromatogram)
         {
-            chromatogram.ShowSeries = _signalProvider is ITicSignalVisibility ticVisibility
-                ? ticVisibility.ShowTicSignal
-                : true;
+            chromatogram.ShowSeries = ResolveTicSignalVisible(recordSource);
             chromatogram.ShowPeakRegionFill = ChromatogramShowPeaks;
             chromatogram.ShowPeakLabels = ShowCalibrationPointLabels
                                           || PlotHostedVisibility.HasEnabledSegments(CalibrationPointLabelSegments);
@@ -786,7 +784,7 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
     {
         if (IsSampleTicPlot(SourceMemberName))
         {
-            chart.FitZoomOutCompletely(CreateSampleTicZoomOutFitOptions(chart));
+            chart.FitZoomOutCompletely(CreateSampleTicZoomOutFitOptions(chart, recordSource));
             return;
         }
 
@@ -811,16 +809,25 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         TicZoomIncludeLabels = includeLabels;
     }
 
-    private ChromatogramZoomOutFitOptions CreateSampleTicZoomOutFitOptions(ChromatogramControl chart)
+    private ChromatogramZoomOutFitOptions CreateSampleTicZoomOutFitOptions(ChromatogramControl chart, object? recordSource)
     {
         // Use the zoom checkbox settings stored in the field view rather than inferring from chart state.
         // This ensures initial render respects user's zoom preferences from the toolbar.
-        var includeTic = TicZoomIncludeTic;
+        // TIC trace is only included in zoom when the TIC signal is actually shown (Tic Plot menu).
+        var includeTic = TicZoomIncludeTic && ResolveTicSignalVisible(recordSource);
         var includeCompounds = TicZoomIncludeCompounds;
         var includeLabels = TicZoomIncludeLabels;
 
         return new ChromatogramZoomOutFitOptions(includeTic, includeCompounds, includeLabels);
     }
+
+    private bool ResolveTicSignalVisible(object? recordSource) =>
+        _signalProvider switch
+        {
+            ITicRecordTicSignalVisibility perRecord => perRecord.GetShowTicSignal(recordSource),
+            ITicSignalVisibility visibility => visibility.ShowTicSignal,
+            _ => true,
+        };
 
     private static object BuildRuntimePointsValue(IReadOnlyList<SignalPoint> points)
     {

@@ -38,6 +38,12 @@ public interface ITicSignalVisibility
     bool ShowTicSignal { get; set; }
 }
 
+/// <summary>Per-row TIC trace visibility (e.g. force show when a sample has no compound overlays).</summary>
+public interface ITicRecordTicSignalVisibility
+{
+    bool GetShowTicSignal(object? recordSource);
+}
+
 /// <summary>Controls optional dashed vertical markers (expected RT, limits, TIC selection overlays).</summary>
 public readonly record struct ChromatogramVerticalMarkerOptions(
     bool ShowExpectedRtLine,
