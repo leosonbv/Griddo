@@ -184,7 +184,7 @@ public sealed partial class Griddo
         }
 
         ClearFieldWidthUserFixed(fieldIndex);
-        var sampledRecords = GetAutoSizeSampleRecords();
+        var sampledRecords = GetAutoSizeSampleRecords(fieldIndex);
         var max = MeasureAutoWidthForField(fieldIndex, sampledRecords);
         SetFieldWidth(fieldIndex, max);
         _hasAutoSizedFields = true;
@@ -199,10 +199,10 @@ public sealed partial class Griddo
             return;
         }
 
-        var sampledRecords = GetAutoSizeSampleRecords();
         for (var fieldIndex = 0; fieldIndex < Fields.Count; fieldIndex++)
         {
             ClearFieldWidthUserFixed(fieldIndex);
+            var sampledRecords = GetAutoSizeSampleRecords(fieldIndex);
             var max = MeasureAutoWidthForField(fieldIndex, sampledRecords);
             SetFieldWidth(fieldIndex, max);
         }
@@ -222,7 +222,6 @@ public sealed partial class Griddo
         }
 
         var any = false;
-        var sampledRecords = GetAutoSizeSampleRecords();
         for (var fieldIndex = 0; fieldIndex < Fields.Count; fieldIndex++)
         {
             if (IsFieldWidthUserFixed(fieldIndex))
@@ -230,6 +229,7 @@ public sealed partial class Griddo
                 continue;
             }
 
+            var sampledRecords = GetAutoSizeSampleRecords(fieldIndex);
             var max = MeasureAutoWidthForField(fieldIndex, sampledRecords);
             SetFieldWidth(fieldIndex, max);
             any = true;
@@ -252,7 +252,6 @@ public sealed partial class Griddo
         }
 
         var any = false;
-        var sampledRecords = GetAutoSizeSampleRecords();
         foreach (var idx in fieldIndices.Distinct())
         {
             if (idx < 0 || idx >= Fields.Count)
@@ -261,6 +260,7 @@ public sealed partial class Griddo
             }
 
             ClearFieldWidthUserFixed(idx);
+            var sampledRecords = GetAutoSizeSampleRecords(idx);
             var max = MeasureAutoWidthForField(idx, sampledRecords);
             SetFieldWidth(idx, max);
             any = true;
@@ -283,7 +283,6 @@ public sealed partial class Griddo
             return;
         }
 
-        var sampledRecords = GetAutoSizeSampleRecords();
         for (var fieldIndex = 0; fieldIndex < Fields.Count; fieldIndex++)
         {
             if (ShouldSkipInitialSampleAutoWidth(fieldIndex))
@@ -291,6 +290,7 @@ public sealed partial class Griddo
                 continue;
             }
 
+            var sampledRecords = GetAutoSizeSampleRecords(fieldIndex);
             var max = MeasureAutoWidthForField(fieldIndex, sampledRecords);
             SetFieldWidth(fieldIndex, max);
         }
@@ -355,21 +355,108 @@ public sealed partial class Griddo
         }));
     }
 
-    private List<int> GetAutoSizeSampleRecords()
+    private const int MaxTextAutoSizeSampleCount = 10;
+
+    private List<int> GetAutoSizeSampleRecords(int fieldIndex)
     {
-        if (Records.Count == 0)
+        if (Records.Count == 0 || fieldIndex < 0 || fieldIndex >= Fields.Count)
         {
             return [];
         }
 
-        var sampledRecords = new HashSet<int> { 0, Records.Count - 1 };
-        var randomTargetCount = Math.Min(10, Math.Max(0, Records.Count - sampledRecords.Count));
-        while (sampledRecords.Count < randomTargetCount + 2 && sampledRecords.Count < Records.Count)
+        var field = Fields[fieldIndex];
+        var longestTextRecords = new List<(int RecordIndex, int TextLength)>();
+        var nonTextRecordIndices = new List<int>();
+        for (var recordIndex = 0; recordIndex < Records.Count; recordIndex++)
         {
-            sampledRecords.Add(Random.Shared.Next(0, Records.Count));
+            var sampleText = GetAutoSizeSampleText(field, Records[recordIndex]);
+            if (sampleText is not null)
+            {
+                longestTextRecords.Add((recordIndex, sampleText.Length));
+                continue;
+            }
+
+            if (field is IGriddoHostedFieldView)
+            {
+                continue;
+            }
+
+            var raw = field.GetValue(Records[recordIndex]);
+            if (raw is ImageSource or Geometry)
+            {
+                nonTextRecordIndices.Add(recordIndex);
+            }
+        }
+
+        if (longestTextRecords.Count > 0)
+        {
+            return longestTextRecords
+                .OrderByDescending(x => x.TextLength)
+                .ThenBy(x => x.RecordIndex)
+                .Take(MaxTextAutoSizeSampleCount)
+                .Select(x => x.RecordIndex)
+                .OrderBy(x => x)
+                .ToList();
+        }
+
+        if (nonTextRecordIndices.Count > 0)
+        {
+            return BuildAutoSizeSampleRecordIndices(nonTextRecordIndices);
+        }
+
+        return BuildAutoSizeSampleRecordIndices(Enumerable.Range(0, Records.Count));
+    }
+
+    private static List<int> BuildAutoSizeSampleRecordIndices(IEnumerable<int> candidateRecordIndices)
+    {
+        var candidates = candidateRecordIndices.Distinct().OrderBy(x => x).ToList();
+        if (candidates.Count == 0)
+        {
+            return [];
+        }
+
+        if (candidates.Count == 1)
+        {
+            return candidates;
+        }
+
+        var sampledRecords = new HashSet<int> { candidates[0], candidates[^1] };
+        var randomTargetCount = Math.Min(10, Math.Max(0, candidates.Count - sampledRecords.Count));
+        while (sampledRecords.Count < randomTargetCount + 2 && sampledRecords.Count < candidates.Count)
+        {
+            sampledRecords.Add(candidates[Random.Shared.Next(0, candidates.Count)]);
         }
 
         return sampledRecords.OrderBy(x => x).ToList();
+    }
+
+    private static string? GetAutoSizeSampleText(IGriddoFieldView field, object record)
+    {
+        if (field is IGriddoHostedFieldView)
+        {
+            return null;
+        }
+
+        var raw = field.GetValue(record);
+        if (raw is ImageSource or Geometry)
+        {
+            return null;
+        }
+
+        if (field.IsHtml)
+        {
+            var html = raw?.ToString();
+            if (string.IsNullOrWhiteSpace(html))
+            {
+                return null;
+            }
+
+            var text = ExtractHtmlPreviewText(html);
+            return text.Length == 0 ? null : text;
+        }
+
+        var formatted = field.FormatValue(raw);
+        return string.IsNullOrEmpty(formatted) ? null : formatted;
     }
 
     private double MeasureAutoWidthForField(int fieldIndex, IReadOnlyCollection<int> sampledRecords)
