@@ -29,6 +29,10 @@ public partial class PlotConfigurationDialog : Window
 
     public PlotFieldDialogResult? Result { get; private set; }
 
+    public global::Griddo.Grid.Griddo PlotSpecificGrid => SpecificGrid;
+    public global::Griddo.Grid.Griddo PlotTitleFieldsGrid => TitleFieldsGrid;
+    public global::Griddo.Grid.Griddo PlotPointLabelFieldsGrid => PointLabelFieldsGrid;
+
     public PlotConfigurationDialog(
         IPlotFieldLayoutTarget initial,
         IReadOnlyList<IGriddoFieldView> allFields,

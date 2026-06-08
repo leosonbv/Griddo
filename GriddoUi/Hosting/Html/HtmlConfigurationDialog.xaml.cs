@@ -25,6 +25,9 @@ public partial class HtmlConfigurationDialog : Window
     private readonly Func<IGriddoFieldView, FieldRegistrationDisplayInfo?>? _resolveRegistration;
     private readonly Action<FieldRegistrationDisplayInfo>? _persistRegistration;
 
+    public global::Griddo.Grid.Griddo HtmlGeneralGrid => GeneralGrid;
+    public global::Griddo.Grid.Griddo HtmlSegmentsGrid => SegmentsGrid;
+
     public HtmlConfigurationDialog(
         IHtmlFieldLayoutTarget seed,
         IReadOnlyList<IGriddoFieldView> allFields,

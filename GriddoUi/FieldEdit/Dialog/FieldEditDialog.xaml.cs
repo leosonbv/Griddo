@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
@@ -84,10 +85,12 @@ public partial class FieldConfigurator : Window
         BuildGeneralPropertyGrid(options, initialFrozenFields, initialFrozenRecords);
         FieldGrid.CellPropertyViewResolver = ResolveCellPropertyViewForConfigurator;
         FieldGrid.FieldHeaderRightClick += FieldGrid_FieldHeaderRightClick;
+        FieldGrid.Records.CollectionChanged += FieldGrid_RecordsCollectionChanged;
         GeneralPropertyGrid.FieldHeaderRightClick += GeneralPropertyGrid_FieldHeaderRightClick;
         Closed += (_, _) =>
         {
             FieldGrid.FieldHeaderRightClick -= FieldGrid_FieldHeaderRightClick;
+            FieldGrid.Records.CollectionChanged -= FieldGrid_RecordsCollectionChanged;
             GeneralPropertyGrid.FieldHeaderRightClick -= GeneralPropertyGrid_FieldHeaderRightClick;
         };
         Loaded += (_, _) =>
@@ -230,6 +233,14 @@ public partial class FieldConfigurator : Window
         FieldHeaderMenuHandler?.Invoke(FieldGrid, _fieldHeaderRegistry, e);
     }
 
+    private void FieldGrid_RecordsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == NotifyCollectionChangedAction.Move)
+        {
+            RenumberUsedFromCurrentListAndResort();
+        }
+    }
+
     private void GeneralPropertyGrid_FieldHeaderRightClick(object? sender, GriddoFieldHeaderMouseEventArgs e)
     {
         FieldHeaderMenuHandler?.Invoke(GeneralPropertyGrid, _generalFieldHeaderRegistry, e);
@@ -270,13 +281,8 @@ public partial class FieldConfigurator : Window
                 {
                     if (rec.OrderNumber <= 0)
                     {
-                        // Assign next positive number (append to end of used sequence); grid will resort.
-                        var max = FieldGrid.Records
-                            .OfType<FieldEditRecord>()
-                            .Select(rr => rr.OrderNumber)
-                            .DefaultIfEmpty(0)
-                            .Max();
-                        rec.OrderNumber = max + 1;
+                        // Mark used; column order is derived from the current row list (incl. drag reorder).
+                        rec.OrderNumber = 1;
                     }
                 }
                 else
@@ -284,7 +290,7 @@ public partial class FieldConfigurator : Window
                     rec.OrderNumber = 0;
                 }
 
-                ResortRecordsByOrderNumber();
+                RenumberUsedFromCurrentListAndResort();
                 return true;
             })
         {
@@ -657,6 +663,7 @@ public partial class FieldConfigurator : Window
             return;
         }
 
+        RenumberUsedFromCurrentListAndResort();
         var records = SnapshotRecords();
         var generalOptions = BuildGeneralOptions();
         ApplyToSourceGrid?.Invoke(records, frozenFields, frozenRecords, generalOptions);
@@ -678,6 +685,7 @@ public partial class FieldConfigurator : Window
             return;
         }
 
+        RenumberUsedFromCurrentListAndResort();
         var records = SnapshotRecords();
         var generalOptions = BuildGeneralOptions();
         ApplyToSourceGrid?.Invoke(records, frozenFields, frozenRecords, generalOptions);

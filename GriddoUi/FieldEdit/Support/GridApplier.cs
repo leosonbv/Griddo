@@ -43,7 +43,13 @@ public static class GridApplier
                     continue;
                 }
 
-                ApplyFieldRecordToView(snap[r.SourceFieldIndex], r);
+                var field = snap[r.SourceFieldIndex];
+                // Header-only catalog fields (dialogs, logbook, etc.) keep their built-in titles;
+                // persisted layout only controls visibility, order, width, and sort for those columns.
+                if (HasBoundSourceMember(field))
+                {
+                    ApplyFieldRecordToView(field, r);
+                }
             }
 
             // Determine the used/checked fields and their column order exclusively from OrderNumber (>0).
@@ -140,17 +146,23 @@ public static class GridApplier
         }
     }
 
+    private static bool HasBoundSourceMember(IGriddoFieldView field) =>
+        field is IGriddoFieldSourceMember { SourceMemberName: var member }
+        && !string.IsNullOrWhiteSpace(member);
+
     /// <summary>Applies configurator/persisted presentation to a catalog field (visible or hidden).</summary>
     private static void ApplyFieldRecordToView(IGriddoFieldView field, FieldEditRecord record)
     {
         field.FieldFill = NormalizeFieldFill(record.FieldFill);
-        field.Header = !string.IsNullOrWhiteSpace(record.LongHeader)
-            ? record.LongHeader.Trim()
-            : string.Empty;
-
-        if (field is IGriddoFieldDescriptionView descriptionView)
+        if (!string.IsNullOrWhiteSpace(record.LongHeader))
         {
-            descriptionView.Description = record.Description?.Trim() ?? string.Empty;
+            field.Header = record.LongHeader.Trim();
+        }
+
+        if (field is IGriddoFieldDescriptionView descriptionView
+            && !string.IsNullOrWhiteSpace(record.Description))
+        {
+            descriptionView.Description = record.Description.Trim();
         }
 
         if (field is IGriddoFieldFormatView formatView)

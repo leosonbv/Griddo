@@ -152,7 +152,7 @@ public sealed partial class Griddo
         return field.FormatValue(value) ?? string.Empty;
     }
 
-    private void AssignCurrentCell(GriddoCellAddress value)
+    private void AssignCurrentCell(GriddoCellAddress value, bool centerInViewport = false)
     {
         _currentCell = value;
         if (!value.IsValid || Records.Count == 0 || Fields.Count == 0 || _viewportBodyWidth <= 0 || _viewportBodyHeight <= 0)
@@ -160,9 +160,13 @@ public sealed partial class Griddo
             return;
         }
 
-        if (!IsCellFullyVisibleInViewport(value))
+        if (centerInViewport)
         {
             CenterCellInViewport(value);
+        }
+        else if (!IsCellFullyVisibleInViewport(value))
+        {
+            RevealCellInViewport(value);
         }
     }
 
@@ -241,6 +245,98 @@ public sealed partial class Griddo
         const double eps = 1.0;
         return inner.Left >= outer.Left - eps && inner.Top >= outer.Top - eps
                && inner.Right <= outer.Right + eps && inner.Bottom <= outer.Bottom + eps;
+    }
+
+    /// <summary>
+    /// Scrolls the minimum amount needed to bring the cell into the visible viewport band.
+    /// Used when changing the current cell via mouse or keyboard navigation.
+    /// </summary>
+    private void RevealCellInViewport(GriddoCellAddress cell)
+    {
+        if (!cell.IsValid || Records.Count == 0 || Fields.Count == 0 || _viewportBodyWidth <= 0 || _viewportBodyHeight <= 0)
+        {
+            return;
+        }
+
+        var rect = GetCellRect(cell.RecordIndex, cell.FieldIndex);
+        if (rect.IsEmpty)
+        {
+            return;
+        }
+
+        if (IsBodyTransposed)
+        {
+            var bodyViewport = new Rect(_recordHeaderWidth, ScaledFieldHeaderHeight, _viewportBodyWidth, _viewportBodyHeight);
+            ApplyMinimalRevealScroll(rect, bodyViewport, scrollHorizontal: true, scrollVertical: true);
+            return;
+        }
+
+        var fRecords = GetEffectiveFixedRecordCount();
+        if (cell.RecordIndex >= fRecords)
+        {
+            var scrollVpH = GetScrollRecordsViewportHeight();
+            if (scrollVpH > 1e-6)
+            {
+                var vTop = ScaledFieldHeaderHeight + GetFixedRecordsHeight();
+                var vBottom = vTop + scrollVpH;
+                ApplyMinimalRevealScroll(rect, new Rect(0, vTop, 0, vBottom - vTop), scrollHorizontal: false, scrollVertical: true);
+            }
+        }
+
+        if (cell.FieldIndex >= _fixedFieldCount)
+        {
+            var fixedW = GetFixedFieldsWidth();
+            var scrollVp = GetScrollViewportWidth();
+            if (scrollVp > 1e-6)
+            {
+                var hLeft = _recordHeaderWidth + fixedW;
+                var hRight = hLeft + scrollVp;
+                ApplyMinimalRevealScroll(rect, new Rect(hLeft, 0, hRight - hLeft, 0), scrollHorizontal: true, scrollVertical: false);
+            }
+        }
+    }
+
+    private void ApplyMinimalRevealScroll(Rect cellRect, Rect band, bool scrollHorizontal, bool scrollVertical)
+    {
+        if (scrollVertical)
+        {
+            var vTop = band.Top;
+            var vBottom = band.Bottom;
+            var deltaY = 0.0;
+            if (cellRect.Bottom > vBottom)
+            {
+                deltaY = cellRect.Bottom - vBottom;
+            }
+            else if (cellRect.Top < vTop)
+            {
+                deltaY = cellRect.Top - vTop;
+            }
+
+            if (Math.Abs(deltaY) > double.Epsilon)
+            {
+                SetVerticalOffset(_verticalOffset + deltaY);
+            }
+        }
+
+        if (scrollHorizontal)
+        {
+            var hLeft = band.Left;
+            var hRight = band.Right;
+            var deltaX = 0.0;
+            if (cellRect.Right > hRight)
+            {
+                deltaX = cellRect.Right - hRight;
+            }
+            else if (cellRect.Left < hLeft)
+            {
+                deltaX = cellRect.Left - hLeft;
+            }
+
+            if (Math.Abs(deltaX) > double.Epsilon)
+            {
+                SetHorizontalOffset(_horizontalOffset + deltaX);
+            }
+        }
     }
 
     public void CenterCellInViewport(GriddoCellAddress cell)

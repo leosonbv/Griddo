@@ -358,7 +358,7 @@ public sealed partial class Griddo
     /// Sets the current body cell and replaces the selection with that single cell (no header selection).
     /// Used when reloading grid data while restoring focus to a logical row/column.
     /// </summary>
-    public void SetBodyCellNavigationTarget(int recordIndex, int fieldIndex)
+    public void SetBodyCellNavigationTarget(int recordIndex, int fieldIndex, bool centerInViewport = true)
     {
         if (Records.Count == 0 || Fields.Count == 0)
         {
@@ -371,7 +371,7 @@ public sealed partial class Griddo
         _isEditing = false;
         recordIndex = Math.Clamp(recordIndex, 0, Records.Count - 1);
         fieldIndex = Math.Clamp(fieldIndex, (int)0, (int)(Fields.Count - 1));
-        AssignCurrentCell(new GriddoCellAddress(recordIndex, fieldIndex));
+        AssignCurrentCell(new GriddoCellAddress(recordIndex, fieldIndex), centerInViewport);
         _selectedCells.Clear();
         _selectedCells.Add(_currentCell);
         InvalidateVisual();
@@ -383,7 +383,8 @@ public sealed partial class Griddo
     public void RestoreBodyCellSelection(
         int currentRecordIndex,
         int currentFieldIndex,
-        IReadOnlyCollection<GriddoCellAddress> selectedCells)
+        IReadOnlyCollection<GriddoCellAddress> selectedCells,
+        bool centerCurrentCellInViewport = false)
     {
         if (Records.Count == 0 || Fields.Count == 0)
         {
@@ -397,7 +398,7 @@ public sealed partial class Griddo
 
         currentRecordIndex = Math.Clamp(currentRecordIndex, 0, Records.Count - 1);
         currentFieldIndex = Math.Clamp(currentFieldIndex, (int)0, (int)(Fields.Count - 1));
-        AssignCurrentCell(new GriddoCellAddress(currentRecordIndex, currentFieldIndex));
+        AssignCurrentCell(new GriddoCellAddress(currentRecordIndex, currentFieldIndex), centerCurrentCellInViewport);
 
         _selectedCells.Clear();
         if (selectedCells.Count > 0)
