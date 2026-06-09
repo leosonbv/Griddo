@@ -160,6 +160,12 @@ public sealed partial class Griddo
     private void ApplySorting()
 
     {
+        if (_recordsCollectionNotifyDepth > 0)
+        {
+            ScheduleDeferredSort();
+            return;
+        }
+
         if (Records.Count <= 1 || _sortDescriptors.Count == 0) return;
 
 
@@ -278,6 +284,21 @@ public sealed partial class Griddo
         RemapSelectionAfterRecordMove(oldToNew);
 
         OnGridCollectionChanged(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+    }
+
+    private void ScheduleDeferredSort()
+    {
+        if (_deferredSortScheduled)
+        {
+            return;
+        }
+
+        _deferredSortScheduled = true;
+        Dispatcher.BeginInvoke(() =>
+        {
+            _deferredSortScheduled = false;
+            ApplySorting();
+        }, System.Windows.Threading.DispatcherPriority.DataBind);
     }
 
 

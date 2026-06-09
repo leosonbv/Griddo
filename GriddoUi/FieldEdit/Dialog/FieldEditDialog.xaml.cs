@@ -26,6 +26,7 @@ public partial class FieldConfigurator : Window
     private int _fontFieldIndex = -1;
     private int _backColorFieldIndex = -1;
     private int _valueFieldIndex = -1;
+    private int _fieldRecordOrderSortFieldIndex = -1;
 
     /// <summary>Fired when Apply is pressed; argument is an ordered snapshot (clones).</summary>
     public event EventHandler<IReadOnlyList<FieldEditRecord>>? PreviewApply;
@@ -80,7 +81,6 @@ public partial class FieldConfigurator : Window
         }
 
         BuildFields();
-        ResortRecordsByOrderNumber();
         var options = initialOptions ?? new FieldChooserGeneralOptions();
         BuildGeneralPropertyGrid(options, initialFrozenFields, initialFrozenRecords);
         FieldGrid.CellPropertyViewResolver = ResolveCellPropertyViewForConfigurator;
@@ -499,6 +499,9 @@ public partial class FieldConfigurator : Window
                 return true;
             },
             GriddoCellEditors.KnownColorsDropdown));
+        _fieldRecordOrderSortFieldIndex = FieldGrid.Fields.Count;
+        AddField(new FieldRecordOrderFieldView());
+        ApplyFieldRecordOrderSort();
     }
 
     private GriddoCellPropertyView? ResolveCellPropertyViewForConfigurator(object recordSource, int fieldIndex)
@@ -704,42 +707,19 @@ public partial class FieldConfigurator : Window
     }
 
     /// <summary>
-    /// Ensures the configurator's field grid records are always sorted by OrderNumber (used >0 ascending first, then 0s).
-    /// Called after checkbox toggles (which assign numbers) and after move up/down (which trigger renumber).
-    /// This fulfills "the field grid ... should always sort based on the order number".
+    /// Re-applies the configurator's fixed OrderNumber sort (used ascending first, then unused).
     /// </summary>
-    private void ResortRecordsByOrderNumber()
+    private void ApplyFieldRecordOrderSort()
     {
-        FieldGrid.CommitPendingCellEdit();
-        var all = FieldGrid.Records.OfType<FieldEditRecord>().ToList();
-        var sorted = all
-            .OrderBy(r => r.OrderNumber > 0 ? r.OrderNumber : int.MaxValue)
-            .ThenBy(r => r.SourceObjectName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(r => r.PropertyName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        if (_fieldRecordOrderSortFieldIndex < 0)
+        {
+            return;
+        }
 
-        // Only rebuild if order actually differs to avoid unnecessary grid churn.
-        bool differs = all.Count != sorted.Count;
-        if (!differs)
-        {
-            for (int i = 0; i < all.Count; i++)
-            {
-                if (!ReferenceEquals(all[i], sorted[i]))
-                {
-                    differs = true;
-                    break;
-                }
-            }
-        }
-        if (differs)
-        {
-            FieldGrid.Records.Clear();
-            foreach (var r in sorted)
-            {
-                FieldGrid.Records.Add(r);
-            }
-            FieldGrid.InvalidateVisual();
-        }
+        FieldGrid.SetSortDescriptors(
+        [
+            new GriddoSortDescriptor(_fieldRecordOrderSortFieldIndex, Ascending: true, Priority: 1)
+        ]);
     }
 
     /// <summary>
@@ -759,7 +739,7 @@ public partial class FieldConfigurator : Window
                 r.OrderNumber = next++;
             }
         }
-        ResortRecordsByOrderNumber();
+        ApplyFieldRecordOrderSort();
     }
 
     private bool TryCommitFrozenFields(out int frozenFields)
@@ -1175,6 +1155,41 @@ public partial class FieldConfigurator : Window
         public bool TrySetValue(object recordSource, object? value) => true;
 
         public string FormatValue(object? value) => value?.ToString() ?? string.Empty;
+    }
+
+    private sealed class FieldRecordOrderFieldView : IGriddoFieldView, IGriddoFieldSortValueView
+    {
+        public string Header { get; set; } = "#";
+        public string Description { get; set; } = "Column order (0 = unused)";
+        public double Width { get; } = 40;
+        public int FieldFill { get; set; }
+        public bool IsHtml => false;
+        public TextAlignment ContentAlignment { get; } = TextAlignment.Right;
+        public IGriddoCellEditor Editor => GriddoCellEditors.Number;
+
+        public object? GetValue(object recordSource) =>
+            recordSource is FieldEditRecord rec && rec.OrderNumber > 0 ? rec.OrderNumber : null;
+
+        public bool TrySetValue(object recordSource, object? value)
+        {
+            _ = recordSource;
+            _ = value;
+            return false;
+        }
+
+        public string FormatValue(object? value) =>
+            value is int i && i > 0 ? i.ToString(CultureInfo.InvariantCulture) : string.Empty;
+
+        public object? GetSortValue(object recordSource)
+        {
+            if (recordSource is not FieldEditRecord rec)
+            {
+                return null;
+            }
+
+            var order = rec.OrderNumber > 0 ? rec.OrderNumber : int.MaxValue;
+            return $"{order:D8}|{rec.SourceObjectName ?? string.Empty}|{rec.PropertyName ?? string.Empty}";
+        }
     }
 
     /// <summary>

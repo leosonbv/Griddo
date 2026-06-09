@@ -199,6 +199,8 @@ public sealed partial class Griddo : FrameworkElement
     private bool _initialSampleAutoSizeScheduled;
     private int _visibleRecordCount;
     private int _suspendGridCollectionChanged;
+    private int _recordsCollectionNotifyDepth;
+    private bool _deferredSortScheduled;
     private readonly ToolTip _fieldHeaderToolTip = new();
 
     /// <summary>Popup used to display the field-header description when the grid has no keyboard focus (WPF ToolTipService suppresses tooltips on inactive controls).</summary>
@@ -833,26 +835,41 @@ public sealed partial class Griddo : FrameworkElement
 
     private void OnGridCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        _ = sender;
         _ = e;
         if (ReferenceEquals(sender, Fields))
         {
             InvalidateFieldFillWidthCache();
         }
 
-        if (_suspendGridCollectionChanged > 0)
+        var trackingRecords = ReferenceEquals(sender, Records);
+        if (trackingRecords)
         {
-            return;
+            _recordsCollectionNotifyDepth++;
         }
 
-        ApplyImmediateGridCollectionStateUpdates();
-        if (_bulkLoadDepth > 0)
+        try
         {
-            DeferGridCollectionLayoutAndSort();
-            return;
-        }
+            if (_suspendGridCollectionChanged > 0)
+            {
+                return;
+            }
 
-        ApplyDeferredGridCollectionUpdates();
+            ApplyImmediateGridCollectionStateUpdates();
+            if (_bulkLoadDepth > 0)
+            {
+                DeferGridCollectionLayoutAndSort();
+                return;
+            }
+
+            ApplyDeferredGridCollectionUpdates();
+        }
+        finally
+        {
+            if (trackingRecords)
+            {
+                _recordsCollectionNotifyDepth--;
+            }
+        }
     }
 
 }
