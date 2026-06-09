@@ -8,6 +8,7 @@ using Griddo.Abstractions.Fields;
 using Griddo.Editing;
 using Griddo.Fields;
 using Griddo.Hosting.Contracts;
+using Griddo.Grid;
 using Griddo.Hosting.Configuration;
 using Plotto.Abstractions.Charting.Core;
 using Plotto.Charting.Controls;
@@ -356,14 +357,33 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
 
     private static void TryActivateOwningGridCell(FrameworkElement host)
     {
+        if (GriddoHostedCellMetadata.TryGet(host, out var grid, out _))
+        {
+            grid.TryActivateHostedCell(host);
+            return;
+        }
+
         for (DependencyObject? node = host; node != null; node = VisualTreeHelper.GetParent(node))
         {
-            if (node is Griddo.Grid.Griddo grid)
+            if (node is Griddo.Grid.Griddo fromTree)
             {
-                grid.TryActivateHostedCell(host);
+                fromTree.TryActivateHostedCell(host);
                 return;
             }
         }
+    }
+
+    private static void ScheduleReactivateHostedCellAfterRefresh(FrameworkElement host)
+    {
+        if (!GriddoHostedCellMetadata.TryGet(host, out var grid, out _))
+        {
+            return;
+        }
+
+        var capturedHost = host;
+        grid.Dispatcher.BeginInvoke(
+            () => grid.TryActivateHostedCell(capturedHost),
+            System.Windows.Threading.DispatcherPriority.ApplicationIdle);
     }
 
     private void OnChartIntegrationChanged(object? sender, IntegrationRegionEventArgs e)
@@ -387,6 +407,7 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
 
         // Manual integration changes peak boundaries/selection immediately; refresh live overlays in editor.
         SyncPeakOverlay(chart, host.Tag);
+        ScheduleReactivateHostedCellAfterRefresh(host);
     }
 
     private void OnChartPeakSplitRequested(object? sender, PeakSplitEventArgs e)
@@ -409,6 +430,7 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         }
 
         SyncPeakOverlay(chart, host.Tag);
+        ScheduleReactivateHostedCellAfterRefresh(host);
     }
 
     private void OnChartPeakSelectionRequested(object? sender, PeakSelectionEventArgs e)
@@ -431,6 +453,7 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         }
 
         SyncPeakOverlay(chart, host.Tag);
+        ScheduleReactivateHostedCellAfterRefresh(host);
     }
 
     private static ChromatogramControl CreateChart() =>

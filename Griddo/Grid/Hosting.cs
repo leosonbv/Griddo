@@ -150,6 +150,7 @@ public sealed partial class Griddo
         foreach (var key in stale)
         {
             var fe = _hostedCells[key];
+            GriddoHostedCellMetadata.Clear(fe);
             if (fe.Parent is Panel p)
             {
                 p.Children.Remove(fe);
@@ -179,6 +180,8 @@ public sealed partial class Griddo
                 parent.Children.Remove(host);
                 dest.Children.Add(host);
             }
+
+            GriddoHostedCellMetadata.Set(host, this, addr);
 
             var recordData = Records[addr.RecordIndex];
             var isSelected = _selectedCells.Contains(addr);
@@ -323,6 +326,7 @@ public sealed partial class Griddo
     {
         foreach (var kv in _hostedCells.Values.ToList())
         {
+            GriddoHostedCellMetadata.Clear(kv);
             if (kv.Parent is Panel p)
             {
                 p.Children.Remove(kv);
