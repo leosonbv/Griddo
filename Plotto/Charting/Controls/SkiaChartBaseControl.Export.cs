@@ -21,13 +21,21 @@ public abstract partial class SkiaChartBaseControl
     }
 
     /// <summary>Raster snapshot for clipboard HTML (Excel-friendly vs inline SVG).</summary>
-    public byte[] GetChartPngBytes(int width, int height)
+    /// <param name="scale">
+    /// Supersampling factor: the chart is laid out at <paramref name="width"/> x <paramref name="height"/>
+    /// but rasterized at scale times more pixels, so fonts and line widths scale up with the bitmap.
+    /// </param>
+    public byte[] GetChartPngBytes(int width, int height, float scale = 1f)
     {
         width = Math.Max(1, width);
         height = Math.Max(1, height);
-        var info = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
+        scale = Math.Max(0.1f, scale);
+        var pixelWidth = Math.Max(1, (int)Math.Round(width * scale));
+        var pixelHeight = Math.Max(1, (int)Math.Round(height * scale));
+        var info = new SKImageInfo(pixelWidth, pixelHeight, SKColorType.Rgba8888, SKAlphaType.Premul);
         using var surface = SKSurface.Create(info);
         surface.Canvas.Clear(SKColors.White);
+        surface.Canvas.Scale(scale);
         DrawChart(surface.Canvas, width, height);
         using var image = surface.Snapshot();
         using var png = image.Encode(SKEncodedImageFormat.Png, 100);
