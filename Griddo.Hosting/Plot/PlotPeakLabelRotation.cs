@@ -18,6 +18,4 @@ public static class PlotPeakLabelRotation
         var snapped = (int)Math.Round(degrees / (double)StepDegrees, MidpointRounding.AwayFromZero) * StepDegrees;
         return snapped >= 360 ? 0 : snapped;
     }
-
-    public static int FromLegacyBool(bool rotate) => rotate ? 90 : 0;
 }

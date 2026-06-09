@@ -440,7 +440,7 @@ public static class MetadataBuilder
         EnsureDefaultContentAlignment(TextAlignment.Left, field, sampleValue, recordType);
 
     /// <summary>
-    /// Upgrades legacy left alignment on numeric fields to right while preserving explicit center/right choices.
+    /// Applies default right alignment for numeric fields while preserving explicit center/right choices.
     /// </summary>
     public static TextAlignment EnsureDefaultContentAlignment(
         TextAlignment alignment,

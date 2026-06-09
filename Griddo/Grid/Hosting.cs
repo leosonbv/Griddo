@@ -43,6 +43,51 @@ public sealed partial class Griddo
         InvalidateVisual();
     }
 
+    /// <summary>
+    /// Makes the hosted cell that owns <paramref name="hostElement"/> the current body cell.
+    /// Used when plot interaction (e.g. manual integration) occurs on a visible hosted plot that is not
+    /// yet the grid current cell because the chart received input without a prior grid hit-test.
+    /// </summary>
+    public bool TryActivateHostedCell(FrameworkElement hostElement)
+    {
+        foreach (var (address, element) in _hostedCells)
+        {
+            if (!ReferenceEquals(element, hostElement))
+            {
+                continue;
+            }
+
+            if (Records.Count == 0 || Fields.Count == 0)
+            {
+                return false;
+            }
+
+            if (address.RecordIndex < 0 || address.RecordIndex >= Records.Count
+                || address.FieldIndex < 0 || address.FieldIndex >= Fields.Count)
+            {
+                return false;
+            }
+
+            if (_currentCell == address)
+            {
+                return true;
+            }
+
+            ClearHeaderFocus();
+            ClearHeaderAuxiliarySelectionState();
+            _hasKeyboardSelectionAnchor = false;
+            _isEditing = false;
+            _selectedCells.Clear();
+            _selectedCells.Add(address);
+            AssignCurrentCell(address, centerInViewport: false);
+            SetCurrentHostedCellEditMode(true);
+            InvalidateVisual();
+            return true;
+        }
+
+        return false;
+    }
+
     private void SyncHostedCells()
     {
         AlignVerticalOffsetToScrollBarForLayout();

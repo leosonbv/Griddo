@@ -16,7 +16,6 @@ public sealed class PropertyViewConfiguration
     public string ForegroundColor { get; set; } = string.Empty;
     public string BackgroundColor { get; set; } = string.Empty;
     public string Category { get; set; } = "General";
-    public bool IsReadOnly { get; set; }
     public bool IsCalculated { get; set; }
     public double DefaultWidth { get; set; } = 100.0;
 }

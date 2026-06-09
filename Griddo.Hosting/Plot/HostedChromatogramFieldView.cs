@@ -354,6 +354,18 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
             IsHitTestVisible = true
         };
 
+    private static void TryActivateOwningGridCell(FrameworkElement host)
+    {
+        for (DependencyObject? node = host; node != null; node = VisualTreeHelper.GetParent(node))
+        {
+            if (node is Griddo.Grid.Griddo grid)
+            {
+                grid.TryActivateHostedCell(host);
+                return;
+            }
+        }
+    }
+
     private void OnChartIntegrationChanged(object? sender, IntegrationRegionEventArgs e)
     {
         if (sender is not ChromatogramControl chart)
@@ -365,6 +377,8 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         {
             return;
         }
+
+        TryActivateOwningGridCell(host);
 
         if (!_signalProvider.TryApplyManualIntegration(host.Tag, e.Region))
         {
@@ -387,6 +401,8 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
             return;
         }
 
+        TryActivateOwningGridCell(host);
+
         if (!_signalProvider.TryApplyPeakSplit(host.Tag, e.SplitX))
         {
             return;
@@ -406,6 +422,8 @@ public sealed class HostedChromatogramFieldView : IGriddoHostedFieldView, IGridd
         {
             return;
         }
+
+        TryActivateOwningGridCell(host);
 
         if (!_signalProvider.TrySelectPeakAtX(host.Tag, e.X))
         {

@@ -1742,7 +1742,7 @@ public partial class MainWindow : Window
             }
 
             record.FieldFill = state.FieldFill;
-            record.Visible = state.Visible;
+            record.OrderNumber = state.OrderNumber;
             record.Width = Math.Max(28, state.Width);
             record.SortPriority = Math.Max(0, state.SortPriority);
             record.SortAscending = state.SortAscending;
@@ -1853,7 +1853,7 @@ public partial class MainWindow : Window
             {
                 SourceClassName = sourceClassName,
                 PropertyName = propertyName,
-                Header = record.Title ?? string.Empty,
+                Header = record.LongHeader ?? string.Empty,
                 Description = record.Description ?? string.Empty,
                 StringFormat = record.FormatString ?? string.Empty,
                 FontSize = Math.Max(0, record.FontSize),
@@ -1888,7 +1888,7 @@ public partial class MainWindow : Window
 
             if (!string.IsNullOrWhiteSpace(definition.Header))
             {
-                record.Title = definition.Header;
+                record.LongHeader = definition.Header;
             }
 
             if (!string.IsNullOrWhiteSpace(definition.Description))
@@ -2030,7 +2030,7 @@ public partial class MainWindow : Window
             }
 
             record.FieldFill = state.FieldFill;
-            record.Visible = state.Visible;
+            record.OrderNumber = state.OrderNumber;
             record.Width = Math.Max(28, state.Width);
             record.SortPriority = Math.Max(0, state.SortPriority);
             record.SortAscending = state.SortAscending;
@@ -2091,7 +2091,7 @@ public partial class MainWindow : Window
             {
                 SourceFieldIndex = r.SourceFieldIndex,
                 FieldFill = r.FieldFill,
-                Visible = r.Visible,
+                OrderNumber = r.OrderNumber,
                 Width = r.Width,
                 SortPriority = r.SortPriority,
                 SortAscending = r.SortAscending
